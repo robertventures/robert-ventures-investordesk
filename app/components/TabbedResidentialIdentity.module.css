@@ -1,0 +1,123 @@
+.wrapper {
+  padding: 0;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+/* Add spacing between consecutive grids to avoid stacked inputs touching */
+.grid + .grid {
+  margin-top: 12px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1a1a1a;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-family: 'Inter', sans-serif;
+}
+
+.input {
+  padding: 16px 20px;
+  border: 2px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 16px;
+  background: #ffffff;
+  font-family: 'Inter', sans-serif;
+}
+
+.input:focus {
+  outline: none;
+  border-color: #1a1a1a;
+  box-shadow: 0 0 0 3px rgba(26, 26, 26, 0.1);
+}
+
+.inputError {
+  border-color: #dc2626;
+}
+
+.error {
+  color: #dc2626;
+  font-size: 12px;
+}
+
+.sectionTitle {
+  margin: 24px 0 12px 0;
+  padding-top: 4px;
+}
+
+.wrapper > .sectionTitle:first-of-type {
+  margin-top: 0;
+}
+
+.sectionTitle h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0;
+  font-family: 'Inter', sans-serif;
+}
+
+.jointHoldingTypeSection {
+  margin-bottom: 24px;
+}
+
+.jointHoldingTypeSection .field {
+  width: 100%;
+}
+
+.jointHoldingTypeSection .input {
+  width: 100%;
+}
+
+.actions {
+  margin-top: 16px;
+}
+
+.secondaryButton {
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 10px 16px;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  display: block;
+}
+
+.primaryButton {
+  width: 100%;
+  background: #1a1a1a;
+  color: #ffffff;
+  border: none;
+  padding: 14px 24px;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.primaryButton:hover {
+  background: #374151;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+@media (max-width: 768px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+

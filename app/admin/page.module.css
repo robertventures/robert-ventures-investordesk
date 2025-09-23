@@ -1,0 +1,168 @@
+.main {
+  padding: 0 0 64px;
+}
+
+.container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 24px;
+}
+
+.title {
+  font-size: 28px;
+  margin: 0 0 8px 0;
+}
+
+.subtitle {
+  color: #64748b;
+  margin: 0 0 16px 0;
+}
+
+.headerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin: 16px 0 24px;
+}
+
+.metric {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.metricLabel {
+  font-size: 12px;
+  color: #64748b;
+  letter-spacing: 0.08em;
+}
+
+.metricValue {
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.tabs {
+  display: flex;
+  gap: 12px;
+  margin: 8px 0 16px;
+}
+
+.tab {
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.tab.active {
+  border-color: #1f2937;
+  background: #1f2937;
+  color: #fff;
+}
+
+.tableContainer {
+  overflow-x: auto;
+}
+
+.linkButton {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #2563eb;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.secondaryButton {
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.dangerButton {
+  border: 1px solid #ef4444;
+  background: #ef4444;
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.actionGroup {
+  display: flex;
+  gap: 8px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th, .table td {
+  border: 1px solid #e2e8f0;
+  padding: 12px;
+  text-align: left;
+}
+
+.investments {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.invRow {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px dashed #e2e8f0;
+  padding: 8px 12px;
+  border-radius: 6px;
+}
+
+.invCol {
+  min-width: 140px;
+}
+
+.invActions {
+  margin-left: auto;
+}
+
+.approveButton {
+  border: 1px solid #16a34a;
+  color: #fff;
+  background: #16a34a;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.approveButton:disabled {
+  border-color: #94a3b8;
+  background: #94a3b8;
+  cursor: not-allowed;
+}
+
+.muted {
+  color: #94a3b8;
+}
+
+

@@ -1,0 +1,110 @@
+.main {
+  padding: 0 0 64px;
+}
+
+.container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 24px;
+}
+
+.backButton {
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-bottom: 12px;
+}
+
+.title {
+  font-size: 28px;
+  margin: 0 0 8px 0;
+}
+
+.subtitle {
+  color: #64748b;
+  margin: 0 0 16px 0;
+}
+
+.headerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.secondaryButton {
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin: 16px 0 24px;
+}
+
+.metric {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.metricLabel {
+  font-size: 12px;
+  color: #64748b;
+  letter-spacing: 0.08em;
+}
+
+.metricValue {
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.section {
+  margin-top: 24px;
+}
+
+.sectionTitle {
+  font-size: 20px;
+  margin-bottom: 8px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px 16px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.invRow {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px 16px;
+  border: 1px dashed #e2e8f0;
+  padding: 8px 12px;
+  border-radius: 6px;
+}
+
+.muted {
+  color: #94a3b8;
+}
+
+
