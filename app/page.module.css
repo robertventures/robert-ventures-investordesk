@@ -59,6 +59,48 @@
   line-height: 1.5;
 }
 
+.signInPrompt {
+  text-align: center;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 32px 24px;
+  max-width: 480px;
+  margin-left: auto;
+  margin-right: auto;
+  box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.04);
+}
+
+.signInText {
+  font-size: 16px;
+  color: #6b7280;
+  margin-bottom: 20px;
+  font-weight: 400;
+}
+
+.signInButton {
+  background: #1a1a1a;
+  color: #ffffff;
+  border: none;
+  padding: 14px 32px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: 'Inter', sans-serif;
+  min-width: 140px;
+  text-decoration: none;
+  display: inline-block;
+  text-align: center;
+}
+
+.signInButton:hover {
+  background: #374151;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
 @media (max-width: 768px) {
   .welcomeTitle {
     font-size: 18px;
@@ -72,6 +114,20 @@
     padding: 12px 12px;
     margin-bottom: 12px;
     border-radius: 6px;
+  }
+  
+  .signInPrompt {
+    padding: 24px 16px;
+  }
+  
+  .signInText {
+    font-size: 15px;
+    margin-bottom: 16px;
+  }
+  
+  .signInButton {
+    padding: 12px 24px;
+    font-size: 13px;
   }
   
   .main {

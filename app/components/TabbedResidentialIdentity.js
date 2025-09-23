@@ -1,14 +1,14 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import styles from './TabbedResidentialIdentity.module.css'
 
-export default function TabbedResidentialIdentity({ onCompleted, accountType: accountTypeProp }) {
-  const router = useRouter()
+export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary, accountType: accountTypeProp }) {
   const US_STATES = [
     'Alabama','Alaska','Arizona','Arkansas','California','Colorado','Connecticut','Delaware','Florida','Georgia','Hawaii','Idaho','Illinois','Indiana','Iowa','Kansas','Kentucky','Louisiana','Maine','Maryland','Massachusetts','Michigan','Minnesota','Mississippi','Missouri','Montana','Nebraska','Nevada','New Hampshire','New Jersey','New Mexico','New York','North Carolina','North Dakota','Ohio','Oklahoma','Oregon','Pennsylvania','Rhode Island','South Carolina','South Dakota','Tennessee','Texas','Utah','Vermont','Virginia','Washington','West Virginia','Wisconsin','Wyoming'
   ]
   const [form, setForm] = useState({
+    firstName: '',
+    lastName: '',
     entityName: '',
     street1: '',
     street2: '',
@@ -20,6 +20,8 @@ export default function TabbedResidentialIdentity({ onCompleted, accountType: ac
     ssn: '',
     jointHoldingType: '',
     jointHolder: {
+      firstName: '',
+      lastName: '',
       street1: '',
       street2: '',
       city: '',
@@ -70,6 +72,8 @@ export default function TabbedResidentialIdentity({ onCompleted, accountType: ac
           setForm(prev => ({
             ...prev,
             entityName: u.entityName || '',
+            firstName: u.firstName || '',
+            lastName: u.lastName || '',
             street1: u.address?.street1 || '',
             street2: u.address?.street2 || '',
             city: u.address?.city || '',
@@ -80,6 +84,8 @@ export default function TabbedResidentialIdentity({ onCompleted, accountType: ac
             ssn: (u.ssn || u.taxId || ''),
             jointHoldingType: u.jointHoldingType || '',
             jointHolder: {
+              firstName: u.jointHolder?.firstName || '',
+              lastName: u.jointHolder?.lastName || '',
               street1: u.jointHolder?.address?.street1 || '',
               street2: u.jointHolder?.address?.street2 || '',
               city: u.jointHolder?.address?.city || '',
@@ -161,6 +167,8 @@ export default function TabbedResidentialIdentity({ onCompleted, accountType: ac
     if (accountType === 'entity') {
       if (!form.entityName.trim()) newErrors.entityName = 'Required'
     }
+    if (!form.firstName.trim()) newErrors.firstName = 'Required'
+    if (!form.lastName.trim()) newErrors.lastName = 'Required'
     if (!form.street1.trim()) newErrors.street1 = 'Required'
     if (!form.city.trim()) newErrors.city = 'Required'
     if (!form.state.trim()) newErrors.state = 'Required'
@@ -171,12 +179,14 @@ export default function TabbedResidentialIdentity({ onCompleted, accountType: ac
     // Validate joint holder fields if account type is joint
     if (accountType === 'joint') {
       if (!form.jointHoldingType.trim()) newErrors.jointHoldingType = 'Required'
+      if (!form.jointHolder.firstName.trim()) newErrors['jointHolder.firstName'] = 'Required'
+      if (!form.jointHolder.lastName.trim()) newErrors['jointHolder.lastName'] = 'Required'
       if (!form.jointHolder.street1.trim()) newErrors['jointHolder.street1'] = 'Required'
       if (!form.jointHolder.city.trim()) newErrors['jointHolder.city'] = 'Required'
       if (!form.jointHolder.state.trim()) newErrors['jointHolder.state'] = 'Required'
       if (!form.jointHolder.zip.trim()) newErrors['jointHolder.zip'] = 'Required'
       if (!form.jointHolder.dob) newErrors['jointHolder.dob'] = 'Required'
-      // SSN is optional for joint holder
+      if (!form.jointHolder.ssn.trim()) newErrors['jointHolder.ssn'] = 'Required'
       if (!/\S+@\S+\.\S+/.test(form.jointHolder.email)) newErrors['jointHolder.email'] = 'Invalid email'
       if (!form.jointHolder.phone.trim()) newErrors['jointHolder.phone'] = 'Required'
     }
@@ -220,6 +230,8 @@ export default function TabbedResidentialIdentity({ onCompleted, accountType: ac
       }
 
       const userData = {
+        firstName: form.firstName.trim(),
+        lastName: form.lastName.trim(),
         ...(accountType === 'entity' ? { entity: {
           name: form.entityName,
           registrationDate: form.dob,
@@ -263,6 +275,8 @@ export default function TabbedResidentialIdentity({ onCompleted, accountType: ac
       if (accountType === 'joint') {
         userData.jointHoldingType = form.jointHoldingType
         userData.jointHolder = {
+          firstName: form.jointHolder.firstName.trim(),
+          lastName: form.jointHolder.lastName.trim(),
           address: jointAddress,
           dob: form.jointHolder.dob,
           ssn: form.jointHolder.ssn,
@@ -307,7 +321,7 @@ export default function TabbedResidentialIdentity({ onCompleted, accountType: ac
             }
           }
         } : {
-          personalInfo: { dob: form.dob, ssn: form.ssn },
+          personalInfo: { firstName: form.firstName.trim(), lastName: form.lastName.trim(), dob: form.dob, ssn: form.ssn },
           address: {
             street1: form.street1,
             street2: form.street2,
@@ -322,6 +336,8 @@ export default function TabbedResidentialIdentity({ onCompleted, accountType: ac
         if (accountType === 'joint') {
           investmentFields.jointHoldingType = form.jointHoldingType
           investmentFields.jointHolder = {
+            firstName: form.jointHolder.firstName.trim(),
+            lastName: form.jointHolder.lastName.trim(),
             address: jointAddress,
             dob: form.jointHolder.dob,
             ssn: form.jointHolder.ssn,
@@ -341,8 +357,44 @@ export default function TabbedResidentialIdentity({ onCompleted, accountType: ac
         })
       }
 
-      if (typeof onCompleted === 'function') onCompleted()
-      router.push('/finalize-investment')
+      const summary = {
+        firstName: form.firstName.trim(),
+        lastName: form.lastName.trim(),
+        street1: form.street1,
+        street2: form.street2,
+        city: form.city,
+        state: form.state,
+        zip: form.zip,
+        country: form.country,
+        dob: form.dob,
+        ssn: form.ssn,
+        accountType,
+        jointHoldingType: form.jointHoldingType,
+        jointHolder: accountType === 'joint' ? {
+          firstName: form.jointHolder.firstName,
+          lastName: form.jointHolder.lastName,
+          email: form.jointHolder.email,
+          phone: form.jointHolder.phone,
+          dob: form.jointHolder.dob,
+          ssn: form.jointHolder.ssn,
+          address: jointAddress
+        } : undefined,
+        entityName: accountType === 'entity' ? form.entityName : undefined,
+        authorizedRep: accountType === 'entity' ? {
+          dob: form.authorizedRep.dob,
+          ssn: form.authorizedRep.ssn,
+          address: {
+            street1: form.authorizedRep.street1,
+            street2: form.authorizedRep.street2,
+            city: form.authorizedRep.city,
+            state: form.authorizedRep.state,
+            zip: form.authorizedRep.zip,
+            country: form.authorizedRep.country,
+          }
+        } : undefined
+      }
+      if (typeof onReviewSummary === 'function') onReviewSummary(summary)
+      if (typeof onCompleted === 'function') onCompleted(summary)
     } catch (e) {
       console.error('Failed saving address & identity', e)
     } finally {
@@ -447,6 +499,16 @@ export default function TabbedResidentialIdentity({ onCompleted, accountType: ac
           </div>
         )}
         <div className={styles.field}> 
+          <label className={styles.label}>First Name</label>
+          <input className={`${styles.input} ${errors.firstName ? styles.inputError : ''}`} name="firstName" value={form.firstName} onChange={handleChange} placeholder="Enter first name" />
+          {errors.firstName && <span className={styles.error}>{errors.firstName}</span>}
+        </div>
+        <div className={styles.field}> 
+          <label className={styles.label}>Last Name</label>
+          <input className={`${styles.input} ${errors.lastName ? styles.inputError : ''}`} name="lastName" value={form.lastName} onChange={handleChange} placeholder="Enter last name" />
+          {errors.lastName && <span className={styles.error}>{errors.lastName}</span>}
+        </div>
+        <div className={styles.field}> 
           <label className={styles.label}>Street Address</label>
           <input className={`${styles.input} ${errors.street1 ? styles.inputError : ''}`} name="street1" value={form.street1} onChange={handleChange} placeholder="No PO Boxes" />
           {errors.street1 && <span className={styles.error}>{errors.street1}</span>}
@@ -508,6 +570,16 @@ export default function TabbedResidentialIdentity({ onCompleted, accountType: ac
 
           <div className={styles.grid}>
             <div className={styles.field}> 
+              <label className={styles.label}>First Name</label>
+              <input className={`${styles.input} ${errors['jointHolder.firstName'] ? styles.inputError : ''}`} name="jointHolder.firstName" value={form.jointHolder.firstName} onChange={handleChange} placeholder="Enter first name" />
+              {errors['jointHolder.firstName'] && <span className={styles.error}>{errors['jointHolder.firstName']}</span>}
+            </div>
+            <div className={styles.field}> 
+              <label className={styles.label}>Last Name</label>
+              <input className={`${styles.input} ${errors['jointHolder.lastName'] ? styles.inputError : ''}`} name="jointHolder.lastName" value={form.jointHolder.lastName} onChange={handleChange} placeholder="Enter last name" />
+              {errors['jointHolder.lastName'] && <span className={styles.error}>{errors['jointHolder.lastName']}</span>}
+            </div>
+            <div className={styles.field}> 
               <label className={styles.label}>Email</label>
               <input className={`${styles.input} ${errors['jointHolder.email'] ? styles.inputError : ''}`} name="jointHolder.email" value={form.jointHolder.email} onChange={handleChange} placeholder="name@example.com" />
               {errors['jointHolder.email'] && <span className={styles.error}>{errors['jointHolder.email']}</span>}
@@ -523,7 +595,7 @@ export default function TabbedResidentialIdentity({ onCompleted, accountType: ac
               {errors['jointHolder.dob'] && <span className={styles.error}>{errors['jointHolder.dob']}</span>}
             </div>
             <div className={styles.field}> 
-              <label className={styles.label}>SSN (optional)</label>
+              <label className={styles.label}>SSN</label>
               <input className={`${styles.input} ${errors['jointHolder.ssn'] ? styles.inputError : ''}`} name="jointHolder.ssn" value={form.jointHolder.ssn} onChange={handleChange} placeholder="123-45-6789" />
               {errors['jointHolder.ssn'] && <span className={styles.error}>{errors['jointHolder.ssn']}</span>}
             </div>

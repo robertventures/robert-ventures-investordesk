@@ -26,6 +26,38 @@ export default function ProfileView() {
             phoneNumber: data.user.phoneNumber || '',
             dob: data.user.dob || '',
             ssn: data.user.ssn || '',
+            jointHolder: data.user.jointHolder ? {
+              firstName: data.user.jointHolder.firstName || '',
+              lastName: data.user.jointHolder.lastName || '',
+              email: data.user.jointHolder.email || '',
+              phone: data.user.jointHolder.phone || '',
+              dob: data.user.jointHolder.dob || '',
+              ssn: data.user.jointHolder.ssn || '',
+              address: {
+                street1: data.user.jointHolder.address?.street1 || '',
+                street2: data.user.jointHolder.address?.street2 || '',
+                city: data.user.jointHolder.address?.city || '',
+                state: data.user.jointHolder.address?.state || '',
+                zip: data.user.jointHolder.address?.zip || '',
+                country: data.user.jointHolder.address?.country || 'United States'
+              }
+            } : {
+              firstName: '',
+              lastName: '',
+              email: '',
+              phone: '',
+              dob: '',
+              ssn: '',
+              address: {
+                street1: '',
+                street2: '',
+                city: '',
+                state: '',
+                zip: '',
+                country: 'United States'
+              }
+            },
+            jointHoldingType: data.user.jointHoldingType || '',
             address: {
               street1: data.user.address?.street1 || '',
               street2: data.user.address?.street2 || '',
@@ -89,6 +121,20 @@ export default function ProfileView() {
     setSaveSuccess(false)
   }
 
+  const handleJointHolderChange = (e) => {
+    const { name, value } = e.target
+    setFormData(prev => ({ ...prev, jointHolder: { ...prev.jointHolder, [name]: value } }))
+    if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }))
+    setSaveSuccess(false)
+  }
+
+  const handleJointAddressChange = (e) => {
+    const { name, value } = e.target
+    setFormData(prev => ({ ...prev, jointHolder: { ...prev.jointHolder, address: { ...prev.jointHolder.address, [name]: value } } }))
+    if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }))
+    setSaveSuccess(false)
+  }
+
   const handleEntityAddressChange = (e) => {
     const { name, value } = e.target
     setFormData(prev => ({ ...prev, entity: { ...prev.entity, address: { ...prev.entity.address, [name]: value } } }))
@@ -147,6 +193,24 @@ export default function ProfileView() {
         if (!formData.authorizedRepresentative.address.zip.trim()) newErrors.repZip = 'Required'
       }
     }
+
+    const hasJointInvestment = Array.isArray(userData?.investments) && userData.investments.some(inv => inv.accountType === 'joint')
+    const showJoint = hasJointInvestment || !!userData?.jointHolder
+    if (showJoint && formData.jointHolder) {
+      if (!formData.jointHoldingType?.trim()) newErrors.jointHoldingType = 'Required'
+      if (!formData.jointHolder.firstName.trim()) newErrors.jointFirstName = 'Required'
+      if (!formData.jointHolder.lastName.trim()) newErrors.jointLastName = 'Required'
+      if (!formData.jointHolder.email.trim() || !/\S+@\S+\.\S+/.test(formData.jointHolder.email)) newErrors.jointEmail = 'Valid email required'
+      if (!formData.jointHolder.phone.trim()) newErrors.jointPhone = 'Required'
+      if (!formData.jointHolder.dob) newErrors.jointDob = 'Required'
+      if (!formData.jointHolder.ssn.trim()) newErrors.jointSsn = 'Required'
+      if (formData.jointHolder.address) {
+        if (!formData.jointHolder.address.street1.trim()) newErrors.jointStreet1 = 'Required'
+        if (!formData.jointHolder.address.city.trim()) newErrors.jointCity = 'Required'
+        if (!formData.jointHolder.address.state) newErrors.jointState = 'Required'
+        if (!formData.jointHolder.address.zip.trim()) newErrors.jointZip = 'Required'
+      }
+    }
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
@@ -176,6 +240,25 @@ export default function ProfileView() {
             zip: formData.address.zip,
             country: formData.address.country
           },
+          ...(Array.isArray(userData?.investments) && userData.investments.some(inv => inv.accountType === 'joint') || !!userData?.jointHolder ? {
+            jointHoldingType: formData.jointHoldingType,
+            jointHolder: {
+              firstName: formData.jointHolder.firstName,
+              lastName: formData.jointHolder.lastName,
+              email: formData.jointHolder.email,
+              phone: formData.jointHolder.phone,
+              dob: formData.jointHolder.dob,
+              ssn: formData.jointHolder.ssn,
+              address: {
+                street1: formData.jointHolder.address.street1,
+                street2: formData.jointHolder.address.street2,
+                city: formData.jointHolder.address.city,
+                state: formData.jointHolder.address.state,
+                zip: formData.jointHolder.address.zip,
+                country: formData.jointHolder.address.country
+              }
+            }
+          } : {}),
           ...(formData.entity && (Array.isArray(userData?.investments) && userData.investments.some(inv => inv.accountType === 'entity') || !!userData?.entity) ? {
             entity: {
               name: formData.entity.name,
@@ -223,6 +306,11 @@ export default function ProfileView() {
     return <div className={styles.loading}>Loading profile...</div>
   }
 
+  const hasJointInvestment = Array.isArray(userData?.investments) && userData.investments.some(inv => inv.accountType === 'joint')
+  const showJointSection = hasJointInvestment || !!userData?.jointHolder
+  const hasEntityInvestment = Array.isArray(userData?.investments) && userData.investments.some(inv => inv.accountType === 'entity')
+  const showEntitySection = hasEntityInvestment || !!userData?.entity
+
   return (
     <div className={styles.profileContainer}>
       <div className={styles.header}>
@@ -231,165 +319,147 @@ export default function ProfileView() {
       </div>
 
       <div className={styles.content}>
-        <div className={styles.section}>
-          <h2 className={styles.sectionTitle}>Personal Details</h2>
-          <div className={styles.fieldGrid}>
-            <div className={styles.field}>
-              <label className={styles.label}>First Name</label>
-              <input
-                className={`${styles.input} ${errors.firstName ? styles.inputError : ''}`}
-                type="text"
-                name="firstName"
-                value={formData.firstName}
-                onChange={handleChange}
-                placeholder="Enter first name"
-              />
-              {errors.firstName && <span className={styles.errorText}>{errors.firstName}</span>}
-            </div>
-            <div className={styles.field}>
-              <label className={styles.label}>Last Name</label>
-              <input
-                className={`${styles.input} ${errors.lastName ? styles.inputError : ''}`}
-                type="text"
-                name="lastName"
-                value={formData.lastName}
-                onChange={handleChange}
-                placeholder="Enter last name"
-              />
-              {errors.lastName && <span className={styles.errorText}>{errors.lastName}</span>}
-            </div>
-            <div className={styles.field}>
-              <label className={styles.label}>Email Address</label>
-              <input
-                className={`${styles.input} ${errors.email ? styles.inputError : ''}`}
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                placeholder="Enter email"
-                disabled
-              />
-              {errors.email && <span className={styles.errorText}>{errors.email}</span>}
-            </div>
-            <div className={styles.field}>
-              <label className={styles.label}>Phone Number</label>
-              <input
-                className={`${styles.input} ${errors.phoneNumber ? styles.inputError : ''}`}
-                type="tel"
-                name="phoneNumber"
-                value={formData.phoneNumber}
-                onChange={handleChange}
-                placeholder="Enter phone number"
-              />
-              {errors.phoneNumber && <span className={styles.errorText}>{errors.phoneNumber}</span>}
-            </div>
-            <div className={styles.field}>
-              <label className={styles.label}>Date of Birth</label>
-              <input
-                className={styles.input}
-                type="date"
-                name="dob"
-                value={formData.dob}
-                onChange={handleChange}
-              />
-            </div>
-            <div className={styles.field}>
-              <label className={styles.label}>Social Security Number</label>
-              <input
-                className={styles.input}
-                type="text"
-                name="ssn"
-                value={formData.ssn}
-                onChange={handleChange}
-                placeholder="Enter SSN"
-              />
-            </div>
-          </div>
-        </div>
+        <section className={styles.section}>
+          <h2 className={styles.sectionTitle}>Primary Holder</h2>
 
-        {formData.address && (
-          <div className={styles.section}>
-            <h2 className={styles.sectionTitle}>Address Information</h2>
-            <div className={styles.fieldGrid}>
+          <div className={styles.subCard}>
+            <h3 className={styles.subSectionTitle}>Personal Information</h3>
+            <div className={styles.compactGrid}>
               <div className={styles.field}>
-                <label className={styles.label}>Street Address 1</label>
-                <input
-                  className={`${styles.input} ${errors.street1 ? styles.inputError : ''}`}
-                  type="text"
-                  name="street1"
-                  value={formData.address.street1}
-                  onChange={handleAddressChange}
-                  placeholder="Street address line 1"
-                />
-                {errors.street1 && <span className={styles.errorText}>{errors.street1}</span>}
+                <label className={styles.label}>First Name</label>
+                <input className={`${styles.input} ${errors.firstName ? styles.inputError : ''}`} name="firstName" value={formData.firstName} onChange={handleChange} />
               </div>
               <div className={styles.field}>
-                <label className={styles.label}>Street Address 2</label>
-                <input
-                  className={styles.input}
-                  type="text"
-                  name="street2"
-                  value={formData.address.street2}
-                  onChange={handleAddressChange}
-                  placeholder="Street address line 2 (optional)"
-                />
+                <label className={styles.label}>Last Name</label>
+                <input className={`${styles.input} ${errors.lastName ? styles.inputError : ''}`} name="lastName" value={formData.lastName} onChange={handleChange} />
               </div>
               <div className={styles.field}>
-                <label className={styles.label}>City</label>
-                <input
-                  className={`${styles.input} ${errors.city ? styles.inputError : ''}`}
-                  type="text"
-                  name="city"
-                  value={formData.address.city}
-                  onChange={handleAddressChange}
-                  placeholder="City"
-                />
-                {errors.city && <span className={styles.errorText}>{errors.city}</span>}
+                <label className={styles.label}>Date of Birth</label>
+                <input className={styles.input} type="date" name="dob" value={formData.dob} onChange={handleChange} />
               </div>
               <div className={styles.field}>
-                <label className={styles.label}>State</label>
-                <input
-                  className={`${styles.input} ${errors.state ? styles.inputError : ''}`}
-                  type="text"
-                  name="state"
-                  value={formData.address.state}
-                  onChange={handleAddressChange}
-                  placeholder="State"
-                />
-                {errors.state && <span className={styles.errorText}>{errors.state}</span>}
-              </div>
-              <div className={styles.field}>
-                <label className={styles.label}>ZIP Code</label>
-                <input
-                  className={`${styles.input} ${errors.zip ? styles.inputError : ''}`}
-                  type="text"
-                  name="zip"
-                  value={formData.address.zip}
-                  onChange={handleAddressChange}
-                  placeholder="ZIP Code"
-                />
-                {errors.zip && <span className={styles.errorText}>{errors.zip}</span>}
-              </div>
-              <div className={styles.field}>
-                <label className={styles.label}>Country</label>
-                <input
-                  className={styles.input}
-                  type="text"
-                  name="country"
-                  value={formData.address.country}
-                  onChange={handleAddressChange}
-                  disabled
-                />
+                <label className={styles.label}>Social Security Number</label>
+                <input className={styles.input} name="ssn" value={formData.ssn} onChange={handleChange} placeholder="123-45-6789" />
               </div>
             </div>
           </div>
+
+          <div className={styles.subCard}>
+            <h3 className={styles.subSectionTitle}>Contact Information</h3>
+            <div className={styles.compactGrid}>
+              <div className={styles.field}>
+                <label className={styles.label}>Email</label>
+                <input className={`${styles.input} ${errors.email ? styles.inputError : ''}`} name="email" value={formData.email} disabled />
+              </div>
+              <div className={styles.field}>
+                <label className={styles.label}>Phone</label>
+                <input className={`${styles.input} ${errors.phoneNumber ? styles.inputError : ''}`} name="phoneNumber" value={formData.phoneNumber} onChange={handleChange} />
+              </div>
+            </div>
+          </div>
+
+          {formData.address && (
+            <div className={styles.subCard}>
+              <h3 className={styles.subSectionTitle}>Mailing Address</h3>
+              <div className={styles.compactGrid}>
+                <div className={styles.field}>
+                  <label className={styles.label}>Street 1</label>
+                  <input className={`${styles.input} ${errors.street1 ? styles.inputError : ''}`} name="street1" value={formData.address.street1} onChange={handleAddressChange} />
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>Street 2</label>
+                  <input className={styles.input} name="street2" value={formData.address.street2} onChange={handleAddressChange} />
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>City</label>
+                  <input className={`${styles.input} ${errors.city ? styles.inputError : ''}`} name="city" value={formData.address.city} onChange={handleAddressChange} />
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>State</label>
+                  <input className={`${styles.input} ${errors.state ? styles.inputError : ''}`} name="state" value={formData.address.state} onChange={handleAddressChange} />
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>ZIP Code</label>
+                  <input className={`${styles.input} ${errors.zip ? styles.inputError : ''}`} name="zip" value={formData.address.zip} onChange={handleAddressChange} />
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>Country</label>
+                  <input className={styles.input} name="country" value={formData.address.country} disabled />
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
+
+        {showJointSection && (
+          <section className={styles.section}>
+            <h2 className={styles.sectionTitle}>Joint Holder</h2>
+
+            <div className={styles.subCard}>
+              <h3 className={styles.subSectionTitle}>Joint Details</h3>
+              <div className={styles.compactGrid}>
+                <div className={`${styles.field} ${styles.fullRow}`}>
+                  <label className={styles.label}>Joint Holder Relationship</label>
+                  <select
+                    className={`${styles.input} ${errors.jointHoldingType ? styles.inputError : ''}`}
+                    name="jointHoldingType"
+                    value={formData.jointHoldingType || ''}
+                    onChange={handleChange}
+                  >
+                    <option value="">Select relationship to primary holder</option>
+                    <option value="spouse">Spouse</option>
+                    <option value="sibling">Sibling</option>
+                    <option value="domestic_partner">Domestic Partner</option>
+                    <option value="business_partner">Business Partner</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>First Name</label>
+                  <input className={`${styles.input} ${errors.jointFirstName ? styles.inputError : ''}`} name="firstName" value={formData.jointHolder?.firstName || ''} onChange={handleJointHolderChange} />
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>Last Name</label>
+                  <input className={`${styles.input} ${errors.jointLastName ? styles.inputError : ''}`} name="lastName" value={formData.jointHolder?.lastName || ''} onChange={handleJointHolderChange} />
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>Email</label>
+                  <input className={`${styles.input} ${errors.jointEmail ? styles.inputError : ''}`} name="email" value={formData.jointHolder?.email || ''} onChange={handleJointHolderChange} />
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>Phone</label>
+                  <input className={`${styles.input} ${errors.jointPhone ? styles.inputError : ''}`} name="phone" value={formData.jointHolder?.phone || ''} onChange={handleJointHolderChange} />
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>Date of Birth</label>
+                  <input className={`${styles.input} ${errors.jointDob ? styles.inputError : ''}`} type="date" name="dob" value={formData.jointHolder?.dob || ''} onChange={handleJointHolderChange} />
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>SSN</label>
+                  <input className={`${styles.input} ${errors.jointSsn ? styles.inputError : ''}`} name="ssn" value={formData.jointHolder?.ssn || ''} onChange={handleJointHolderChange} />
+                </div>
+              </div>
+            </div>
+
+            <div className={styles.subCard}>
+              <h3 className={styles.subSectionTitle}>Mailing Address</h3>
+              <div className={styles.compactGrid}>
+                <div className={styles.field}><label className={styles.label}>Street 1</label><input className={`${styles.input} ${errors.jointStreet1 ? styles.inputError : ''}`} name="street1" value={formData.jointHolder?.address?.street1 || ''} onChange={handleJointAddressChange} /></div>
+                <div className={styles.field}><label className={styles.label}>Street 2</label><input className={styles.input} name="street2" value={formData.jointHolder?.address?.street2 || ''} onChange={handleJointAddressChange} /></div>
+                <div className={styles.field}><label className={styles.label}>City</label><input className={`${styles.input} ${errors.jointCity ? styles.inputError : ''}`} name="city" value={formData.jointHolder?.address?.city || ''} onChange={handleJointAddressChange} /></div>
+                <div className={styles.field}><label className={styles.label}>State</label><input className={`${styles.input} ${errors.jointState ? styles.inputError : ''}`} name="state" value={formData.jointHolder?.address?.state || ''} onChange={handleJointAddressChange} /></div>
+                <div className={styles.field}><label className={styles.label}>ZIP Code</label><input className={`${styles.input} ${errors.jointZip ? styles.inputError : ''}`} name="zip" value={formData.jointHolder?.address?.zip || ''} onChange={handleJointAddressChange} /></div>
+                <div className={styles.field}><label className={styles.label}>Country</label><input className={styles.input} name="country" value={formData.jointHolder?.address?.country || 'United States'} disabled /></div>
+              </div>
+            </div>
+          </section>
         )}
 
-        {((Array.isArray(userData?.investments) && userData.investments.some(inv => inv.accountType === 'entity')) || !!userData?.entity) && (
+        {showEntitySection && (
           <>
-            <div className={styles.section}>
+            <section className={styles.section}>
               <h2 className={styles.sectionTitle}>Entity Information</h2>
-              <div className={styles.fieldGrid}>
+              <div className={styles.compactGrid}>
                 <div className={styles.field}>
                   <label className={styles.label}>Entity Name</label>
                   <input
@@ -398,7 +468,6 @@ export default function ProfileView() {
                     name="name"
                     value={formData.entity?.name || ''}
                     onChange={handleEntityChange}
-                    placeholder="Enter entity name"
                   />
                   {errors.entityName && <span className={styles.errorText}>{errors.entityName}</span>}
                 </div>
@@ -421,12 +490,11 @@ export default function ProfileView() {
                     name="taxId"
                     value={formData.entity?.taxId || ''}
                     onChange={handleEntityChange}
-                    placeholder="Enter tax ID"
                   />
                   {errors.entityTaxId && <span className={styles.errorText}>{errors.entityTaxId}</span>}
                 </div>
               </div>
-              <div className={styles.fieldGrid}>
+              <div className={styles.compactGrid}>
                 <div className={styles.field}>
                   <label className={styles.label}>Street Address 1</label>
                   <input
@@ -435,7 +503,6 @@ export default function ProfileView() {
                     name="street1"
                     value={formData.entity?.address?.street1 || ''}
                     onChange={handleEntityAddressChange}
-                    placeholder="Street address line 1"
                   />
                   {errors.entityStreet1 && <span className={styles.errorText}>{errors.entityStreet1}</span>}
                 </div>
@@ -447,7 +514,6 @@ export default function ProfileView() {
                     name="street2"
                     value={formData.entity?.address?.street2 || ''}
                     onChange={handleEntityAddressChange}
-                    placeholder="Street address line 2 (optional)"
                   />
                 </div>
                 <div className={styles.field}>
@@ -458,7 +524,6 @@ export default function ProfileView() {
                     name="city"
                     value={formData.entity?.address?.city || ''}
                     onChange={handleEntityAddressChange}
-                    placeholder="City"
                   />
                   {errors.entityCity && <span className={styles.errorText}>{errors.entityCity}</span>}
                 </div>
@@ -470,7 +535,6 @@ export default function ProfileView() {
                     name="state"
                     value={formData.entity?.address?.state || ''}
                     onChange={handleEntityAddressChange}
-                    placeholder="State"
                   />
                   {errors.entityState && <span className={styles.errorText}>{errors.entityState}</span>}
                 </div>
@@ -482,7 +546,6 @@ export default function ProfileView() {
                     name="zip"
                     value={formData.entity?.address?.zip || ''}
                     onChange={handleEntityAddressChange}
-                    placeholder="ZIP Code"
                   />
                   {errors.entityZip && <span className={styles.errorText}>{errors.entityZip}</span>}
                 </div>
@@ -498,11 +561,11 @@ export default function ProfileView() {
                   />
                 </div>
               </div>
-            </div>
+            </section>
 
-            <div className={styles.section}>
+            <section className={styles.section}>
               <h2 className={styles.sectionTitle}>Authorized Representative</h2>
-              <div className={styles.fieldGrid}>
+              <div className={styles.compactGrid}>
                 <div className={styles.field}>
                   <label className={styles.label}>Date of Birth</label>
                   <input
@@ -522,12 +585,11 @@ export default function ProfileView() {
                     name="ssn"
                     value={formData.authorizedRepresentative?.ssn || ''}
                     onChange={handleAuthorizedRepChange}
-                    placeholder="123-45-6789"
                   />
                   {errors.repSsn && <span className={styles.errorText}>{errors.repSsn}</span>}
                 </div>
               </div>
-              <div className={styles.fieldGrid}>
+              <div className={styles.compactGrid}>
                 <div className={styles.field}>
                   <label className={styles.label}>Street Address 1</label>
                   <input
@@ -536,7 +598,6 @@ export default function ProfileView() {
                     name="street1"
                     value={formData.authorizedRepresentative?.address?.street1 || ''}
                     onChange={handleAuthorizedRepAddressChange}
-                    placeholder="Street address line 1"
                   />
                   {errors.repStreet1 && <span className={styles.errorText}>{errors.repStreet1}</span>}
                 </div>
@@ -548,7 +609,6 @@ export default function ProfileView() {
                     name="street2"
                     value={formData.authorizedRepresentative?.address?.street2 || ''}
                     onChange={handleAuthorizedRepAddressChange}
-                    placeholder="Street address line 2 (optional)"
                   />
                 </div>
                 <div className={styles.field}>
@@ -559,7 +619,6 @@ export default function ProfileView() {
                     name="city"
                     value={formData.authorizedRepresentative?.address?.city || ''}
                     onChange={handleAuthorizedRepAddressChange}
-                    placeholder="City"
                   />
                   {errors.repCity && <span className={styles.errorText}>{errors.repCity}</span>}
                 </div>
@@ -571,7 +630,6 @@ export default function ProfileView() {
                     name="state"
                     value={formData.authorizedRepresentative?.address?.state || ''}
                     onChange={handleAuthorizedRepAddressChange}
-                    placeholder="State"
                   />
                   {errors.repState && <span className={styles.errorText}>{errors.repState}</span>}
                 </div>
@@ -583,7 +641,6 @@ export default function ProfileView() {
                     name="zip"
                     value={formData.authorizedRepresentative?.address?.zip || ''}
                     onChange={handleAuthorizedRepAddressChange}
-                    placeholder="ZIP Code"
                   />
                   {errors.repZip && <span className={styles.errorText}>{errors.repZip}</span>}
                 </div>
@@ -599,11 +656,11 @@ export default function ProfileView() {
                   />
                 </div>
               </div>
-            </div>
+            </section>
           </>
         )}
 
-        <div className={styles.section}>
+        <section className={styles.section}>
           <h2 className={styles.sectionTitle}>Account Information</h2>
           <div className={styles.fieldGrid}>
             <div className={styles.field}>
@@ -626,18 +683,16 @@ export default function ProfileView() {
             </div>
           </div>
           <div className={styles.actions}>
-            <button 
+            <button
               className={styles.saveButton}
               onClick={handleSave}
               disabled={isSaving}
             >
               {isSaving ? 'Saving...' : 'Save Changes'}
             </button>
-            {saveSuccess && (
-              <span className={styles.success}>Saved!</span>
-            )}
+            {saveSuccess && <span className={styles.success}>Saved!</span>}
           </div>
-        </div>
+        </section>
       </div>
     </div>
   )

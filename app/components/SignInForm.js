@@ -11,6 +11,7 @@ export default function SignInForm() {
   })
   const [errors, setErrors] = useState({})
   const [isLoading, setIsLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
@@ -128,16 +129,27 @@ export default function SignInForm() {
           <label htmlFor="password" className={styles.label}>
             Password
           </label>
-          <input
-            type="password"
-            id="password"
-            name="password"
-            value={formData.password}
-            onChange={handleInputChange}
-            className={`${styles.input} ${errors.password ? styles.inputError : ''}`}
-            placeholder="Enter your password"
-            disabled={isLoading}
-          />
+          <div className={styles.inputWrapper}>
+            <input
+              type={showPassword ? 'text' : 'password'}
+              id="password"
+              name="password"
+              value={formData.password}
+              onChange={handleInputChange}
+              className={`${styles.input} ${styles.inputWithToggle} ${errors.password ? styles.inputError : ''}`}
+              placeholder="Enter your password"
+              disabled={isLoading}
+            />
+            <button
+              type="button"
+              className={styles.toggleButton}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              onClick={() => setShowPassword(prev => !prev)}
+              disabled={isLoading}
+            >
+              {showPassword ? 'Hide' : 'Show'}
+            </button>
+          </div>
           {errors.password && <span className={styles.errorText}>{errors.password}</span>}
         </div>
 

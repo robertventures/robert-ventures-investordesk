@@ -15,6 +15,10 @@
   display: none;
 }
 
+.collapsed .reviewBlock {
+  display: block;
+}
+
 .cardHeader {
   display: grid;
   grid-template-columns: auto 1fr auto;
@@ -67,6 +71,64 @@
 
 .cardBody {
   padding: 16px 24px 24px 24px;
+}
+
+.reviewBlock {
+  padding: 16px 24px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.reviewSummary {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.summaryRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.summaryLabel {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #6b7280;
+  letter-spacing: 0.05em;
+}
+
+.summaryValue {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.reviewBlock button.secondaryButton {
+  align-self: stretch;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 10px 20px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.reviewBlock button.secondaryButton:hover {
+  background: #e5e7eb;
+}
+
+.reviewActions {
+  margin-top: 24px;
 }
 
 .noPadding {
@@ -157,6 +219,13 @@
   }
   .cardTitle {
     font-size: 20px;
+  }
+  .reviewSummary {
+    padding: 16px;
+  }
+  .summaryRow {
+    flex-direction: column;
+    gap: 4px;
   }
 }
 

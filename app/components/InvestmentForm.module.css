@@ -254,6 +254,13 @@
   margin-top: 8px;
   font-family: 'Inter', sans-serif;
 }
+.currencyInputWrapper {
+  width: 100%;
+  text-align: right;
+}
+.amountError {
+  display: inline-block;
+}
 
 .actionsRow {
   margin-top: 16px;

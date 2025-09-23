@@ -45,12 +45,9 @@ export default function DashboardPage() {
         return (
           <>
             <PortfolioSummary />
-            {/* Notifications removed */}
             <TransactionsTable />
           </>
         )
-      case 'notifications':
-        return null
     }
   }
 

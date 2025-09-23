@@ -21,7 +21,8 @@ export default function FinalizeInvestmentPage() {
 function ClientContent() {
   const [user, setUser] = useState(null)
   const [investment, setInvestment] = useState(null)
-  const [accredited, setAccredited] = useState('not_accredited')
+  const [accredited, setAccredited] = useState('')
+  const [accreditedType, setAccreditedType] = useState('')
   const [fundingMethod, setFundingMethod] = useState('bank-transfer')
   const [payoutMethod, setPayoutMethod] = useState('bank-account')
   const [isSaving, setIsSaving] = useState(false)
@@ -41,6 +42,13 @@ function ClientContent() {
     }
     load()
   }, [])
+
+  useEffect(() => {
+    if (investment?.compliance) {
+      setAccredited(investment.compliance.accredited || '')
+      setAccreditedType(investment.compliance.accreditedType || '')
+    }
+  }, [investment?.compliance])
 
   // Enforce payout method when monthly payments are selected
   useEffect(() => {
@@ -70,22 +78,57 @@ function ClientContent() {
               name="accredited"
               value="accredited"
               checked={accredited === 'accredited'}
-              onChange={() => setAccredited('accredited')}
+              onChange={() => {
+                setAccredited('accredited')
+                setAccreditedType('')
+              }}
             />
             <span>Investor meets the definition of “accredited investor”</span>
           </label>
+          {accredited === 'accredited' && (
+            <div className={styles.subCategory}>
+              <div className={styles.subCategoryLabel}>Select the appropriate category:</div>
+              <div className={styles.subRadioGroup}>
+                <label className={styles.radioOption}>
+                  <input
+                    type="radio"
+                    name="accreditedType"
+                    value="assets"
+                    checked={accreditedType === 'assets'}
+                    onChange={() => setAccreditedType('assets')}
+                  />
+                  <span>Value of assets: Net worth over $1 million, excluding primary residence (individually or with spouse or partner)</span>
+                </label>
+                <label className={styles.radioOption}>
+                  <input
+                    type="radio"
+                    name="accreditedType"
+                    value="income"
+                    checked={accreditedType === 'income'}
+                    onChange={() => setAccreditedType('income')}
+                  />
+                  <span>Annual income: Income over $200,000 (individually) or $300,000 (with spouse or partner) in each of the prior two years, with the same expected this year</span>
+                </label>
+              </div>
+            </div>
+          )}
           <label className={styles.radioOption}>
             <input
               type="radio"
               name="accredited"
               value="not_accredited"
               checked={accredited === 'not_accredited'}
-              onChange={() => setAccredited('not_accredited')}
+              onChange={() => {
+                setAccredited('not_accredited')
+                setAccreditedType('')
+              }}
             />
-            <span>Investor does not meet the definition or is not sure</span>
+            <span>Investor does not meet the definition of "accredited investor" or is not sure</span>
           </label>
         </div>
-        <p className={styles.note}>By clicking Continue, the investor confirms they are within their investment limit.</p>
+        {accredited === 'not_accredited' && (
+          <p className={styles.note}>By clicking Continue, the investor confirms their investment is not more than 10% of their net worth or annual income.</p>
+        )}
       </Section>
 
       <Section title="Document Signup" raw>
@@ -214,7 +257,11 @@ function ClientContent() {
       <div className={styles.actions}>
         <button
           className={styles.primaryButton}
-          disabled={isSaving}
+          disabled={
+            isSaving ||
+            !accredited ||
+            (accredited === 'accredited' && !accreditedType)
+          }
           onClick={async () => {
             if (!investment) return
             setIsSaving(true)
@@ -229,7 +276,10 @@ function ClientContent() {
                   _action: 'updateInvestment',
                   investmentId,
                   fields: {
-                    compliance: { accredited },
+                    compliance: {
+                      accredited,
+                      accreditedType: accredited === 'accredited' ? accreditedType : null
+                    },
                     banking: { fundingMethod, earningsMethod, payoutMethod },
                     status: 'submitted',
                     submittedAt: new Date().toISOString()

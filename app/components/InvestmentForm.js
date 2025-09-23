@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import styles from './InvestmentForm.module.css'
 
-export default function InvestmentForm({ onCompleted, disableAuthGuard = false, accountType, initialAmount, initialPaymentFrequency, initialLockup, onValuesChange }) {
+export default function InvestmentForm({ onCompleted, onReviewSummary, disableAuthGuard = false, accountType, initialAmount, initialPaymentFrequency, initialLockup, onValuesChange }) {
   const router = useRouter()
   const [formData, setFormData] = useState({
     investmentAmount: typeof initialAmount === 'number' ? initialAmount : 0,
@@ -16,6 +16,14 @@ export default function InvestmentForm({ onCompleted, disableAuthGuard = false, 
 
   // Calculate bonds based on $10 per bond
   const bonds = Math.floor(formData.investmentAmount / 10)
+  const formattedBonds = bonds.toLocaleString()
+
+  const getAmountError = (amount) => {
+    if (!amount) return ''
+    if (amount < 1000) return 'Minimum investment is $1,000'
+    if (amount % 10 !== 0) return 'Investment amount must be in $10 increments'
+    return ''
+  }
 
   // Calculate anticipated earnings based on payment frequency
   const calculateEarnings1Year = () => {
@@ -58,6 +66,31 @@ export default function InvestmentForm({ onCompleted, disableAuthGuard = false, 
   const annualEarnings1Year = (formData.investmentAmount * 0.08).toFixed(2)
   const annualEarnings3Year = (formData.investmentAmount * 0.10).toFixed(2)
 
+  const buildSummary = (lockupPeriodSelection) => {
+    const effectiveLockup = lockupPeriodSelection || selectedLockup
+    const anticipated = effectiveLockup === '1-year' ? Number(earnings1Year) : Number(earnings3Year)
+    return {
+      amount: formData.investmentAmount,
+      paymentFrequency: formData.paymentFrequency,
+      lockupPeriod: effectiveLockup,
+      anticipatedEarnings: anticipated,
+      bonds,
+      accountType
+    }
+  }
+
+  const notifyCompletion = (investmentId, lockupPeriodSelection) => {
+    const summary = buildSummary(lockupPeriodSelection)
+    if (typeof onReviewSummary === 'function') {
+      onReviewSummary(summary)
+    }
+    if (typeof onCompleted === 'function') {
+      onCompleted({ investmentId, ...summary })
+    } else {
+      router.push('/investment')
+    }
+  }
+
   useEffect(() => {
     // Check if user is logged in (has session data)
     if (disableAuthGuard) return
@@ -98,16 +131,19 @@ export default function InvestmentForm({ onCompleted, disableAuthGuard = false, 
     let nextValue = value
     if (name === 'investmentAmount') {
       // Remove commas and strip leading zeros so typing doesn't result in values like 01000
-      const cleanValue = value.replace(/,/g, '').replace(/^0+(?=\d)/, '')
+      const cleanValue = value.replace(/,/g, '').replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '')
       nextValue = cleanValue
       setDisplayAmount(cleanValue) // Show raw input while typing
     }
-    const numericValue = name === 'investmentAmount' ? (nextValue === '' ? 0 : parseFloat(nextValue) || 0) : nextValue
+    const numericValue = name === 'investmentAmount' ? (nextValue === '' ? 0 : parseInt(nextValue, 10) || 0) : nextValue
     
     setFormData(prev => ({ ...prev, [name]: numericValue }))
     if (typeof onValuesChange === 'function') onValuesChange({ amount: name === 'investmentAmount' ? numericValue : formData.investmentAmount, paymentFrequency: formData.paymentFrequency, lockupPeriod: selectedLockup })
     
-    if (errors[name]) {
+    if (name === 'investmentAmount') {
+      const amountError = getAmountError(numericValue)
+      setErrors(prev => ({ ...prev, investmentAmount: amountError }))
+    } else if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }))
     }
   }
@@ -123,8 +159,11 @@ export default function InvestmentForm({ onCompleted, disableAuthGuard = false, 
   const validateForm = () => {
     const newErrors = {}
     
-    if (!formData.investmentAmount || formData.investmentAmount < 1000) {
+    if (!formData.investmentAmount) {
       newErrors.investmentAmount = 'Minimum investment is $1,000'
+    } else {
+      const amountError = getAmountError(formData.investmentAmount)
+      if (amountError) newErrors.investmentAmount = amountError
     }
     
     if (!formData.paymentFrequency) {
@@ -176,11 +215,7 @@ export default function InvestmentForm({ onCompleted, disableAuthGuard = false, 
             return
           }
         } else {
-          if (typeof onCompleted === 'function') {
-            onCompleted(existingInvestmentId)
-          } else {
-            router.push('/investment')
-          }
+        notifyCompletion(existingInvestmentId, lockupPeriod)
           return
         }
       }
@@ -212,11 +247,7 @@ export default function InvestmentForm({ onCompleted, disableAuthGuard = false, 
           })
         }
       }
-      if (typeof onCompleted === 'function') {
-        onCompleted(data.investment?.id)
-      } else {
-        router.push('/investment')
-      }
+      notifyCompletion(data.investment?.id, lockupPeriod)
     } catch (err) {
       console.error('Error starting investment', err)
       alert('An error occurred. Please try again.')
@@ -231,25 +262,26 @@ export default function InvestmentForm({ onCompleted, disableAuthGuard = false, 
           <h2 className={styles.sectionTitle}>1. Enter Investment Amount</h2>
           <div className={styles.amountSection}>
             <div className={styles.inputGroup}>
-              <div className={styles.currencyInput}>
-                <span className={styles.currencyPrefix}>$</span>
-                <input
-                  type="text"
-                  name="investmentAmount"
-                  value={isAmountFocused ? displayAmount : (formData.investmentAmount > 0 ? formData.investmentAmount.toLocaleString() : '')}
-                  onChange={handleInputChange}
-                  className={styles.amountInput}
-                  onFocus={() => setIsAmountFocused(true)}
-                  onBlur={() => setIsAmountFocused(false)}
-                  placeholder="0"
-                />
-                <span className={styles.bondsSuffix}>= {bonds} Bond{bonds !== 1 ? 's' : ''}</span>
+              <div className={styles.currencyInputWrapper}>
+                <div className={styles.currencyInput}>
+                  <span className={styles.currencyPrefix}>$</span>
+                  <input
+                    type="text"
+                    name="investmentAmount"
+                    value={isAmountFocused ? displayAmount : (formData.investmentAmount > 0 ? formData.investmentAmount.toLocaleString() : '')}
+                    onChange={handleInputChange}
+                    className={styles.amountInput}
+                    onFocus={() => setIsAmountFocused(true)}
+                    onBlur={() => setIsAmountFocused(false)}
+                    placeholder="0"
+                  />
+                  <span className={styles.bondsSuffix}>= {formattedBonds} Bond{bonds !== 1 ? 's' : ''}</span>
+                </div>
+                {errors.investmentAmount && (
+                  <div className={`${styles.errorMessage} ${styles.amountError}`}>{errors.investmentAmount}</div>
+                )}
               </div>
-              
             </div>
-            {errors.investmentAmount && (
-              <div className={styles.errorMessage}>{errors.investmentAmount}</div>
-            )}
           </div>
         </div>
 

@@ -90,7 +90,6 @@ export default function DashboardHeader({ onViewChange, activeView }) {
           >
             Documents
           </button>
-          {/* Notifications removed */}
           <button className={styles.navItem}>Contact</button>
         </nav>
         
@@ -112,7 +111,6 @@ export default function DashboardHeader({ onViewChange, activeView }) {
             <button className={styles.mobileNavItem} onClick={() => handleNavSelect('portfolio')}>Dashboard</button>
             <button className={styles.mobileNavItem} onClick={() => handleNavSelect('profile')}>Profile</button>
             <button className={styles.mobileNavItem} onClick={() => handleNavSelect('documents')}>Documents</button>
-            <button className={styles.mobileNavItem} onClick={() => handleNavSelect('notifications')}>Notifications</button>
             <button className={styles.mobileNavItem} onClick={() => { setShowMobileNav(false); router.push('/investment') }}>Make an Investment</button>
             <button className={styles.mobileNavItem} onClick={() => setShowMobileNav(false)}>Contact</button>
             <div className={styles.mobileDivider}></div>

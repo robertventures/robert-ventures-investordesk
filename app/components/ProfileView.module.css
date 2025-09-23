@@ -27,13 +27,13 @@
 .content {
   display: flex;
   flex-direction: column;
-  gap: 40px;
+  gap: 24px;
 }
 
 .section {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 12px;
 }
 
 .sectionTitle {
@@ -41,14 +41,21 @@
   font-weight: 600;
   color: #1a1a1a;
   margin: 0;
-  padding-bottom: 8px;
+  padding-bottom: 6px;
   border-bottom: 1px solid #e5e7eb;
 }
 
-.fieldGrid {
+.subSectionTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+  margin: 0 0 8px 0;
+}
+
+.subSectionGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 24px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
 }
 
 .field {
@@ -58,8 +65,8 @@
 }
 
 .label {
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 12px;
+  font-weight: 600;
   color: #374151;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -144,6 +151,33 @@
 .success {
   color: #10b981;
   font-weight: 600;
+}
+
+/* Responsive compact grid for desktop; stacks on mobile */
+.compactGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+/* Removed 3-column layout to improve scanability */
+
+@media (max-width: 768px) {
+  .compactGrid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+.subCard {
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 8px 0 4px 0;
+}
+
+.fullRow {
+  grid-column: 1 / -1;
 }
 
 @media (max-width: 768px) {
