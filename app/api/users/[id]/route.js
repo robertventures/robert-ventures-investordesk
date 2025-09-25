@@ -18,7 +18,7 @@ export async function PUT(request, { params }) {
 
     // Custom action: start investment intent (append to user's investments array)
     if (body._action === 'startInvestment' && body.investment) {
-      const usersData = getUsers()
+      const usersData = await getUsers()
       const userIndex = usersData.users.findIndex(u => u.id === id)
       if (userIndex === -1) {
         return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 })
@@ -45,7 +45,7 @@ export async function PUT(request, { params }) {
       }
       usersData.users[userIndex] = updatedUser
 
-      if (!saveUsers(usersData)) {
+      if (!await saveUsers(usersData)) {
         return NextResponse.json({ success: false, error: 'Failed to save investment' }, { status: 500 })
       }
       return NextResponse.json({ success: true, user: updatedUser, investment: newInvestment })
@@ -53,7 +53,7 @@ export async function PUT(request, { params }) {
 
     // Custom action: update existing investment fields by id
     if (body._action === 'updateInvestment' && body.investmentId && body.fields) {
-      const usersData = getUsers()
+      const usersData = await getUsers()
       const userIndex = usersData.users.findIndex(u => u.id === id)
       if (userIndex === -1) {
         return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 })
@@ -75,14 +75,14 @@ export async function PUT(request, { params }) {
       investments[invIndex] = updatedInvestment
       const updatedUser = { ...user, investments, updatedAt: new Date().toISOString() }
       usersData.users[userIndex] = updatedUser
-      if (!saveUsers(usersData)) {
+      if (!await saveUsers(usersData)) {
         return NextResponse.json({ success: false, error: 'Failed to update investment' }, { status: 500 })
       }
       return NextResponse.json({ success: true, user: updatedUser, investment: updatedInvestment })
     }
 
     // Fallback: Update user with whatever fields are provided
-    const result = updateUser(id, body)
+    const result = await updateUser(id, body)
     console.log('Update result:', result)
 
     if (result.success) {
@@ -103,7 +103,7 @@ export async function PUT(request, { params }) {
 export async function GET(request, { params }) {
   try {
     const { id } = params
-    const usersData = getUsers()
+    const usersData = await getUsers()
     const user = usersData.users.find(user => user.id === id)
     
     if (user) {
@@ -121,7 +121,7 @@ export async function GET(request, { params }) {
 export async function DELETE(request, { params }) {
   try {
     const { id } = params
-    const usersData = getUsers()
+    const usersData = await getUsers()
     const idx = usersData.users.findIndex(u => u.id === id)
     if (idx === -1) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 })
@@ -131,7 +131,7 @@ export async function DELETE(request, { params }) {
       return NextResponse.json({ success: false, error: 'Cannot delete admin account' }, { status: 403 })
     }
     usersData.users.splice(idx, 1)
-    if (!saveUsers(usersData)) {
+    if (!await saveUsers(usersData)) {
       return NextResponse.json({ success: false, error: 'Failed to delete user' }, { status: 500 })
     }
     return NextResponse.json({ success: true })

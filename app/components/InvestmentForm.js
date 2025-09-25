@@ -193,7 +193,27 @@ export default function InvestmentForm({ onCompleted, onReviewSummary, disableAu
         bonds,
       }
 
-      const existingInvestmentId = typeof window !== 'undefined' ? localStorage.getItem('currentInvestmentId') : null
+      let existingInvestmentId = typeof window !== 'undefined' ? localStorage.getItem('currentInvestmentId') : null
+      const requiresNewDraft = async () => {
+        try {
+          const checkRes = await fetch(`/api/users/${userId}`)
+          if (!checkRes.ok) throw new Error('Failed to load user investments')
+          const checkData = await checkRes.json()
+          const investments = Array.isArray(checkData?.user?.investments) ? checkData.user.investments : []
+          const currentInvestment = investments.find(inv => inv.id === existingInvestmentId)
+          if (!currentInvestment) return true
+          return currentInvestment.status !== 'draft'
+        } catch (err) {
+          console.error('Failed to verify existing investment draft', err)
+          return true
+        }
+      }
+
+      if (existingInvestmentId && await requiresNewDraft()) {
+        if (typeof window !== 'undefined') localStorage.removeItem('currentInvestmentId')
+        existingInvestmentId = null
+      }
+
       if (existingInvestmentId) {
         // Update existing draft investment instead of creating a new one
         const updateRes = await fetch(`/api/users/${userId}`, {
@@ -209,13 +229,13 @@ export default function InvestmentForm({ onCompleted, onReviewSummary, disableAu
         if (!updateData.success) {
           // If the server says the investment does not exist, clear stale id and create new
           if (updateData.error === 'Investment not found') {
-            localStorage.removeItem('currentInvestmentId')
+            if (typeof window !== 'undefined') localStorage.removeItem('currentInvestmentId')
           } else {
             alert(updateData.error || 'Failed to update investment')
             return
           }
         } else {
-        notifyCompletion(existingInvestmentId, lockupPeriod)
+          notifyCompletion(existingInvestmentId, lockupPeriod)
           return
         }
       }

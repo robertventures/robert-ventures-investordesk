@@ -143,6 +143,7 @@ export default function AccountCreationForm() {
               aria-label={showPassword ? 'Hide password' : 'Show password'}
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => setShowPassword(prev => !prev)}
+              tabIndex={-1}
             >
               {showPassword ? 'Hide' : 'Show'}
             </button>
@@ -183,6 +184,7 @@ export default function AccountCreationForm() {
               className={styles.toggleButton}
               aria-label={showPassword ? 'Hide password' : 'Show password'}
               onClick={() => setShowPassword(prev => !prev)}
+              tabIndex={-1}
             >
               {showPassword ? 'Hide' : 'Show'}
             </button>

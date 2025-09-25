@@ -9,7 +9,7 @@ export async function GET(request) {
     
     if (email) {
       // Get specific user by email
-      const user = getUserByEmail(email)
+      const user = await getUserByEmail(email)
       if (user) {
         return NextResponse.json({ success: true, user })
       } else {
@@ -19,12 +19,12 @@ export async function GET(request) {
       // Check if this is a cleanup request
       const action = searchParams.get('action')
       if (action === 'cleanup') {
-        const result = cleanupDuplicateUsers()
+        const result = await cleanupDuplicateUsers()
         return NextResponse.json({ success: true, message: `Cleaned up ${result.removed} duplicate users` })
       }
       
       // Get all users
-      const usersData = getUsers()
+      const usersData = await getUsers()
       return NextResponse.json({ success: true, users: usersData.users })
     }
   } catch (error) {
@@ -50,7 +50,7 @@ export async function POST(request) {
     }
     
     // Check if user already exists
-    const existingUser = getUserByEmail(email)
+    const existingUser = await getUserByEmail(email)
     console.log('Checking for existing user with email:', email)
     console.log('Existing user found:', existingUser ? 'YES' : 'NO')
     if (existingUser) {
@@ -63,7 +63,7 @@ export async function POST(request) {
     
     // Add new user
     console.log('Adding new user...')
-    const result = addUser({ email, password })
+    const result = await addUser({ email, password })
     console.log('Add user result:', result)
     
     if (result.success) {

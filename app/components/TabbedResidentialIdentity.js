@@ -1,6 +1,42 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import styles from './TabbedResidentialIdentity.module.css'
+
+const MIN_DOB = '1900-01-01'
+
+const formatZip = (value = '') => value.replace(/\D/g, '').slice(0, 5)
+
+const formatSsn = (value = '') => {
+  const digits = value.replace(/\D/g, '').slice(0, 9)
+  if (digits.length <= 3) return digits
+  if (digits.length <= 5) return `${digits.slice(0, 3)}-${digits.slice(3)}`
+  return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`
+}
+
+const isCompleteSsn = (value = '') => value.replace(/\D/g, '').length === 9
+
+const formatName = (value = '') => value.replace(/[0-9]/g, '')
+
+// City names should not contain digits
+const formatCity = (value = '') => value.replace(/[0-9]/g, '')
+
+const parseDateString = (value = '') => {
+  const [year, month, day] = value.split('-').map(Number)
+  if (!year || !month || !day) return null
+  const date = new Date(year, month - 1, day)
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null
+  return date
+}
+
+const isAdultDob = (value = '') => {
+  const date = parseDateString(value)
+  if (!date) return false
+  const minimum = parseDateString(MIN_DOB)
+  if (!minimum || date < minimum) return false
+  const today = new Date()
+  const adultCutoff = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate())
+  return date <= adultCutoff
+}
 
 export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary, accountType: accountTypeProp }) {
   const US_STATES = [
@@ -48,8 +84,20 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
   const [isSaving, setIsSaving] = useState(false)
   const [accountType, setAccountType] = useState(accountTypeProp || 'individual')
   const [jointUsePrimaryAddress, setJointUsePrimaryAddress] = useState(true)
+  const [showSsnHelp, setShowSsnHelp] = useState(false)
+  const [showAuthorizedRepSsnHelp, setShowAuthorizedRepSsnHelp] = useState(false)
+  const [showJointSsnHelp, setShowJointSsnHelp] = useState(false)
   const idLabel = accountType === 'entity' ? 'EIN or TIN' : 'SSN'
   const dateLabel = accountType === 'entity' ? 'Registration Date' : 'Date of Birth'
+  const maxAdultDob = useMemo(() => {
+    const now = new Date()
+    const cutoff = new Date(now.getFullYear() - 18, now.getMonth(), now.getDate())
+    return cutoff.toISOString().split('T')[0]
+  }, [])
+  const maxToday = useMemo(() => {
+    const now = new Date()
+    return now.toISOString().split('T')[0]
+  }, [])
 
   useEffect(() => {
     if (accountTypeProp) setAccountType(accountTypeProp)
@@ -140,8 +188,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
     }))
   }, [accountType, jointUsePrimaryAddress, form.street1, form.street2, form.city, form.state, form.zip, form.country])
 
-  const handleChange = (e) => {
-    const { name, value } = e.target
+  const setFieldValue = (name, value) => {
     if (name.startsWith('jointHolder.')) {
       const fieldName = name.replace('jointHolder.', '')
       setForm(prev => ({ 
@@ -162,6 +209,27 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
     }
   }
 
+  const handleChange = (e) => {
+    const { name, value } = e.target
+    if (name.endsWith('firstName') || name.endsWith('lastName')) {
+      setFieldValue(name, formatName(value))
+      return
+    }
+    if (name.endsWith('.city') || name === 'city') {
+      setFieldValue(name, formatCity(value))
+      return
+    }
+    if (name.endsWith('.zip') || name === 'zip') {
+      setFieldValue(name, formatZip(value))
+      return
+    }
+    if (name.endsWith('.ssn') || name === 'ssn') {
+      setFieldValue(name, formatSsn(value))
+      return
+    }
+    setFieldValue(name, value)
+  }
+
   const validate = () => {
     const newErrors = {}
     if (accountType === 'entity') {
@@ -171,10 +239,21 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
     if (!form.lastName.trim()) newErrors.lastName = 'Required'
     if (!form.street1.trim()) newErrors.street1 = 'Required'
     if (!form.city.trim()) newErrors.city = 'Required'
+    else if (/[0-9]/.test(form.city)) newErrors.city = 'No numbers allowed'
     if (!form.state.trim()) newErrors.state = 'Required'
-    if (!form.zip.trim()) newErrors.zip = 'Required'
-    if (!form.dob) newErrors.dob = 'Required'
-    if (!form.ssn.trim()) newErrors.ssn = 'Required'
+  if (!form.zip.trim()) newErrors.zip = 'Required'
+  else if (form.zip.length !== 5) newErrors.zip = 'Enter 5 digits'
+  if (!form.dob) newErrors.dob = 'Required'
+  else if (accountType === 'entity') {
+    const date = (() => { const [y,m,d] = form.dob.split('-').map(Number); return new Date(y, m-1, d) })()
+    const today = new Date()
+    const min = (() => { const [y,m,d] = MIN_DOB.split('-').map(Number); return new Date(y, m-1, d) })()
+    if (!(date >= min && date <= today)) newErrors.dob = `Enter a valid date (YYYY-MM-DD). Min ${MIN_DOB}. Cannot be in the future.`
+  } else if (!isAdultDob(form.dob)) {
+    newErrors.dob = `Enter a valid date (YYYY-MM-DD). Min ${MIN_DOB}. Must be 18+.`
+  }
+  if (!form.ssn.trim()) newErrors.ssn = 'Required'
+  else if (!isCompleteSsn(form.ssn)) newErrors.ssn = 'Enter full SSN'
     
     // Validate joint holder fields if account type is joint
     if (accountType === 'joint') {
@@ -183,10 +262,13 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
       if (!form.jointHolder.lastName.trim()) newErrors['jointHolder.lastName'] = 'Required'
       if (!form.jointHolder.street1.trim()) newErrors['jointHolder.street1'] = 'Required'
       if (!form.jointHolder.city.trim()) newErrors['jointHolder.city'] = 'Required'
+      else if (/[0-9]/.test(form.jointHolder.city)) newErrors['jointHolder.city'] = 'No numbers allowed'
       if (!form.jointHolder.state.trim()) newErrors['jointHolder.state'] = 'Required'
       if (!form.jointHolder.zip.trim()) newErrors['jointHolder.zip'] = 'Required'
-      if (!form.jointHolder.dob) newErrors['jointHolder.dob'] = 'Required'
+      else if (form.jointHolder.zip.length !== 5) newErrors['jointHolder.zip'] = 'Enter 5 digits'
+      if (!form.jointHolder.dob || !isAdultDob(form.jointHolder.dob)) newErrors['jointHolder.dob'] = `Enter a valid date (YYYY-MM-DD). Min ${MIN_DOB}. Must be 18+.`
       if (!form.jointHolder.ssn.trim()) newErrors['jointHolder.ssn'] = 'Required'
+      else if (!isCompleteSsn(form.jointHolder.ssn)) newErrors['jointHolder.ssn'] = 'Enter full SSN'
       if (!/\S+@\S+\.\S+/.test(form.jointHolder.email)) newErrors['jointHolder.email'] = 'Invalid email'
       if (!form.jointHolder.phone.trim()) newErrors['jointHolder.phone'] = 'Required'
     }
@@ -194,10 +276,13 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
       // Authorized representative must also be provided
       if (!form.authorizedRep.street1.trim()) newErrors['authorizedRep.street1'] = 'Required'
       if (!form.authorizedRep.city.trim()) newErrors['authorizedRep.city'] = 'Required'
+      else if (/[0-9]/.test(form.authorizedRep.city)) newErrors['authorizedRep.city'] = 'No numbers allowed'
       if (!form.authorizedRep.state.trim()) newErrors['authorizedRep.state'] = 'Required'
       if (!form.authorizedRep.zip.trim()) newErrors['authorizedRep.zip'] = 'Required'
-      if (!form.authorizedRep.dob) newErrors['authorizedRep.dob'] = 'Required'
+      else if (form.authorizedRep.zip.length !== 5) newErrors['authorizedRep.zip'] = 'Enter 5 digits'
+      if (!form.authorizedRep.dob || !isAdultDob(form.authorizedRep.dob)) newErrors['authorizedRep.dob'] = `Enter a valid date (YYYY-MM-DD). Min ${MIN_DOB}. Must be 18+.`
       if (!form.authorizedRep.ssn.trim()) newErrors['authorizedRep.ssn'] = 'Required'
+      else if (!isCompleteSsn(form.authorizedRep.ssn)) newErrors['authorizedRep.ssn'] = 'Enter full SSN'
     }
     
     setErrors(newErrors)
@@ -441,16 +526,16 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
             </div>
             <div className={styles.field}> 
               <label className={styles.label}>Apt or Unit</label>
-              <input className={styles.input} name="authorizedRep.street2" value={form.authorizedRep.street2} onChange={handleChange} />
+              <input className={styles.input} name="authorizedRep.street2" value={form.authorizedRep.street2} onChange={handleChange} placeholder="Apt, unit, etc." />
             </div>
             <div className={styles.field}> 
               <label className={styles.label}>City</label>
-              <input className={`${styles.input} ${errors['authorizedRep.city'] ? styles.inputError : ''}`} name="authorizedRep.city" value={form.authorizedRep.city} onChange={handleChange} />
+              <input className={`${styles.input} ${errors['authorizedRep.city'] ? styles.inputError : ''}`} name="authorizedRep.city" value={form.authorizedRep.city} onChange={handleChange} placeholder="Enter city" />
               {errors['authorizedRep.city'] && <span className={styles.error}>{errors['authorizedRep.city']}</span>}
             </div>
             <div className={styles.field}> 
               <label className={styles.label}>Zip Code</label>
-              <input className={`${styles.input} ${errors['authorizedRep.zip'] ? styles.inputError : ''}`} name="authorizedRep.zip" value={form.authorizedRep.zip} onChange={handleChange} />
+              <input className={`${styles.input} ${errors['authorizedRep.zip'] ? styles.inputError : ''}`} name="authorizedRep.zip" value={form.authorizedRep.zip} onChange={handleChange} placeholder="Enter ZIP code" />
               {errors['authorizedRep.zip'] && <span className={styles.error}>{errors['authorizedRep.zip']}</span>}
             </div>
             <div className={styles.field}> 
@@ -474,13 +559,21 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
             </div>
             <div className={styles.field}> 
               <label className={styles.label}>Date of Birth</label>
-              <input className={`${styles.input} ${errors['authorizedRep.dob'] ? styles.inputError : ''}`} type="date" name="authorizedRep.dob" value={form.authorizedRep.dob} onChange={handleChange} />
+              <input className={`${styles.input} ${errors['authorizedRep.dob'] ? styles.inputError : ''}`} type="date" name="authorizedRep.dob" value={form.authorizedRep.dob} onChange={handleChange} min={MIN_DOB} max={maxAdultDob} />
               {errors['authorizedRep.dob'] && <span className={styles.error}>{errors['authorizedRep.dob']}</span>}
             </div>
             <div className={styles.field}> 
-              <label className={styles.label}>SSN</label>
+              <div className={styles.labelRow}>
+                <label className={styles.label}>SSN</label>
+                <button type="button" className={styles.helpLink} onClick={() => setShowAuthorizedRepSsnHelp(v => !v)}>Why do we need this?</button>
+              </div>
               <input className={`${styles.input} ${errors['authorizedRep.ssn'] ? styles.inputError : ''}`} name="authorizedRep.ssn" value={form.authorizedRep.ssn} onChange={handleChange} placeholder="123-45-6789" />
               {errors['authorizedRep.ssn'] && <span className={styles.error}>{errors['authorizedRep.ssn']}</span>}
+              {showAuthorizedRepSsnHelp && (
+                <div className={styles.helpText}>
+                  A Taxpayer Identification Number (TIN) is necessary for compliance with Anti-Money Laundering (AML) and Know Your Customer (KYC) regulations. This information is securely stored and used only for verification purposes.
+                </div>
+              )}
             </div>
           </div>
         </>
@@ -515,16 +608,16 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
         </div>
         <div className={styles.field}> 
           <label className={styles.label}>Apt or Unit</label>
-          <input className={styles.input} name="street2" value={form.street2} onChange={handleChange} />
+          <input className={styles.input} name="street2" value={form.street2} onChange={handleChange} placeholder="Apt, unit, etc." />
         </div>
         <div className={styles.field}> 
           <label className={styles.label}>City</label>
-          <input className={`${styles.input} ${errors.city ? styles.inputError : ''}`} name="city" value={form.city} onChange={handleChange} />
+          <input className={`${styles.input} ${errors.city ? styles.inputError : ''}`} name="city" value={form.city} onChange={handleChange} placeholder="Enter city" />
           {errors.city && <span className={styles.error}>{errors.city}</span>}
         </div>
         <div className={styles.field}> 
           <label className={styles.label}>Zip Code</label>
-          <input className={`${styles.input} ${errors.zip ? styles.inputError : ''}`} name="zip" value={form.zip} onChange={handleChange} />
+          <input className={`${styles.input} ${errors.zip ? styles.inputError : ''}`} name="zip" value={form.zip} onChange={handleChange} placeholder="Enter ZIP code" />
           {errors.zip && <span className={styles.error}>{errors.zip}</span>}
         </div>
         <div className={styles.field}> 
@@ -548,13 +641,23 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
         </div>
         <div className={styles.field}> 
           <label className={styles.label}>{dateLabel}</label>
-          <input className={`${styles.input} ${errors.dob ? styles.inputError : ''}`} type="date" name="dob" value={form.dob} onChange={handleChange} />
+          <input className={`${styles.input} ${errors.dob ? styles.inputError : ''}`} type="date" name="dob" value={form.dob} onChange={handleChange} min={MIN_DOB} max={accountType === 'entity' ? maxToday : maxAdultDob} />
           {errors.dob && <span className={styles.error}>{errors.dob}</span>}
         </div>
         <div className={styles.field}> 
-          <label className={styles.label}>{idLabel}</label>
+          <div className={styles.labelRow}>
+            <label className={styles.label}>{idLabel}</label>
+            <button type="button" className={styles.helpLink} onClick={() => setShowSsnHelp(v => !v)}>
+              Why do we need this?
+            </button>
+          </div>
           <input className={`${styles.input} ${errors.ssn ? styles.inputError : ''}`} name="ssn" value={form.ssn} onChange={handleChange} placeholder={accountType === 'entity' ? 'Enter EIN or TIN' : '123-45-6789'} />
           {errors.ssn && <span className={styles.error}>{errors.ssn}</span>}
+          {showSsnHelp && (
+            <div className={styles.helpText}>
+              A Taxpayer Identification Number (TIN) is necessary for compliance with Anti-Money Laundering (AML) and Know Your Customer (KYC) regulations. This information is securely stored and used only for verification purposes.
+            </div>
+          )}
         </div>
       </div>
 
@@ -591,13 +694,21 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
             </div>
             <div className={styles.field}> 
               <label className={styles.label}>Date of Birth</label>
-              <input className={`${styles.input} ${errors['jointHolder.dob'] ? styles.inputError : ''}`} type="date" name="jointHolder.dob" value={form.jointHolder.dob} onChange={handleChange} />
+              <input className={`${styles.input} ${errors['jointHolder.dob'] ? styles.inputError : ''}`} type="date" name="jointHolder.dob" value={form.jointHolder.dob} onChange={handleChange} min={MIN_DOB} max={maxAdultDob} />
               {errors['jointHolder.dob'] && <span className={styles.error}>{errors['jointHolder.dob']}</span>}
             </div>
             <div className={styles.field}> 
-              <label className={styles.label}>SSN</label>
+              <div className={styles.labelRow}>
+                <label className={styles.label}>SSN</label>
+                <button type="button" className={styles.helpLink} onClick={() => setShowJointSsnHelp(v => !v)}>Why do we need this?</button>
+              </div>
               <input className={`${styles.input} ${errors['jointHolder.ssn'] ? styles.inputError : ''}`} name="jointHolder.ssn" value={form.jointHolder.ssn} onChange={handleChange} placeholder="123-45-6789" />
               {errors['jointHolder.ssn'] && <span className={styles.error}>{errors['jointHolder.ssn']}</span>}
+              {showJointSsnHelp && (
+                <div className={styles.helpText}>
+                  A Taxpayer Identification Number (TIN) is necessary for compliance with Anti-Money Laundering (AML) and Know Your Customer (KYC) regulations. This information is securely stored and used only for verification purposes.
+                </div>
+              )}
             </div>
           </div>
 
@@ -623,16 +734,16 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
               </div>
               <div className={styles.field}> 
                 <label className={styles.label}>Apt or Unit</label>
-                <input className={styles.input} name="jointHolder.street2" value={form.jointHolder.street2} onChange={handleChange} />
+                <input className={styles.input} name="jointHolder.street2" value={form.jointHolder.street2} onChange={handleChange} placeholder="Apt, unit, etc." />
               </div>
               <div className={styles.field}> 
                 <label className={styles.label}>City</label>
-                <input className={`${styles.input} ${errors['jointHolder.city'] ? styles.inputError : ''}`} name="jointHolder.city" value={form.jointHolder.city} onChange={handleChange} />
+                <input className={`${styles.input} ${errors['jointHolder.city'] ? styles.inputError : ''}`} name="jointHolder.city" value={form.jointHolder.city} onChange={handleChange} placeholder="Enter city" />
                 {errors['jointHolder.city'] && <span className={styles.error}>{errors['jointHolder.city']}</span>}
               </div>
               <div className={styles.field}> 
                 <label className={styles.label}>Zip Code</label>
-                <input className={`${styles.input} ${errors['jointHolder.zip'] ? styles.inputError : ''}`} name="jointHolder.zip" value={form.jointHolder.zip} onChange={handleChange} />
+                <input className={`${styles.input} ${errors['jointHolder.zip'] ? styles.inputError : ''}`} name="jointHolder.zip" value={form.jointHolder.zip} onChange={handleChange} placeholder="Enter ZIP code" />
                 {errors['jointHolder.zip'] && <span className={styles.error}>{errors['jointHolder.zip']}</span>}
               </div>
               <div className={styles.field}> 

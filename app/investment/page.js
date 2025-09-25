@@ -38,10 +38,9 @@ export default function InvestmentPage() {
     const lines = []
     lines.push({ label: 'Account Type', value: accountTypeLabels[investmentSummary.accountType] || '—' })
     lines.push({ label: 'Investment Amount', value: typeof investmentSummary.amount === 'number' ? `$${Number(investmentSummary.amount).toLocaleString()}` : '—' })
+    lines.push({ label: 'Total Bonds', value: typeof investmentSummary.bonds === 'number' ? investmentSummary.bonds.toLocaleString() : '—' })
     lines.push({ label: 'Payment Frequency', value: investmentSummary.paymentFrequency === 'monthly' ? 'Interest Paid Monthly' : 'Compounded Monthly' })
     lines.push({ label: 'Lockup Period', value: lockupLabels[investmentSummary.lockupPeriod] || '—' })
-    lines.push({ label: 'Estimated Earnings', value: typeof investmentSummary.anticipatedEarnings === 'number' ? `$${Number(investmentSummary.anticipatedEarnings).toLocaleString()}` : '—' })
-    lines.push({ label: 'Total Bonds', value: typeof investmentSummary.bonds === 'number' ? investmentSummary.bonds.toLocaleString() : '—' })
     return lines
   }, [investmentSummary])
 
@@ -128,11 +127,13 @@ export default function InvestmentPage() {
   }, [selectedAccountType, investmentPaymentFrequency])
 
   const shouldShowSummaryStep1 = reviewModeStep1 && isStep1Completed && Boolean(investmentSummary)
-  const showStep1Edit = activeStep === 1 && (!shouldShowSummaryStep1 || !isStep1Completed)
+  // Keep incomplete steps expanded regardless of active step
+  const showStep1Edit = (!isStep1Completed) || (activeStep === 1 && !shouldShowSummaryStep1)
   const isStep1Collapsed = isStep1Completed && !showStep1Edit
 
   const shouldShowSummaryStep2 = reviewModeStep2 && isStep2Completed && Boolean(identitySummary)
-  const showStep2Edit = activeStep === 2 && (!shouldShowSummaryStep2 || !isStep2Completed)
+  // Keep incomplete steps expanded regardless of active step
+  const showStep2Edit = (!isStep2Completed) || (activeStep === 2 && !shouldShowSummaryStep2)
   const isStep2Collapsed = isStep2Completed && !showStep2Edit
   const canFinalize = shouldShowSummaryStep1 && shouldShowSummaryStep2
 
@@ -205,7 +206,8 @@ export default function InvestmentPage() {
                 onCompleted={() => {
                   setIsStep2Completed(true)
                   setReviewModeStep2(true)
-                  setReviewModeStep1(true)
+                  // Do not collapse step 1 unless it was actually completed
+                  setReviewModeStep1(v => (isStep1Completed ? true : v))
                   setActiveStep(2)
                 }}
               />

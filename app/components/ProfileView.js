@@ -1,8 +1,36 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import styles from './ProfileView.module.css'
 
 export default function ProfileView() {
+  const MIN_DOB = '1900-01-01'
+  const maxDob = useMemo(() => {
+    const now = new Date()
+    const cutoff = new Date(now.getFullYear() - 18, now.getMonth(), now.getDate())
+    return cutoff.toISOString().split('T')[0]
+  }, [])
+  const maxToday = useMemo(() => {
+    const now = new Date()
+    return now.toISOString().split('T')[0]
+  }, [])
+
+  const parseDateString = (value = '') => {
+    const [year, month, day] = (value || '').split('-').map(Number)
+    if (!year || !month || !day) return null
+    const date = new Date(year, month - 1, day)
+    if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null
+    return date
+  }
+
+  const isAdultDob = (value = '') => {
+    const date = parseDateString(value)
+    if (!date) return false
+    const minimum = parseDateString(MIN_DOB)
+    if (!minimum || date < minimum) return false
+    const today = new Date()
+    const adultCutoff = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate())
+    return date <= adultCutoff
+  }
   const [userData, setUserData] = useState(null)
   const [formData, setFormData] = useState(null)
   const [isSaving, setIsSaving] = useState(false)
@@ -162,6 +190,7 @@ export default function ProfileView() {
     if (!formData.lastName.trim()) newErrors.lastName = 'Required'
     if (!/\S+@\S+\.\S+/.test(formData.email)) newErrors.email = 'Invalid email'
     if (!formData.phoneNumber.trim()) newErrors.phoneNumber = 'Required'
+    if (formData.dob && !isAdultDob(formData.dob)) newErrors.dob = `Enter a valid date (YYYY-MM-DD). Min ${MIN_DOB}. Must be 18+.`
     if (formData.address) {
       if (!formData.address.street1.trim()) newErrors.street1 = 'Required'
       if (!formData.address.city.trim()) newErrors.city = 'Required'
@@ -184,7 +213,7 @@ export default function ProfileView() {
     }
 
     if (showEntity && formData.authorizedRepresentative) {
-      if (!formData.authorizedRepresentative.dob) newErrors.repDob = 'Required'
+      if (!formData.authorizedRepresentative.dob || !isAdultDob(formData.authorizedRepresentative.dob)) newErrors.repDob = `Enter a valid date (YYYY-MM-DD). Min ${MIN_DOB}. Must be 18+.`
       if (!formData.authorizedRepresentative.ssn.trim()) newErrors.repSsn = 'Required'
       if (formData.authorizedRepresentative.address) {
         if (!formData.authorizedRepresentative.address.street1.trim()) newErrors.repStreet1 = 'Required'
@@ -202,7 +231,7 @@ export default function ProfileView() {
       if (!formData.jointHolder.lastName.trim()) newErrors.jointLastName = 'Required'
       if (!formData.jointHolder.email.trim() || !/\S+@\S+\.\S+/.test(formData.jointHolder.email)) newErrors.jointEmail = 'Valid email required'
       if (!formData.jointHolder.phone.trim()) newErrors.jointPhone = 'Required'
-      if (!formData.jointHolder.dob) newErrors.jointDob = 'Required'
+      if (!formData.jointHolder.dob || !isAdultDob(formData.jointHolder.dob)) newErrors.jointDob = `Enter a valid date (YYYY-MM-DD). Min ${MIN_DOB}. Must be 18+.`
       if (!formData.jointHolder.ssn.trim()) newErrors.jointSsn = 'Required'
       if (formData.jointHolder.address) {
         if (!formData.jointHolder.address.street1.trim()) newErrors.jointStreet1 = 'Required'
@@ -335,7 +364,8 @@ export default function ProfileView() {
               </div>
               <div className={styles.field}>
                 <label className={styles.label}>Date of Birth</label>
-                <input className={styles.input} type="date" name="dob" value={formData.dob} onChange={handleChange} />
+                <input className={`${styles.input} ${errors.dob ? styles.inputError : ''}`} type="date" name="dob" value={formData.dob} onChange={handleChange} min={MIN_DOB} max={maxDob} />
+                {errors.dob && <span className={styles.errorText}>{errors.dob}</span>}
               </div>
               <div className={styles.field}>
                 <label className={styles.label}>Social Security Number</label>
@@ -360,7 +390,7 @@ export default function ProfileView() {
 
           {formData.address && (
             <div className={styles.subCard}>
-              <h3 className={styles.subSectionTitle}>Mailing Address</h3>
+              <h3 className={styles.subSectionTitle}>Legal Address</h3>
               <div className={styles.compactGrid}>
                 <div className={styles.field}>
                   <label className={styles.label}>Street 1</label>
@@ -432,7 +462,8 @@ export default function ProfileView() {
                 </div>
                 <div className={styles.field}>
                   <label className={styles.label}>Date of Birth</label>
-                  <input className={`${styles.input} ${errors.jointDob ? styles.inputError : ''}`} type="date" name="dob" value={formData.jointHolder?.dob || ''} onChange={handleJointHolderChange} />
+                  <input className={`${styles.input} ${errors.jointDob ? styles.inputError : ''}`} type="date" name="dob" value={formData.jointHolder?.dob || ''} onChange={handleJointHolderChange} min={MIN_DOB} max={maxDob} />
+                  {errors.jointDob && <span className={styles.errorText}>{errors.jointDob}</span>}
                 </div>
                 <div className={styles.field}>
                   <label className={styles.label}>SSN</label>
@@ -442,7 +473,7 @@ export default function ProfileView() {
             </div>
 
             <div className={styles.subCard}>
-              <h3 className={styles.subSectionTitle}>Mailing Address</h3>
+              <h3 className={styles.subSectionTitle}>Legal Address</h3>
               <div className={styles.compactGrid}>
                 <div className={styles.field}><label className={styles.label}>Street 1</label><input className={`${styles.input} ${errors.jointStreet1 ? styles.inputError : ''}`} name="street1" value={formData.jointHolder?.address?.street1 || ''} onChange={handleJointAddressChange} /></div>
                 <div className={styles.field}><label className={styles.label}>Street 2</label><input className={styles.input} name="street2" value={formData.jointHolder?.address?.street2 || ''} onChange={handleJointAddressChange} /></div>
@@ -479,6 +510,8 @@ export default function ProfileView() {
                     name="registrationDate"
                     value={formData.entity?.registrationDate || ''}
                     onChange={handleEntityChange}
+                    min={MIN_DOB}
+                    max={maxToday}
                   />
                   {errors.entityRegistrationDate && <span className={styles.errorText}>{errors.entityRegistrationDate}</span>}
                 </div>
@@ -574,6 +607,8 @@ export default function ProfileView() {
                     name="dob"
                     value={formData.authorizedRepresentative?.dob || ''}
                     onChange={handleAuthorizedRepChange}
+                    min={MIN_DOB}
+                    max={maxDob}
                   />
                   {errors.repDob && <span className={styles.errorText}>{errors.repDob}</span>}
                 </div>
