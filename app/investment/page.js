@@ -18,6 +18,7 @@ export default function InvestmentPage() {
   const [reviewModeStep2, setReviewModeStep2] = useState(false)
 
   const [selectedAccountType, setSelectedAccountType] = useState('individual')
+  const [lockedAccountType, setLockedAccountType] = useState(null)
   const [investmentAmount, setInvestmentAmount] = useState(0)
   const [investmentPaymentFrequency, setInvestmentPaymentFrequency] = useState('compounding')
   const [investmentLockup, setInvestmentLockup] = useState('1-year')
@@ -114,6 +115,11 @@ export default function InvestmentPage() {
         if (data.success && data.user?.isAdmin) {
           window.location.href = '/dashboard'
         }
+        // Load locked account type if present to enforce in UI
+        if (data.success && data.user?.lockedAccountType) {
+          setLockedAccountType(data.user.lockedAccountType)
+          setSelectedAccountType(data.user.lockedAccountType)
+        }
       } catch {}
     }
     if (userId) checkAdmin()
@@ -168,6 +174,7 @@ export default function InvestmentPage() {
                   autoSaveOnSelect
                   onChange={setSelectedAccountType}
                   selectedValue={selectedAccountType}
+                  lockedAccountType={lockedAccountType}
                 />
               </div>
               <InvestmentForm 
@@ -237,6 +244,19 @@ export default function InvestmentPage() {
             </button>
           </div>
         )}
+      </div>
+
+      <div className={styles.footer}>
+        <p className={styles.footerText}>
+          Want to explore first?{' '}
+          <button
+            type="button"
+            onClick={() => router.push('/dashboard')}
+            className={styles.linkButton}
+          >
+            Continue to Dashboard
+          </button>
+        </p>
       </div>
     </main>
   )

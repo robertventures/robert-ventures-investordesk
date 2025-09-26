@@ -32,6 +32,12 @@
   box-shadow: 0 4px 8px rgba(0,0,0,0.08);
 }
 
+.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 .card:focus,
 .card:focus-visible {
   outline: none;

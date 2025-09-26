@@ -28,6 +28,16 @@ export async function PUT(request, { params }) {
         return NextResponse.json({ success: false, error: 'Admins cannot create investments' }, { status: 403 })
       }
 
+      // Account type lock enforcement
+      const existingInvestments = Array.isArray(user.investments) ? user.investments : []
+      const lockedType = user.lockedAccountType || existingInvestments.find(inv => inv.status !== 'draft' && inv.accountType)?.accountType
+      if (lockedType && body.investment.accountType && body.investment.accountType !== lockedType) {
+        return NextResponse.json({ success: false, error: `Account type is locked to ${lockedType} for this user.` }, { status: 400 })
+      }
+      if (lockedType && !body.investment.accountType) {
+        body.investment.accountType = lockedType
+      }
+
       const investmentId = Date.now().toString()
       const newInvestment = {
         id: investmentId,
@@ -38,9 +48,11 @@ export async function PUT(request, { params }) {
       }
 
       const existing = Array.isArray(user.investments) ? user.investments : []
+      const nextLocked = user.lockedAccountType || newInvestment.accountType || null
       const updatedUser = {
         ...user,
         investments: [...existing, newInvestment],
+        ...(nextLocked ? { lockedAccountType: nextLocked } : {}),
         updatedAt: new Date().toISOString()
       }
       usersData.users[userIndex] = updatedUser
@@ -67,18 +79,63 @@ export async function PUT(request, { params }) {
       if (invIndex === -1) {
         return NextResponse.json({ success: false, error: 'Investment not found' }, { status: 404 })
       }
+
+      // Account type lock enforcement
+      const committedType = user.lockedAccountType || investments.find(inv => inv.status !== 'draft' && inv.accountType)?.accountType
+      const incomingType = body.fields.accountType
+      if (committedType && incomingType && incomingType !== committedType) {
+        return NextResponse.json({ success: false, error: `Account type is locked to ${committedType} for this user.` }, { status: 400 })
+      }
+
       const updatedInvestment = {
         ...investments[invIndex],
         ...body.fields,
         updatedAt: new Date().toISOString()
       }
       investments[invIndex] = updatedInvestment
-      const updatedUser = { ...user, investments, updatedAt: new Date().toISOString() }
+      const nextLockedType = user.lockedAccountType || updatedInvestment.accountType || null
+      const updatedUser = { ...user, investments, ...(nextLockedType ? { lockedAccountType: nextLockedType } : {}), updatedAt: new Date().toISOString() }
       usersData.users[userIndex] = updatedUser
       if (!await saveUsers(usersData)) {
         return NextResponse.json({ success: false, error: 'Failed to update investment' }, { status: 500 })
       }
       return NextResponse.json({ success: true, user: updatedUser, investment: updatedInvestment })
+    }
+
+    // Custom action: approve or reject account deletion request
+    if (body._action === 'approveDeletion' || body._action === 'rejectDeletion') {
+      const usersData = await getUsers()
+      const userIndex = usersData.users.findIndex(u => u.id === id)
+      if (userIndex === -1) {
+        return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 })
+      }
+      const user = usersData.users[userIndex]
+      if (user.isAdmin) {
+        return NextResponse.json({ success: false, error: 'Cannot modify admin account' }, { status: 403 })
+      }
+
+      if (body._action === 'approveDeletion') {
+        // Delete the user account
+        usersData.users.splice(userIndex, 1)
+        if (!await saveUsers(usersData)) {
+          return NextResponse.json({ success: false, error: 'Failed to delete user account' }, { status: 500 })
+        }
+        return NextResponse.json({ success: true, message: 'Account deleted successfully' })
+      } else {
+        // Reject deletion request - remove deletion fields
+        const updatedUser = {
+          ...user,
+          deletionRequestedAt: undefined,
+          deletionReason: undefined,
+          accountStatus: undefined,
+          updatedAt: new Date().toISOString()
+        }
+        usersData.users[userIndex] = updatedUser
+        if (!await saveUsers(usersData)) {
+          return NextResponse.json({ success: false, error: 'Failed to reject deletion request' }, { status: 500 })
+        }
+        return NextResponse.json({ success: true, user: updatedUser })
+      }
     }
 
     // Fallback: Update user with whatever fields are provided

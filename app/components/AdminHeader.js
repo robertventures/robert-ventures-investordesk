@@ -1,11 +1,11 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import styles from './DashboardHeader.module.css'
+import styles from './AdminHeader.module.css'
 
-export default function DashboardHeader({ onViewChange, activeView }) {
+export default function AdminHeader({ onTabChange, activeTab }) {
   const router = useRouter()
-  const [userData, setUserData] = useState(null)
+  const [currentUser, setCurrentUser] = useState(null)
   const [showMobileNav, setShowMobileNav] = useState(false)
 
   useEffect(() => {
@@ -20,7 +20,7 @@ export default function DashboardHeader({ onViewChange, activeView }) {
         const res = await fetch(`/api/users/${userId}`)
         const data = await res.json()
         if (data.success && data.user) {
-          setUserData(data.user)
+          setCurrentUser(data.user)
         }
       } catch (e) {
         console.error('Failed to load user data', e)
@@ -28,10 +28,6 @@ export default function DashboardHeader({ onViewChange, activeView }) {
     }
     loadUser()
   }, [router])
-
-  const handleMakeInvestment = () => {
-    router.push('/investment')
-  }
 
   const handleLogout = () => {
     localStorage.removeItem('currentUserId')
@@ -44,8 +40,8 @@ export default function DashboardHeader({ onViewChange, activeView }) {
     setShowMobileNav(prev => !prev)
   }
 
-  const handleNavSelect = (view) => {
-    onViewChange(view)
+  const handleNavSelect = (tab) => {
+    onTabChange(tab)
     setShowMobileNav(false)
   }
 
@@ -60,7 +56,7 @@ export default function DashboardHeader({ onViewChange, activeView }) {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [showMobileNav])
 
-  if (!userData) {
+  if (!currentUser) {
     return <div className={styles.loading}>Loading...</div>
   }
 
@@ -70,34 +66,34 @@ export default function DashboardHeader({ onViewChange, activeView }) {
         <div className={styles.logo}>
           <span className={styles.logoText}>ROBERT VENTURES</span>
         </div>
-        
+
         <nav className={styles.nav}>
-          <button 
-            onClick={() => onViewChange('portfolio')} 
-            className={`${styles.navItem} ${activeView === 'portfolio' ? styles.active : ''}`}
+          <button
+            onClick={() => onTabChange('dashboard')}
+            className={`${styles.navItem} ${activeTab === 'dashboard' ? styles.active : ''}`}
           >
             Dashboard
           </button>
-          <button 
-            onClick={() => onViewChange('profile')} 
-            className={`${styles.navItem} ${activeView === 'profile' ? styles.active : ''}`}
+          <button
+            onClick={() => onTabChange('investments')}
+            className={`${styles.navItem} ${activeTab === 'investments' ? styles.active : ''}`}
           >
-            Profile
-          </button>
-          <button 
-            onClick={() => onViewChange('documents')} 
-            className={`${styles.navItem} ${activeView === 'documents' ? styles.active : ''}`}
-          >
-            Documents
+            Investments
           </button>
           <button
-            onClick={() => onViewChange('contact')}
-            className={`${styles.navItem} ${activeView === 'contact' ? styles.active : ''}`}
+            onClick={() => onTabChange('accounts')}
+            className={`${styles.navItem} ${activeTab === 'accounts' ? styles.active : ''}`}
           >
-            Contact
+            Accounts
+          </button>
+          <button
+            onClick={() => onTabChange('deletions')}
+            className={`${styles.navItem} ${activeTab === 'deletions' ? styles.active : ''}`}
+          >
+            Deletion Requests
           </button>
         </nav>
-        
+
         <div className={styles.userActions}>
           <button className={styles.navItem} onClick={handleLogout}>Sign Out</button>
           <button className={styles.mobileToggle} onClick={toggleMobileNav} aria-label="Toggle menu">
@@ -110,14 +106,13 @@ export default function DashboardHeader({ onViewChange, activeView }) {
         <div className={styles.mobileNavWrapper}>
           <div className={styles.mobileNav}>
             <div className={styles.mobileHeader}>
-              <div className={styles.mobileUserName}>{userData.firstName} {userData.lastName}</div>
-              <div className={styles.mobileUserEmail}>{userData.email}</div>
+              <div className={styles.mobileUserName}>{currentUser.firstName} {currentUser.lastName}</div>
+              <div className={styles.mobileUserEmail}>{currentUser.email}</div>
             </div>
-            <button className={styles.mobileNavItem} onClick={() => handleNavSelect('portfolio')}>Dashboard</button>
-            <button className={styles.mobileNavItem} onClick={() => handleNavSelect('profile')}>Profile</button>
-            <button className={styles.mobileNavItem} onClick={() => handleNavSelect('documents')}>Documents</button>
-            <button className={styles.mobileNavItem} onClick={() => handleNavSelect('contact')}>Contact</button>
-            <button className={styles.mobileNavItem} onClick={() => { setShowMobileNav(false); router.push('/investment') }}>Make an Investment</button>
+            <button className={styles.mobileNavItem} onClick={() => handleNavSelect('dashboard')}>Dashboard</button>
+            <button className={styles.mobileNavItem} onClick={() => handleNavSelect('investments')}>Investments</button>
+            <button className={styles.mobileNavItem} onClick={() => handleNavSelect('accounts')}>Accounts</button>
+            <button className={styles.mobileNavItem} onClick={() => handleNavSelect('deletions')}>Deletion Requests</button>
             <div className={styles.mobileDivider}></div>
             <button className={styles.mobileNavItem} onClick={() => { setShowMobileNav(false); handleLogout() }}>Sign Out</button>
           </div>

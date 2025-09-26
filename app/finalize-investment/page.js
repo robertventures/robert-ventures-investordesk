@@ -299,7 +299,7 @@ function ClientContent() {
                       tenPercentLimitConfirmed: accredited === 'not_accredited' ? tenPercentConfirmed : null
                     },
                     banking: { fundingMethod, earningsMethod, payoutMethod },
-                    status: 'submitted',
+                    status: 'pending',
                     submittedAt: new Date().toISOString()
                   }
                 })

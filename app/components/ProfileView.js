@@ -36,6 +36,9 @@ export default function ProfileView() {
   const [isSaving, setIsSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [errors, setErrors] = useState({})
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deletionReason, setDeletionReason] = useState('')
+  const [isRequestingDeletion, setIsRequestingDeletion] = useState(false)
 
   useEffect(() => {
     const loadUser = async () => {
@@ -328,6 +331,42 @@ export default function ProfileView() {
       console.error('Failed to save profile', e)
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  const handleRequestDeletion = async () => {
+    setIsRequestingDeletion(true)
+    try {
+      const userId = localStorage.getItem('currentUserId')
+      const updateData = {
+        deletionRequestedAt: new Date().toISOString(),
+        accountStatus: 'deletion_requested'
+      }
+
+      if (deletionReason.trim()) {
+        updateData.deletionReason = deletionReason.trim()
+      }
+
+      const res = await fetch(`/api/users/${userId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updateData)
+      })
+
+      const data = await res.json()
+      if (data.success) {
+        setUserData(data.user)
+        setShowDeleteModal(false)
+        setDeletionReason('')
+        alert('Account deletion request submitted successfully. Our team will review your request.')
+      } else {
+        alert(data.error || 'Failed to submit deletion request')
+      }
+    } catch (e) {
+      console.error('Failed to request deletion', e)
+      alert('An error occurred. Please try again.')
+    } finally {
+      setIsRequestingDeletion(false)
     }
   }
 
@@ -726,9 +765,62 @@ export default function ProfileView() {
               {isSaving ? 'Saving...' : 'Save Changes'}
             </button>
             {saveSuccess && <span className={styles.success}>Saved!</span>}
+            {(!userData.deletionRequestedAt || userData.accountStatus !== 'deletion_requested') && (
+              <button
+                className={styles.dangerButton}
+                onClick={() => setShowDeleteModal(true)}
+              >
+                Request Account Deletion
+              </button>
+            )}
+            {userData.deletionRequestedAt && userData.accountStatus === 'deletion_requested' && (
+              <div className={styles.deletionStatus}>
+                <span className={styles.deletionPending}>Deletion request pending review</span>
+              </div>
+            )}
           </div>
         </section>
       </div>
+
+      {showDeleteModal && (
+        <div className={styles.modalOverlay}>
+          <div className={styles.modal}>
+            <h3 className={styles.modalTitle}>Request Account Deletion</h3>
+            <p className={styles.modalText}>
+              Are you sure you want to request deletion of your account? This action will submit a request to our team for review.
+              Your account will remain active until the request is approved.
+            </p>
+            <div className={styles.modalField}>
+              <label className={styles.modalLabel}>Reason for deletion (optional)</label>
+              <textarea
+                className={styles.modalTextarea}
+                value={deletionReason}
+                onChange={(e) => setDeletionReason(e.target.value)}
+                placeholder="Please explain why you want to delete your account (optional)..."
+                rows={4}
+              />
+            </div>
+            <div className={styles.modalActions}>
+              <button
+                className={styles.modalCancelButton}
+                onClick={() => {
+                  setShowDeleteModal(false)
+                  setDeletionReason('')
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className={styles.modalDeleteButton}
+                onClick={handleRequestDeletion}
+                disabled={isRequestingDeletion}
+              >
+                {isRequestingDeletion ? 'Submitting...' : 'Submit Request'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

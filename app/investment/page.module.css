@@ -13,4 +13,33 @@
 
 /* tabs replaced by vertical steps */
 
+.footer {
+  margin-top: 32px;
+  text-align: center;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.footerText {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 0;
+  font-family: 'Inter', sans-serif;
+}
+
+.linkButton {
+  background: none;
+  border: none;
+  color: #1e40af;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: underline;
+  font-family: 'Inter', sans-serif;
+  transition: color 0.2s ease;
+}
+
+.linkButton:hover {
+  color: #1d4ed8;
+}
 

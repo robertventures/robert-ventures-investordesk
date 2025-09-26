@@ -9,7 +9,7 @@ const options = [
   { key: 'ira', label: 'IRA' }
 ]
 
-export default function TabbedInvestmentType({ onCompleted, showContinueButton = true, autoSaveOnSelect = false, onChange, selectedValue }) {
+export default function TabbedInvestmentType({ onCompleted, showContinueButton = true, autoSaveOnSelect = false, onChange, selectedValue, lockedAccountType }) {
   const [selected, setSelected] = useState(selectedValue || 'individual')
   const [isSaving, setIsSaving] = useState(false)
 
@@ -23,6 +23,7 @@ export default function TabbedInvestmentType({ onCompleted, showContinueButton =
   }, [selectedValue])
 
   const handleSelect = async (key) => {
+    if (lockedAccountType && key !== lockedAccountType) return
     setSelected(key)
     if (typeof onChange === 'function') onChange(key)
     if (!autoSaveOnSelect) return
@@ -70,16 +71,21 @@ export default function TabbedInvestmentType({ onCompleted, showContinueButton =
   return (
     <div className={styles.wrapper}>
       <div className={styles.grid}>
-        {options.map(opt => (
-          <button
-            key={opt.key}
-            type="button"
-            className={`${styles.card} ${selected === opt.key ? styles.selected : ''}`}
-            onClick={() => handleSelect(opt.key)}
-          >
-            {opt.label}
-          </button>
-        ))}
+        {options.map(opt => {
+          const isLockedOther = Boolean(lockedAccountType && opt.key !== lockedAccountType)
+          return (
+            <button
+              key={opt.key}
+              type="button"
+              className={`${styles.card} ${selected === opt.key ? styles.selected : ''} ${isLockedOther ? styles.disabled : ''}`}
+              onClick={() => handleSelect(opt.key)}
+              disabled={isLockedOther}
+              aria-disabled={isLockedOther}
+            >
+              {opt.label}
+            </button>
+          )
+        })}
       </div>
       {showContinueButton && (
         <div className={styles.actions}>

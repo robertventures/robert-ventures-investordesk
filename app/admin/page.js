@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Header from '../components/Header'
+import AdminHeader from '../components/AdminHeader'
 import styles from './page.module.css'
 
 export default function AdminPage() {
@@ -10,7 +10,9 @@ export default function AdminPage() {
   const [users, setUsers] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [savingId, setSavingId] = useState(null)
-  const [activeTab, setActiveTab] = useState('investments') // 'investments' | 'accounts'
+  const [activeTab, setActiveTab] = useState('dashboard') // 'dashboard' | 'investments' | 'accounts' | 'deletions'
+  const [investmentsSearch, setInvestmentsSearch] = useState('')
+  const [accountsSearch, setAccountsSearch] = useState('')
 
   useEffect(() => {
     const init = async () => {
@@ -88,6 +90,52 @@ export default function AdminPage() {
     }
   }
 
+  const approveDeletion = async (userId) => {
+    try {
+      setSavingId(userId)
+      const res = await fetch(`/api/users/${userId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ _action: 'approveDeletion' })
+      })
+      const data = await res.json()
+      if (!data.success) {
+        alert(data.error || 'Failed to approve deletion')
+        return
+      }
+      alert('Account deleted successfully')
+      await refreshUsers()
+    } catch (e) {
+      console.error('Approve deletion failed', e)
+      alert('An error occurred. Please try again.')
+    } finally {
+      setSavingId(null)
+    }
+  }
+
+  const rejectDeletion = async (userId) => {
+    try {
+      setSavingId(userId)
+      const res = await fetch(`/api/users/${userId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ _action: 'rejectDeletion' })
+      })
+      const data = await res.json()
+      if (!data.success) {
+        alert(data.error || 'Failed to reject deletion')
+        return
+      }
+      alert('Deletion request rejected')
+      await refreshUsers()
+    } catch (e) {
+      console.error('Reject deletion failed', e)
+      alert('An error occurred. Please try again.')
+    } finally {
+      setSavingId(null)
+    }
+  }
+
   const handleLogout = () => {
     localStorage.removeItem('currentUserId')
     localStorage.removeItem('signupEmail')
@@ -97,45 +145,63 @@ export default function AdminPage() {
 
   if (isLoading) {
     return (
-      <main className={styles.main}>
-        <Header />
+      <div className={styles.main}>
+        <AdminHeader onTabChange={setActiveTab} activeTab={activeTab} />
         <div className={styles.container}>
-          <div className={styles.card}>Loading admin dashboard...</div>
+          <div className={styles.content}>Loading admin dashboard...</div>
         </div>
-      </main>
+      </div>
     )
   }
 
   const nonAdminUsers = (users || []).filter(u => !u.isAdmin)
+  const activeAccountsCount = nonAdminUsers.length
   const investorsCount = nonAdminUsers.filter(u => (u.investments || []).length > 0).length
-  const { pendingTotal, approvedTotal } = nonAdminUsers.reduce((acc, u) => {
+  const { pendingTotal, raisedTotal } = nonAdminUsers.reduce((acc, u) => {
     (u.investments || []).forEach(inv => {
       const amount = inv.amount || 0
       if (inv.status === 'approved' || inv.status === 'invested') {
-        acc.approvedTotal += amount
+        acc.raisedTotal += amount
       } else {
         acc.pendingTotal += amount
       }
     })
     return acc
-  }, { pendingTotal: 0, approvedTotal: 0 })
+  }, { pendingTotal: 0, raisedTotal: 0 })
+
+  // Filter functions for search
+  const filterUsersBySearch = (users, searchTerm) => {
+    if (!searchTerm.trim()) return users
+    const term = searchTerm.toLowerCase()
+    return users.filter(user => {
+      const fullName = `${user.firstName || ''} ${user.lastName || ''}`.toLowerCase()
+      const email = (user.email || '').toLowerCase()
+      return fullName.includes(term) || email.includes(term)
+    })
+  }
+
+  const filteredInvestmentUsers = filterUsersBySearch(nonAdminUsers, investmentsSearch)
+  const filteredAccountUsers = filterUsersBySearch(nonAdminUsers, accountsSearch)
 
   return (
-    <main className={styles.main}>
-      <Header />
+    <div className={styles.main}>
+      <AdminHeader onTabChange={setActiveTab} activeTab={activeTab} />
       <div className={styles.container}>
-        <div className={styles.card}>
+        <div className={styles.content}>
           <div className={styles.headerRow}>
             <div>
               <h1 className={styles.title}>Admin Dashboard</h1>
               <p className={styles.subtitle}>Manage users and approve investments.</p>
             </div>
-            <button className={styles.secondaryButton} onClick={handleLogout}>Sign Out</button>
           </div>
 
           <div className={styles.metrics}>
             <div className={styles.metric}>
               <div className={styles.metricLabel}>ACTIVE ACCOUNTS</div>
+              <div className={styles.metricValue}>{activeAccountsCount}</div>
+            </div>
+            <div className={styles.metric}>
+              <div className={styles.metricLabel}>NUMBER OF INVESTORS</div>
               <div className={styles.metricValue}>{investorsCount}</div>
             </div>
             <div className={styles.metric}>
@@ -143,29 +209,55 @@ export default function AdminPage() {
               <div className={styles.metricValue}>${pendingTotal.toLocaleString()}</div>
             </div>
             <div className={styles.metric}>
-              <div className={styles.metricLabel}>TOTAL APPROVED</div>
-              <div className={styles.metricValue}>${approvedTotal.toLocaleString()}</div>
+              <div className={styles.metricLabel}>TOTAL AMOUNT RAISED</div>
+              <div className={styles.metricValue}>${raisedTotal.toLocaleString()}</div>
             </div>
           </div>
 
-          <div className={styles.tabs}>
-            <button className={`${styles.tab} ${activeTab === 'investments' ? styles.active : ''}`} onClick={() => setActiveTab('investments')}>Investments</button>
-            <button className={`${styles.tab} ${activeTab === 'accounts' ? styles.active : ''}`} onClick={() => setActiveTab('accounts')}>Accounts</button>
-            {/* Notifications tab removed */}
-          </div>
+          {activeTab === 'dashboard' && (
+            <div className={styles.dashboardContent}>
+              <div className={styles.dashboardSection}>
+                <h2 className={styles.sectionTitle}>Recent Activity</h2>
+                <div className={styles.activitySummary}>
+                  <p className={styles.activityItem}>
+                    Total registered users: <strong>{nonAdminUsers.length}</strong>
+                  </p>
+                  <p className={styles.activityItem}>
+                    Active investors: <strong>{investorsCount}</strong>
+                  </p>
+                  <p className={styles.activityItem}>
+                    Pending investment approvals: <strong>{nonAdminUsers.reduce((count, u) => count + (u.investments || []).filter(inv => inv.status === 'pending').length, 0)}</strong>
+                  </p>
+                  <p className={styles.activityItem}>
+                    Deletion requests: <strong>{nonAdminUsers.filter(user => user.deletionRequestedAt && user.accountStatus === 'deletion_requested').length}</strong>
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {activeTab === 'investments' && (
-            <div className={styles.tableContainer}>
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <th>User</th>
-                    <th>Email</th>
-                    <th>Investments</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {nonAdminUsers.map(user => (
+            <div>
+              <div className={styles.searchContainer}>
+                <input
+                  type="text"
+                  placeholder="Search by name or email..."
+                  value={investmentsSearch}
+                  onChange={(e) => setInvestmentsSearch(e.target.value)}
+                  className={styles.searchInput}
+                />
+              </div>
+              <div className={styles.tableContainer}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>User</th>
+                      <th>Email</th>
+                      <th>Investments</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredInvestmentUsers.map(user => (
                     <tr key={user.id}>
                       <td>{user.firstName || '-'} {user.lastName || ''}</td>
                       <td>{user.email}</td>
@@ -198,26 +290,37 @@ export default function AdminPage() {
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
 
           {activeTab === 'accounts' && (
-            <div className={styles.tableContainer}>
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Email</th>
-                    <th>Phone</th>
-                    <th>Created</th>
-                    <th>Verified</th>
-                    <th>Investments</th>
-                    <th>Invested</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {nonAdminUsers.map(user => (
+            <div>
+              <div className={styles.searchContainer}>
+                <input
+                  type="text"
+                  placeholder="Search by name or email..."
+                  value={accountsSearch}
+                  onChange={(e) => setAccountsSearch(e.target.value)}
+                  className={styles.searchInput}
+                />
+              </div>
+              <div className={styles.tableContainer}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Email</th>
+                      <th>Phone</th>
+                      <th>Created</th>
+                      <th>Verified</th>
+                      <th>Investments</th>
+                      <th>Invested</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredAccountUsers.map(user => (
                     <tr key={user.id}>
                       <td>
                         <button 
@@ -269,13 +372,84 @@ export default function AdminPage() {
                   ))}
                 </tbody>
               </table>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'deletions' && (
+            <div className={styles.tableContainer}>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Requested</th>
+                    <th>Reason</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {nonAdminUsers
+                    .filter(user => user.deletionRequestedAt && user.accountStatus === 'deletion_requested')
+                    .map(user => (
+                      <tr key={user.id}>
+                        <td>
+                          <button
+                            className={styles.linkButton}
+                            onClick={() => router.push(`/admin/users/${user.id}`)}
+                          >
+                            {user.firstName || '-'} {user.lastName || ''}
+                          </button>
+                        </td>
+                        <td>{user.email}</td>
+                        <td>{user.deletionRequestedAt ? new Date(user.deletionRequestedAt).toLocaleDateString() : '-'}</td>
+                        <td>
+                          <div className={styles.deletionReason}>
+                            {user.deletionReason || 'No reason provided'}
+                          </div>
+                        </td>
+                        <td>
+                          <div className={styles.actionGroup}>
+                            <button
+                              className={styles.dangerButton}
+                              disabled={savingId === user.id}
+                              onClick={() => {
+                                if (confirm(`Are you sure you want to permanently delete ${user.firstName} ${user.lastName}'s account? This cannot be undone.`)) {
+                                  approveDeletion(user.id)
+                                }
+                              }}
+                            >
+                              {savingId === user.id ? 'Deleting...' : 'Approve Deletion'}
+                            </button>
+                            <button
+                              className={styles.secondaryButton}
+                              disabled={savingId === user.id}
+                              onClick={() => {
+                                if (confirm(`Are you sure you want to reject ${user.firstName} ${user.lastName}'s deletion request?`)) {
+                                  rejectDeletion(user.id)
+                                }
+                              }}
+                            >
+                              {savingId === user.id ? 'Rejecting...' : 'Reject Request'}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  {nonAdminUsers.filter(user => user.deletionRequestedAt && user.accountStatus === 'deletion_requested').length === 0 && (
+                    <tr>
+                      <td colSpan="5" className={styles.emptyState}>No deletion requests pending review</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           )}
 
           {/* Notifications UI removed */}
         </div>
       </div>
-    </main>
+    </div>
   )
 }
 

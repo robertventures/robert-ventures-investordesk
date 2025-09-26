@@ -1,14 +1,16 @@
 .main {
-  padding: 0 0 64px;
+  min-height: 100vh;
+  background: #f8fafc;
+  padding-bottom: 64px;
 }
 
 .container {
   max-width: 1400px;
   margin: 0 auto;
-  padding: 24px;
+  padding: 32px 24px;
 }
 
-.card {
+.content {
   background: #fff;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
@@ -26,14 +28,12 @@
 }
 
 .headerRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  margin-bottom: 24px;
 }
 
 .metrics {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 16px;
   margin: 16px 0 24px;
 }
@@ -56,25 +56,6 @@
   font-weight: 600;
 }
 
-.tabs {
-  display: flex;
-  gap: 12px;
-  margin: 8px 0 16px;
-}
-
-.tab {
-  border: 1px solid #e2e8f0;
-  background: #f8fafc;
-  padding: 8px 12px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.tab.active {
-  border-color: #1f2937;
-  background: #1f2937;
-  color: #fff;
-}
 
 .tableContainer {
   overflow-x: auto;
@@ -163,6 +144,94 @@
 
 .muted {
   color: #94a3b8;
+}
+
+.deletionReason {
+  max-width: 300px;
+  word-wrap: break-word;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.emptyState {
+  text-align: center;
+  color: #94a3b8;
+  font-style: italic;
+  padding: 40px;
+}
+
+.dashboardContent {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.dashboardSection {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 24px;
+}
+
+.sectionTitle {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0 0 16px 0;
+  color: #1f2937;
+}
+
+.activitySummary {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.activityItem {
+  margin: 0;
+  padding: 12px 0;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.activityItem:last-child {
+  border-bottom: none;
+}
+
+.searchContainer {
+  margin-bottom: 20px;
+}
+
+.searchInput {
+  width: 100%;
+  max-width: 400px;
+  padding: 12px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+  background: #fff;
+}
+
+.searchInput:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+@media (max-width: 768px) {
+  .container {
+    padding: 12px;
+  }
+
+  .main {
+    padding-bottom: 84px;
+  }
+
+
+  .dashboardSection {
+    padding: 16px;
+  }
 }
 
 
