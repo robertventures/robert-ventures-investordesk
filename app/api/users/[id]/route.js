@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { updateUser, getUsers, saveUsers } from '../../../../lib/database'
+import { getCurrentAppTime } from '../../../../lib/appTime'
 
 // PUT - Update user data
 export async function PUT(request, { params }) {
@@ -28,9 +29,9 @@ export async function PUT(request, { params }) {
         return NextResponse.json({ success: false, error: 'Admins cannot create investments' }, { status: 403 })
       }
 
-      // Account type lock enforcement
+      // Account type lock enforcement - only for confirmed investments
       const existingInvestments = Array.isArray(user.investments) ? user.investments : []
-      const lockedType = user.lockedAccountType || existingInvestments.find(inv => inv.status !== 'draft' && inv.accountType)?.accountType
+      const lockedType = user.lockedAccountType || existingInvestments.find(inv => inv.status === 'confirmed' && inv.accountType)?.accountType
       if (lockedType && body.investment.accountType && body.investment.accountType !== lockedType) {
         return NextResponse.json({ success: false, error: `Account type is locked to ${lockedType} for this user.` }, { status: 400 })
       }
@@ -48,7 +49,8 @@ export async function PUT(request, { params }) {
       }
 
       const existing = Array.isArray(user.investments) ? user.investments : []
-      const nextLocked = user.lockedAccountType || newInvestment.accountType || null
+      // Only lock account type if the new investment is being created as confirmed
+      const nextLocked = user.lockedAccountType || (newInvestment.status === 'confirmed' ? newInvestment.accountType : null)
       const updatedUser = {
         ...user,
         investments: [...existing, newInvestment],
@@ -80,8 +82,8 @@ export async function PUT(request, { params }) {
         return NextResponse.json({ success: false, error: 'Investment not found' }, { status: 404 })
       }
 
-      // Account type lock enforcement
-      const committedType = user.lockedAccountType || investments.find(inv => inv.status !== 'draft' && inv.accountType)?.accountType
+      // Account type lock enforcement - only for confirmed investments
+      const committedType = user.lockedAccountType || investments.find(inv => inv.status === 'confirmed' && inv.accountType)?.accountType
       const incomingType = body.fields.accountType
       if (committedType && incomingType && incomingType !== committedType) {
         return NextResponse.json({ success: false, error: `Account type is locked to ${committedType} for this user.` }, { status: 400 })
@@ -92,8 +94,28 @@ export async function PUT(request, { params }) {
         ...body.fields,
         updatedAt: new Date().toISOString()
       }
+      
+      // Calculate lockdown end date and start compounding ONLY when investment becomes confirmed
+      if (body.fields.status === 'confirmed' && !updatedInvestment.lockdownEndDate) {
+        // Use current app time as the confirmation date (when admin/bank confirms)
+        const appTime = await getCurrentAppTime()
+        const confirmedDate = new Date(appTime)
+        const lockupYears = updatedInvestment.lockupPeriod === '3-year' ? 3 : 1
+        const lockdownEndDate = new Date(confirmedDate)
+        lockdownEndDate.setFullYear(lockdownEndDate.getFullYear() + lockupYears)
+        updatedInvestment.lockdownEndDate = lockdownEndDate.toISOString()
+        
+        // Set confirmation date for compound calculations (actual confirmation date)
+        if (!updatedInvestment.confirmedAt) {
+          updatedInvestment.confirmedAt = confirmedDate.toISOString()
+        }
+      }
+      
       investments[invIndex] = updatedInvestment
-      const nextLockedType = user.lockedAccountType || updatedInvestment.accountType || null
+      
+      // Only lock account type when investment status becomes confirmed
+      const shouldLockAccountType = updatedInvestment.status === 'confirmed' && updatedInvestment.accountType
+      const nextLockedType = user.lockedAccountType || (shouldLockAccountType ? updatedInvestment.accountType : null)
       const updatedUser = { ...user, investments, ...(nextLockedType ? { lockedAccountType: nextLockedType } : {}), updatedAt: new Date().toISOString() }
       usersData.users[userIndex] = updatedUser
       if (!await saveUsers(usersData)) {

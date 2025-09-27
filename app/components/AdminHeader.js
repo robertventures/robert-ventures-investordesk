@@ -75,16 +75,16 @@ export default function AdminHeader({ onTabChange, activeTab }) {
             Dashboard
           </button>
           <button
-            onClick={() => onTabChange('investments')}
-            className={`${styles.navItem} ${activeTab === 'investments' ? styles.active : ''}`}
-          >
-            Investments
-          </button>
-          <button
             onClick={() => onTabChange('accounts')}
             className={`${styles.navItem} ${activeTab === 'accounts' ? styles.active : ''}`}
           >
             Accounts
+          </button>
+          <button
+            onClick={() => onTabChange('investments')}
+            className={`${styles.navItem} ${activeTab === 'investments' ? styles.active : ''}`}
+          >
+            Investments
           </button>
           <button
             onClick={() => onTabChange('deletions')}
@@ -110,8 +110,8 @@ export default function AdminHeader({ onTabChange, activeTab }) {
               <div className={styles.mobileUserEmail}>{currentUser.email}</div>
             </div>
             <button className={styles.mobileNavItem} onClick={() => handleNavSelect('dashboard')}>Dashboard</button>
-            <button className={styles.mobileNavItem} onClick={() => handleNavSelect('investments')}>Investments</button>
             <button className={styles.mobileNavItem} onClick={() => handleNavSelect('accounts')}>Accounts</button>
+            <button className={styles.mobileNavItem} onClick={() => handleNavSelect('investments')}>Investments</button>
             <button className={styles.mobileNavItem} onClick={() => handleNavSelect('deletions')}>Deletion Requests</button>
             <div className={styles.mobileDivider}></div>
             <button className={styles.mobileNavItem} onClick={() => { setShowMobileNav(false); handleLogout() }}>Sign Out</button>

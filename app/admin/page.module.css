@@ -146,6 +146,121 @@
   color: #94a3b8;
 }
 
+/* Time Machine Styles */
+.timeMachineSection {
+  background: #f8fafc;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 20px;
+  margin: 24px 0;
+}
+
+.timeMachineTitle {
+  margin: 0 0 16px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.activeIndicator {
+  color: #dc2626;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.timeMachineControls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+.timeDisplay {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.timeRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+}
+
+.timeLabel {
+  font-weight: 600;
+  color: #374151;
+}
+
+.timeValue {
+  font-family: 'Courier New', monospace;
+  font-weight: 600;
+}
+
+.timeControls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.timeInput {
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.timeMachineButton {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.timeMachineButton:hover {
+  background: #2563eb;
+}
+
+.timeMachineButton:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+}
+
+.resetTimeButton {
+  background: #ef4444;
+  color: white;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.resetTimeButton:hover {
+  background: #dc2626;
+}
+
+.resetTimeButton:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+}
+
+@media (max-width: 768px) {
+  .timeMachineControls {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
 .deletionReason {
   max-width: 300px;
   word-wrap: break-word;

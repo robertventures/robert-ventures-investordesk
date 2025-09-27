@@ -13,6 +13,9 @@ export default function AdminPage() {
   const [activeTab, setActiveTab] = useState('dashboard') // 'dashboard' | 'investments' | 'accounts' | 'deletions'
   const [investmentsSearch, setInvestmentsSearch] = useState('')
   const [accountsSearch, setAccountsSearch] = useState('')
+  const [timeMachineData, setTimeMachineData] = useState({ appTime: null, isActive: false })
+  const [newAppTime, setNewAppTime] = useState('')
+  const [isUpdatingTime, setIsUpdatingTime] = useState(false)
 
   useEffect(() => {
     const init = async () => {
@@ -40,6 +43,19 @@ export default function AdminPage() {
         const data = await res.json()
         if (data.success) {
           setUsers(data.users || [])
+        }
+
+        // Load time machine data
+        const timeRes = await fetch('/api/admin/time-machine')
+        const timeData = await timeRes.json()
+        if (timeData.success) {
+          setTimeMachineData({
+            appTime: timeData.appTime,
+            isActive: timeData.isTimeMachineActive,
+            realTime: timeData.realTime
+          })
+          // Set input to current app time for easy editing
+          setNewAppTime(new Date(timeData.appTime).toISOString().slice(0, 16))
         }
 
         // Notifications removed
@@ -73,20 +89,88 @@ export default function AdminPage() {
         body: JSON.stringify({
           _action: 'updateInvestment',
           investmentId,
-          fields: { status: 'approved', approvedAt: new Date().toISOString() }
+          fields: { status: 'confirmed', confirmedAt: new Date().toISOString() }
         })
       })
       const data = await res.json()
       if (!data.success) {
-        alert(data.error || 'Failed to approve investment')
+        alert(data.error || 'Failed to confirm investment')
         return
       }
       await refreshUsers()
     } catch (e) {
-      console.error('Approve failed', e)
+      console.error('Confirm failed', e)
       alert('An error occurred. Please try again.')
     } finally {
       setSavingId(null)
+    }
+  }
+
+  const updateAppTime = async () => {
+    if (!newAppTime) {
+      alert('Please enter a valid date and time')
+      return
+    }
+    
+    setIsUpdatingTime(true)
+    try {
+      const res = await fetch('/api/admin/time-machine', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          appTime: new Date(newAppTime).toISOString(),
+          adminUserId: currentUser.id
+        })
+      })
+      
+      const data = await res.json()
+      if (data.success) {
+        setTimeMachineData({
+          appTime: data.appTime,
+          isActive: true,
+          realTime: new Date().toISOString()
+        })
+        alert('Time machine updated successfully!')
+        // Refresh users to see updated calculations
+        await refreshUsers()
+      } else {
+        alert(data.error || 'Failed to update app time')
+      }
+    } catch (e) {
+      console.error('Failed to update app time', e)
+      alert('An error occurred while updating app time')
+    } finally {
+      setIsUpdatingTime(false)
+    }
+  }
+
+  const resetAppTime = async () => {
+    setIsUpdatingTime(true)
+    try {
+      const res = await fetch(`/api/admin/time-machine?adminUserId=${currentUser.id}`, {
+        method: 'DELETE'
+      })
+      
+      const data = await res.json()
+      if (data.success) {
+        const realTime = new Date().toISOString()
+        setTimeMachineData({
+          appTime: realTime,
+          isActive: false,
+          realTime
+        })
+        setNewAppTime(new Date(realTime).toISOString().slice(0, 16))
+        alert('Time machine reset to real time!')
+        // Refresh users to see updated calculations
+        await refreshUsers()
+      } else {
+        alert(data.error || 'Failed to reset app time')
+      }
+    } catch (e) {
+      console.error('Failed to reset app time', e)
+      alert('An error occurred while resetting app time')
+    } finally {
+      setIsUpdatingTime(false)
     }
   }
 
@@ -180,7 +264,7 @@ export default function AdminPage() {
     })
   }
 
-  const filteredInvestmentUsers = filterUsersBySearch(nonAdminUsers, investmentsSearch)
+  const filteredInvestmentUsers = filterUsersBySearch(nonAdminUsers, investmentsSearch).filter(user => (user.investments || []).length > 0)
   const filteredAccountUsers = filterUsersBySearch(nonAdminUsers, accountsSearch)
 
   return (
@@ -211,6 +295,56 @@ export default function AdminPage() {
             <div className={styles.metric}>
               <div className={styles.metricLabel}>TOTAL AMOUNT RAISED</div>
               <div className={styles.metricValue}>${raisedTotal.toLocaleString()}</div>
+            </div>
+          </div>
+
+          {/* Time Machine Controls */}
+          <div className={styles.timeMachineSection}>
+            <h3 className={styles.timeMachineTitle}>
+              🕐 Time Machine {timeMachineData.isActive && <span className={styles.activeIndicator}>(ACTIVE)</span>}
+            </h3>
+            <div className={styles.timeMachineControls}>
+              <div className={styles.timeDisplay}>
+                <div className={styles.timeRow}>
+                  <span className={styles.timeLabel}>App Time:</span>
+                  <span className={styles.timeValue} style={{ color: timeMachineData.isActive ? '#dc2626' : '#059669' }}>
+                    {timeMachineData.appTime ? new Date(timeMachineData.appTime).toLocaleString() : 'Loading...'}
+                  </span>
+                </div>
+                {timeMachineData.isActive && (
+                  <div className={styles.timeRow}>
+                    <span className={styles.timeLabel}>Real Time:</span>
+                    <span className={styles.timeValue}>
+                      {timeMachineData.realTime ? new Date(timeMachineData.realTime).toLocaleString() : 'Loading...'}
+                    </span>
+                  </div>
+                )}
+              </div>
+              <div className={styles.timeControls}>
+                <input
+                  type="datetime-local"
+                  value={newAppTime}
+                  onChange={(e) => setNewAppTime(e.target.value)}
+                  className={styles.timeInput}
+                  disabled={isUpdatingTime}
+                />
+                <button
+                  onClick={updateAppTime}
+                  disabled={isUpdatingTime}
+                  className={styles.timeMachineButton}
+                >
+                  {isUpdatingTime ? 'Updating...' : 'Set Time'}
+                </button>
+                {timeMachineData.isActive && (
+                  <button
+                    onClick={resetAppTime}
+                    disabled={isUpdatingTime}
+                    className={styles.resetTimeButton}
+                  >
+                    Reset to Real Time
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -273,10 +407,12 @@ export default function AdminPage() {
                                 <div className={styles.invActions}>
                                   <button
                                     className={styles.approveButton}
-                                    disabled={savingId === inv.id || inv.status === 'approved' || inv.status === 'invested'}
+                                    disabled={savingId === inv.id || inv.status === 'confirmed' || inv.status === 'withdrawn'}
                                     onClick={() => approveInvestment(user.id, inv.id)}
                                   >
-                                    {inv.status === 'approved' || inv.status === 'invested' ? 'Approved' : (savingId === inv.id ? 'Approving...' : 'Approve')}
+                                    {inv.status === 'confirmed' ? 'Confirmed' : 
+                                     inv.status === 'withdrawn' ? 'Withdrawn' : 
+                                     (savingId === inv.id ? 'Confirming...' : 'Confirm')}
                                   </button>
                                 </div>
                               </div>

@@ -89,6 +89,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
   const [showJointSsnHelp, setShowJointSsnHelp] = useState(false)
   const idLabel = accountType === 'entity' ? 'EIN or TIN' : 'SSN'
   const dateLabel = accountType === 'entity' ? 'Registration Date' : 'Date of Birth'
+
   const maxAdultDob = useMemo(() => {
     const now = new Date()
     const cutoff = new Date(now.getFullYear() - 18, now.getMonth(), now.getDate())

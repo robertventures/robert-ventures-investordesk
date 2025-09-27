@@ -240,7 +240,7 @@ export default function InvestmentForm({ onCompleted, onReviewSummary, disableAu
         }
       }
 
-      // No existing investment: create once
+      // No existing investment: create draft investment
       const res = await fetch(`/api/users/${userId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },

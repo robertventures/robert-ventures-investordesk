@@ -16,6 +16,7 @@ export default function InvestmentPage() {
   const [isStep2Completed, setIsStep2Completed] = useState(false)
   const [reviewModeStep1, setReviewModeStep1] = useState(false)
   const [reviewModeStep2, setReviewModeStep2] = useState(false)
+  const [step2Unlocked, setStep2Unlocked] = useState(false)
 
   const [selectedAccountType, setSelectedAccountType] = useState('individual')
   const [lockedAccountType, setLockedAccountType] = useState(null)
@@ -120,6 +121,18 @@ export default function InvestmentPage() {
           setLockedAccountType(data.user.lockedAccountType)
           setSelectedAccountType(data.user.lockedAccountType)
         }
+        
+        // Load existing draft investment data if it exists
+        const investmentId = localStorage.getItem('currentInvestmentId')
+        if (data.success && investmentId) {
+          const existingInvestment = (data.user.investments || []).find(inv => inv.id === investmentId && inv.status === 'draft')
+          if (existingInvestment) {
+            if (existingInvestment.accountType) setSelectedAccountType(existingInvestment.accountType)
+            if (typeof existingInvestment.amount === 'number') setInvestmentAmount(existingInvestment.amount)
+            if (existingInvestment.paymentFrequency) setInvestmentPaymentFrequency(existingInvestment.paymentFrequency)
+            if (existingInvestment.lockupPeriod) setInvestmentLockup(existingInvestment.lockupPeriod)
+          }
+        }
       } catch {}
     }
     if (userId) checkAdmin()
@@ -140,7 +153,7 @@ export default function InvestmentPage() {
   const shouldShowSummaryStep2 = reviewModeStep2 && isStep2Completed && Boolean(identitySummary)
   // Keep incomplete steps expanded regardless of active step
   const showStep2Edit = (!isStep2Completed) || (activeStep === 2 && !shouldShowSummaryStep2)
-  const isStep2Collapsed = isStep2Completed && !showStep2Edit
+  const isStep2Collapsed = !step2Unlocked || (isStep2Completed && !showStep2Edit)
   const canFinalize = shouldShowSummaryStep1 && shouldShowSummaryStep2
 
   return (
@@ -191,6 +204,7 @@ export default function InvestmentPage() {
                 onCompleted={() => {
                   setIsStep1Completed(true)
                   setReviewModeStep1(true)
+                  setStep2Unlocked(true)
                   setActiveStep(2)
                 }}
                 disableAuthGuard
@@ -200,7 +214,7 @@ export default function InvestmentPage() {
         </section>
 
         <section className={`${stepStyles.card} ${isStep2Collapsed ? stepStyles.collapsed : ''}`}>
-          <header className={stepStyles.cardHeader} onClick={() => { setActiveStep(2); setReviewModeStep2(false) }}>
+          <header className={stepStyles.cardHeader} onClick={() => { setStep2Unlocked(true); setActiveStep(2); setReviewModeStep2(false) }}>
             <div className={stepStyles.stepCircle}>2</div>
             <h2 className={stepStyles.cardTitle}>Investor Information</h2>
             {isStep2Completed && <div className={stepStyles.checkmark}>✓</div>}

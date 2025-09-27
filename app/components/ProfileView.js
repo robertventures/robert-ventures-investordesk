@@ -14,6 +14,14 @@ export default function ProfileView() {
     return now.toISOString().split('T')[0]
   }, [])
 
+  const formatName = (value = '') => value.replace(/[0-9]/g, '')
+
+  // City names should not contain digits
+  const formatCity = (value = '') => value.replace(/[0-9]/g, '')
+
+  // Phone numbers should not contain letters
+  const formatPhone = (value = '') => value.replace(/[^0-9+]/g, '')
+
   const parseDateString = (value = '') => {
     const [year, month, day] = (value || '').split('-').map(Number)
     if (!year || !month || !day) return null
@@ -133,14 +141,25 @@ export default function ProfileView() {
 
   const handleChange = (e) => {
     const { name, value } = e.target
-    setFormData(prev => ({ ...prev, [name]: value }))
+    let formattedValue = value
+    if (name === 'firstName' || name === 'lastName') {
+      formattedValue = formatName(value)
+    }
+    if (name === 'phoneNumber') {
+      formattedValue = formatPhone(value)
+    }
+    setFormData(prev => ({ ...prev, [name]: formattedValue }))
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }))
     setSaveSuccess(false)
   }
 
   const handleAddressChange = (e) => {
     const { name, value } = e.target
-    setFormData(prev => ({ ...prev, address: { ...prev.address, [name]: value } }))
+    let formattedValue = value
+    if (name === 'city') {
+      formattedValue = formatCity(value)
+    }
+    setFormData(prev => ({ ...prev, address: { ...prev.address, [name]: formattedValue } }))
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }))
     setSaveSuccess(false)
   }
@@ -154,21 +173,36 @@ export default function ProfileView() {
 
   const handleJointHolderChange = (e) => {
     const { name, value } = e.target
-    setFormData(prev => ({ ...prev, jointHolder: { ...prev.jointHolder, [name]: value } }))
+    let formattedValue = value
+    if (name === 'firstName' || name === 'lastName') {
+      formattedValue = formatName(value)
+    }
+    if (name === 'phone') {
+      formattedValue = formatPhone(value)
+    }
+    setFormData(prev => ({ ...prev, jointHolder: { ...prev.jointHolder, [name]: formattedValue } }))
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }))
     setSaveSuccess(false)
   }
 
   const handleJointAddressChange = (e) => {
     const { name, value } = e.target
-    setFormData(prev => ({ ...prev, jointHolder: { ...prev.jointHolder, address: { ...prev.jointHolder.address, [name]: value } } }))
+    let formattedValue = value
+    if (name === 'city') {
+      formattedValue = formatCity(value)
+    }
+    setFormData(prev => ({ ...prev, jointHolder: { ...prev.jointHolder, address: { ...prev.jointHolder.address, [name]: formattedValue } } }))
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }))
     setSaveSuccess(false)
   }
 
   const handleEntityAddressChange = (e) => {
     const { name, value } = e.target
-    setFormData(prev => ({ ...prev, entity: { ...prev.entity, address: { ...prev.entity.address, [name]: value } } }))
+    let formattedValue = value
+    if (name === 'city') {
+      formattedValue = formatCity(value)
+    }
+    setFormData(prev => ({ ...prev, entity: { ...prev.entity, address: { ...prev.entity.address, [name]: formattedValue } } }))
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }))
     setSaveSuccess(false)
   }
@@ -182,7 +216,11 @@ export default function ProfileView() {
 
   const handleAuthorizedRepAddressChange = (e) => {
     const { name, value } = e.target
-    setFormData(prev => ({ ...prev, authorizedRepresentative: { ...prev.authorizedRepresentative, address: { ...prev.authorizedRepresentative.address, [name]: value } } }))
+    let formattedValue = value
+    if (name === 'city') {
+      formattedValue = formatCity(value)
+    }
+    setFormData(prev => ({ ...prev, authorizedRepresentative: { ...prev.authorizedRepresentative, address: { ...prev.authorizedRepresentative.address, [name]: formattedValue } } }))
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }))
     setSaveSuccess(false)
   }
@@ -193,10 +231,12 @@ export default function ProfileView() {
     if (!formData.lastName.trim()) newErrors.lastName = 'Required'
     if (!/\S+@\S+\.\S+/.test(formData.email)) newErrors.email = 'Invalid email'
     if (!formData.phoneNumber.trim()) newErrors.phoneNumber = 'Required'
+    else if (/[a-zA-Z]/.test(formData.phoneNumber)) newErrors.phoneNumber = 'Phone number cannot contain letters'
     if (formData.dob && !isAdultDob(formData.dob)) newErrors.dob = `Enter a valid date (YYYY-MM-DD). Min ${MIN_DOB}. Must be 18+.`
     if (formData.address) {
       if (!formData.address.street1.trim()) newErrors.street1 = 'Required'
       if (!formData.address.city.trim()) newErrors.city = 'Required'
+      else if (/[0-9]/.test(formData.address.city)) newErrors.city = 'No numbers allowed'
       if (!formData.address.state) newErrors.state = 'Required'
       if (!formData.address.zip.trim()) newErrors.zip = 'Required'
     }
@@ -210,6 +250,7 @@ export default function ProfileView() {
       if (formData.entity.address) {
         if (!formData.entity.address.street1.trim()) newErrors.entityStreet1 = 'Required'
         if (!formData.entity.address.city.trim()) newErrors.entityCity = 'Required'
+        else if (/[0-9]/.test(formData.entity.address.city)) newErrors.entityCity = 'No numbers allowed'
         if (!formData.entity.address.state) newErrors.entityState = 'Required'
         if (!formData.entity.address.zip.trim()) newErrors.entityZip = 'Required'
       }
@@ -221,6 +262,7 @@ export default function ProfileView() {
       if (formData.authorizedRepresentative.address) {
         if (!formData.authorizedRepresentative.address.street1.trim()) newErrors.repStreet1 = 'Required'
         if (!formData.authorizedRepresentative.address.city.trim()) newErrors.repCity = 'Required'
+        else if (/[0-9]/.test(formData.authorizedRepresentative.address.city)) newErrors.repCity = 'No numbers allowed'
         if (!formData.authorizedRepresentative.address.state) newErrors.repState = 'Required'
         if (!formData.authorizedRepresentative.address.zip.trim()) newErrors.repZip = 'Required'
       }
@@ -234,11 +276,13 @@ export default function ProfileView() {
       if (!formData.jointHolder.lastName.trim()) newErrors.jointLastName = 'Required'
       if (!formData.jointHolder.email.trim() || !/\S+@\S+\.\S+/.test(formData.jointHolder.email)) newErrors.jointEmail = 'Valid email required'
       if (!formData.jointHolder.phone.trim()) newErrors.jointPhone = 'Required'
+      else if (/[a-zA-Z]/.test(formData.jointHolder.phone)) newErrors.jointPhone = 'Phone number cannot contain letters'
       if (!formData.jointHolder.dob || !isAdultDob(formData.jointHolder.dob)) newErrors.jointDob = `Enter a valid date (YYYY-MM-DD). Min ${MIN_DOB}. Must be 18+.`
       if (!formData.jointHolder.ssn.trim()) newErrors.jointSsn = 'Required'
       if (formData.jointHolder.address) {
         if (!formData.jointHolder.address.street1.trim()) newErrors.jointStreet1 = 'Required'
         if (!formData.jointHolder.address.city.trim()) newErrors.jointCity = 'Required'
+        else if (/[0-9]/.test(formData.jointHolder.address.city)) newErrors.jointCity = 'No numbers allowed'
         if (!formData.jointHolder.address.state) newErrors.jointState = 'Required'
         if (!formData.jointHolder.address.zip.trim()) newErrors.jointZip = 'Required'
       }

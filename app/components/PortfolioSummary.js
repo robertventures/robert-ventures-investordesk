@@ -1,14 +1,20 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import styles from './PortfolioSummary.module.css'
+import { calculateInvestmentValue, formatCurrency, formatDate, getInvestmentStatus } from '../../lib/investmentCalculations'
 
 export default function PortfolioSummary() {
+  const router = useRouter()
   const [userData, setUserData] = useState(null)
   const [portfolioData, setPortfolioData] = useState({
     totalInvested: 0,
     totalPending: 0,
-    totalEarnings: 0
+    totalEarnings: 0,
+    totalCurrentValue: 0,
+    investments: []
   })
+  const [appTime, setAppTime] = useState(null)
 
   useEffect(() => {
     const loadData = async () => {
@@ -16,48 +22,76 @@ export default function PortfolioSummary() {
       if (!userId) return
 
       try {
+        // First, run migration to fix any missing fields
+        await fetch('/api/migrate-investments', { method: 'POST' })
+        
+        // Get current app time for calculations
+        const timeRes = await fetch('/api/admin/time-machine')
+        const timeData = await timeRes.json()
+        const currentAppTime = timeData.success ? timeData.appTime : new Date().toISOString()
+        setAppTime(currentAppTime)
+        
         const res = await fetch(`/api/users/${userId}`)
         const data = await res.json()
         if (data.success && data.user) {
           setUserData(data.user)
           
-          // Calculate portfolio metrics from investments
+          // Calculate portfolio metrics from investments using the new calculation functions
           const investments = data.user.investments || []
-          const approvedInvestments = investments.filter(inv => inv.status === 'approved' || inv.status === 'invested')
-          const totalInvested = approvedInvestments.reduce((sum, inv) => sum + (inv.amount || 0), 0)
-          const totalPending = investments
-            .filter(inv => inv.status !== 'approved' && inv.status !== 'invested')
-            .reduce((sum, inv) => sum + (inv.amount || 0), 0)
+          const confirmedInvestments = investments.filter(inv => inv.status === 'confirmed')
+          const pendingInvestments = investments.filter(inv => inv.status === 'pending')
+          const draftInvestments = investments.filter(inv => inv.status === 'draft')
           
-          // Calculate actual earnings based on payment frequency and time elapsed
-          const totalEarnings = approvedInvestments.reduce((sum, inv) => {
-            if (!inv.amount || !inv.paymentFrequency || !inv.lockupPeriod) return sum
+          // Calculate totals using the precise calculation functions - only for confirmed investments
+          let totalInvested = 0
+          let totalEarnings = 0
+          let totalCurrentValue = 0
+          const investmentDetails = []
+          
+          confirmedInvestments.forEach(inv => {
+            const calculation = calculateInvestmentValue(inv, currentAppTime)
+            const status = getInvestmentStatus(inv)
             
-            const investmentDate = new Date(inv.createdAt || inv.signedAt || new Date())
-            const now = new Date()
-            const monthsElapsed = Math.floor((now - investmentDate) / (1000 * 60 * 60 * 24 * 30.44)) // Average days per month
+            totalInvested += inv.amount || 0
+            totalEarnings += calculation.totalEarnings
+            totalCurrentValue += calculation.currentValue
             
-            if (inv.paymentFrequency === 'monthly') {
-              // For monthly payments, calculate cumulative monthly earnings
-              const annualRate = inv.lockupPeriod === '1-year' ? 0.08 : 0.10
-              const monthlyRate = annualRate / 12
-              const monthlyEarnings = inv.amount * monthlyRate
-              return sum + (monthlyEarnings * monthsElapsed)
-            } else if (inv.paymentFrequency === 'compounding') {
-              // For compounding, calculate compound interest
-              const annualRate = inv.lockupPeriod === '1-year' ? 0.08 : 0.10
-              const monthlyRate = annualRate / 12
-              const compoundEarnings = inv.amount * Math.pow(1 + monthlyRate, monthsElapsed) - inv.amount
-              return sum + compoundEarnings
-            }
-            
-            return sum
-          }, 0)
+            investmentDetails.push({
+              ...inv,
+              calculation,
+              status
+            })
+          })
+          
+          // Pending investments (waiting for admin confirmation) + drafts
+          const totalPending = [...pendingInvestments, ...draftInvestments].reduce((sum, inv) => sum + (inv.amount || 0), 0)
+          
+          // Add pending investments to display (but without earnings calculations)
+          pendingInvestments.forEach(inv => {
+            investmentDetails.push({
+              ...inv,
+              calculation: {
+                currentValue: inv.amount,
+                totalEarnings: 0,
+                monthsElapsed: 0,
+                isWithdrawable: false,
+                lockdownEndDate: null
+              },
+              status: {
+                status: 'pending',
+                statusLabel: 'Pending Confirmation',
+                isActive: false,
+                isLocked: true
+              }
+            })
+          })
           
           setPortfolioData({
             totalInvested,
             totalPending,
-            totalEarnings
+            totalEarnings,
+            totalCurrentValue,
+            investments: investmentDetails
           })
         }
       } catch (e) {
@@ -66,6 +100,10 @@ export default function PortfolioSummary() {
     }
     loadData()
   }, [])
+
+  const handleInvestmentClick = (investmentId) => {
+    router.push(`/investment-details/${investmentId}`)
+  }
 
   if (!userData) {
     return <div className={styles.loading}>Loading portfolio...</div>
@@ -82,17 +120,20 @@ export default function PortfolioSummary() {
         <div className={styles.metrics}>
           <div className={styles.metric}>
             <span className={styles.metricLabel}>TOTAL INVESTED</span>
-            <span className={styles.metricValue}>${portfolioData.totalInvested.toLocaleString()}</span>
+            <span className={styles.metricValue}>{formatCurrency(portfolioData.totalInvested)}</span>
           </div>
           <div className={styles.metric}>
             <span className={styles.metricLabel}>TOTAL PENDING</span>
-            <span className={styles.metricValue}>${portfolioData.totalPending.toLocaleString()}</span>
+            <span className={styles.metricValue}>{formatCurrency(portfolioData.totalPending)}</span>
           </div>
           <div className={styles.metric}>
             <span className={styles.metricLabel}>TOTAL EARNINGS</span>
-            <span className={styles.metricValue}>${portfolioData.totalEarnings.toLocaleString()}</span>
+            <span className={styles.metricValue}>{formatCurrency(portfolioData.totalEarnings)}</span>
           </div>
-          
+          <div className={styles.metric}>
+            <span className={styles.metricLabel}>CURRENT VALUE</span>
+            <span className={styles.metricValue}>{formatCurrency(portfolioData.totalCurrentValue)}</span>
+          </div>
         </div>
         
         <div className={styles.chartSection}>
@@ -118,6 +159,45 @@ export default function PortfolioSummary() {
           </div>
         </div>
       </div>
+      
+      {/* Investments Section - Moved to Bottom */}
+      {portfolioData.investments.length > 0 && (
+        <div className={styles.investmentsSection}>
+          <h2 className={styles.investmentsTitle}>INVESTMENTS</h2>
+          <div className={styles.investmentsList}>
+            {portfolioData.investments.map(inv => (
+              <div 
+                key={inv.id} 
+                className={styles.investmentCard}
+                onClick={() => handleInvestmentClick(inv.id)}
+              >
+                <div className={styles.cardTop}>
+                  <div className={styles.cardLeft}>
+                    <div className={styles.investmentAmount}>{formatCurrency(inv.amount)}</div>
+                    <div className={styles.investmentType}>
+                      {inv.lockupPeriod === '3-year' ? '3Y' : '1Y'} • {inv.paymentFrequency === 'monthly' ? 'Monthly' : 'Compound'}
+                    </div>
+                  </div>
+                  <span className={`${styles.statusBadge} ${inv.status.isLocked ? styles.locked : styles.available}`}>
+                    {inv.status.statusLabel}
+                  </span>
+                </div>
+                <div className={styles.cardBottom}>
+                  <div className={styles.compactMetric}>
+                    <span className={styles.compactLabel}>Current</span>
+                    <span className={styles.compactValue}>{formatCurrency(inv.calculation.currentValue)}</span>
+                  </div>
+                  <div className={styles.compactMetric}>
+                    <span className={styles.compactLabel}>Earnings</span>
+                    <span className={styles.compactValue}>{formatCurrency(inv.calculation.totalEarnings)}</span>
+                  </div>
+                  <div className={styles.viewDetails}>View Details →</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -52,6 +52,14 @@ function ClientContent() {
     }
   }, [investment?.compliance])
 
+  // Load banking details from user account
+  useEffect(() => {
+    if (user?.banking) {
+      setFundingMethod(user.banking.fundingMethod || '')
+      setPayoutMethod(user.banking.payoutMethod || 'bank-account')
+    }
+  }, [user?.banking])
+
   // Enforce payout method when monthly payments are selected
   useEffect(() => {
     if (investment?.paymentFrequency === 'monthly' && payoutMethod !== 'bank-account') {
@@ -286,6 +294,8 @@ function ClientContent() {
               const userId = user.id
               const investmentId = investment.id
               const earningsMethod = investment.paymentFrequency === 'monthly' ? payoutMethod : 'compounding'
+              
+              // Update the draft investment to pending status with compliance data
               await fetch(`/api/users/${userId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
@@ -298,12 +308,25 @@ function ClientContent() {
                       accreditedType: accredited === 'accredited' ? accreditedType : null,
                       tenPercentLimitConfirmed: accredited === 'not_accredited' ? tenPercentConfirmed : null
                     },
-                    banking: { fundingMethod, earningsMethod, payoutMethod },
                     status: 'pending',
                     submittedAt: new Date().toISOString()
                   }
                 })
               })
+              
+              // Store banking details on user account (not investment-specific)
+              await fetch(`/api/users/${userId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  banking: { 
+                    fundingMethod, 
+                    earningsMethod, 
+                    payoutMethod 
+                  }
+                })
+              })
+              
               window.location.href = '/dashboard'
             } catch (e) {
               console.error('Failed to save finalization data', e)

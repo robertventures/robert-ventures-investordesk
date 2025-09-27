@@ -3,7 +3,6 @@ import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import DashboardHeader from '../components/DashboardHeader'
 import PortfolioSummary from '../components/PortfolioSummary'
-import TransactionsTable from '../components/TransactionsTable'
 import ProfileView from '../components/ProfileView'
 import DocumentsView from '../components/DocumentsView'
 import FixedInvestButton from '../components/FixedInvestButton'
@@ -66,12 +65,7 @@ export default function DashboardPage() {
         )
       case 'portfolio':
       default:
-        return (
-          <>
-            <PortfolioSummary />
-            <TransactionsTable />
-          </>
-        )
+        return <PortfolioSummary />
     }
   }
 

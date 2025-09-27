@@ -2,12 +2,15 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import styles from './InvestmentDetailsContent.module.css'
+import { calculateInvestmentValue, formatCurrency, formatDate, getInvestmentStatus } from '../../lib/investmentCalculations'
 
 export default function InvestmentDetailsContent({ investmentId }) {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState('investment-info')
   const [investmentData, setInvestmentData] = useState(null)
   const [userData, setUserData] = useState(null)
+  const [appTime, setAppTime] = useState(null)
+  const [isWithdrawing, setIsWithdrawing] = useState(false)
 
   useEffect(() => {
     const loadData = async () => {
@@ -18,6 +21,12 @@ export default function InvestmentDetailsContent({ investmentId }) {
       }
 
       try {
+        // Get current app time for calculations
+        const timeRes = await fetch('/api/admin/time-machine')
+        const timeData = await timeRes.json()
+        const currentAppTime = timeData.success ? timeData.appTime : new Date().toISOString()
+        setAppTime(currentAppTime)
+
         const res = await fetch(`/api/users/${userId}`)
         const data = await res.json()
         if (data.success && data.user) {
@@ -37,35 +46,46 @@ export default function InvestmentDetailsContent({ investmentId }) {
     loadData()
   }, [investmentId, router])
 
+  const handleWithdrawal = async () => {
+    if (!investmentData || !userData) return
+
+    setIsWithdrawing(true)
+    
+    try {
+      const res = await fetch('/api/withdrawals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: userData.id, investmentId: investmentData.id })
+      })
+      
+      const data = await res.json()
+      
+      if (data.success) {
+        alert('Withdrawal request submitted successfully!')
+        router.push('/dashboard')
+      } else {
+        alert(data.error || 'Failed to process withdrawal')
+      }
+    } catch (error) {
+      console.error('Error processing withdrawal:', error)
+      alert('An error occurred while processing the withdrawal')
+    } finally {
+      setIsWithdrawing(false)
+    }
+  }
+
   if (!investmentData || !userData) {
     return <div className={styles.loading}>Loading investment details...</div>
   }
 
-  // Calculate earnings data
-  const calculateEarnings = () => {
-    if (!investmentData.amount || !investmentData.paymentFrequency || !investmentData.lockupPeriod) {
-      return { totalEarnings: 0, monthlyEarnings: 0, monthsElapsed: 0 }
-    }
-
-    // Only show earnings for approved investments
-    const isApproved = investmentData.status === 'approved' || investmentData.status === 'invested'
-    if (!isApproved) {
-      return { totalEarnings: 0, monthlyEarnings: 0, monthsElapsed: 0 }
-    }
-
-    const investmentDate = new Date(investmentData.createdAt || investmentData.signedAt || new Date())
-    const now = new Date()
-    const monthsElapsed = Math.floor((now - investmentDate) / (1000 * 60 * 60 * 24 * 30.44))
-    
-    const annualRate = investmentData.lockupPeriod === '1-year' ? 0.08 : 0.10
-    const monthlyRate = annualRate / 12
-    const monthlyEarnings = investmentData.amount * monthlyRate
-    const totalEarnings = monthlyEarnings * monthsElapsed
-
-    return { totalEarnings, monthlyEarnings, monthsElapsed }
-  }
-
-  const { totalEarnings, monthlyEarnings, monthsElapsed } = calculateEarnings()
+  // Use new calculation functions
+  const calculation = calculateInvestmentValue(investmentData, appTime)
+  const status = getInvestmentStatus(investmentData)
+  
+  // Legacy format for existing UI
+  const totalEarnings = calculation.totalEarnings
+  const monthlyEarnings = calculation.monthlyInterestAmount
+  const monthsElapsed = calculation.monthsElapsed
 
   const formatDate = (dateString) => {
     if (!dateString) return '-'
@@ -115,173 +135,135 @@ export default function InvestmentDetailsContent({ investmentId }) {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className={styles.tabs}>
-        <button 
-          className={`${styles.tab} ${activeTab === 'investment-info' ? styles.active : ''}`}
-          onClick={() => setActiveTab('investment-info')}
-        >
-          📈 INVESTMENT INFO
-        </button>
-        <button 
-          className={`${styles.tab} ${activeTab === 'earnings' ? styles.active : ''}`}
-          onClick={() => setActiveTab('earnings')}
-        >
-          🤲 EARNINGS
-        </button>
-        <button 
-          className={`${styles.tab} ${activeTab === 'banking' ? styles.active : ''}`}
-          onClick={() => setActiveTab('banking')}
-        >
-          🏦 BANKING INFO
-        </button>
-      </div>
+      {/* Tabs - Only show if withdrawal is available */}
+      {calculation.isWithdrawable && (
+        <div className={styles.tabs}>
+          <button 
+            className={`${styles.tab} ${activeTab === 'investment-info' ? styles.active : ''}`}
+            onClick={() => setActiveTab('investment-info')}
+          >
+            📈 INVESTMENT INFO
+          </button>
+          <button 
+            className={`${styles.tab} ${activeTab === 'withdrawal' ? styles.active : ''}`}
+            onClick={() => setActiveTab('withdrawal')}
+          >
+            💰 WITHDRAWAL
+          </button>
+        </div>
+      )}
 
       {/* Tab Content */}
-      {activeTab === 'investment-info' && (
+      {(activeTab === 'investment-info' || !calculation.isWithdrawable) && (
         <div className={styles.tabContent}>
-          <div className={styles.summaryCard}>
-            <div className={styles.summaryGrid}>
-              <div className={styles.summaryItem}>
-                <span className={styles.summaryLabel}>AMOUNT</span>
-                <span className={styles.summaryValue}>${investmentData.amount?.toLocaleString() || '0'}</span>
-              </div>
-              <div className={styles.summaryItem}>
-                <span className={styles.summaryLabel}>BONDS</span>
-                <span className={styles.summaryValue}>{investmentData.bonds || '-'}</span>
-              </div>
-              <div className={styles.summaryItem}>
-                <span className={styles.summaryLabel}>INTEREST RATE</span>
-                <span className={styles.summaryValue}>{investmentData.lockupPeriod === '1-year' ? '8%' : '10%'}</span>
-              </div>
-              <div className={styles.summaryItem}>
-                <span className={styles.summaryLabel}>STATUS</span>
-                <span className={`${styles.status} ${(investmentData.status === 'approved' || investmentData.status === 'invested') ? styles.completed : styles.pending}`}>
-                  {investmentData.status || 'Created'}
-                </span>
-              </div>
+          {/* Value Summary - Prominent display */}
+          <div className={styles.valueCard}>
+            <div className={styles.valueHeader}>
+              <h3 className={styles.valueTitle}>Investment Value</h3>
+              <span className={`${styles.statusBadge} ${status.isLocked ? styles.pending : styles.completed}`}>
+                {status.statusLabel}
+              </span>
             </div>
-            <div className={styles.summaryItem}>
-              <span className={styles.summaryLabel}>MATURITY DATE</span>
-              <span className={styles.summaryValue}>-</span>
+            <div className={styles.valueGrid}>
+              <div className={styles.valueItem}>
+                <span className={styles.valueAmount}>{formatCurrency(calculation.currentValue)}</span>
+                <span className={styles.valueLabel}>Current Value</span>
+              </div>
+              <div className={styles.valueItem}>
+                <span className={styles.valueAmount}>{formatCurrency(investmentData.amount)}</span>
+                <span className={styles.valueLabel}>Original Investment</span>
+              </div>
+              <div className={styles.valueItem}>
+                <span className={styles.valueAmount}>{formatCurrency(calculation.totalEarnings)}</span>
+                <span className={styles.valueLabel}>Total Earnings</span>
+              </div>
+              {investmentData.status === 'confirmed' && (
+                <div className={styles.valueItem}>
+                  <span className={styles.valueAmount}>{calculation.monthsElapsed.toFixed(1)}</span>
+                  <span className={styles.valueLabel}>Months Elapsed</span>
+                </div>
+              )}
             </div>
           </div>
 
+          {/* Investment Details */}
           <div className={styles.detailsCard}>
             <div className={styles.detailsHeader}>
-              <h3 className={styles.detailsTitle}>Details</h3>
-              <button className={styles.expandButton}>⌄</button>
+              <h3 className={styles.detailsTitle}>Investment Details</h3>
             </div>
             <div className={styles.detailsContent}>
               <div className={styles.detailsGrid}>
                 <div className={styles.detailItem}>
-                  <span className={styles.detailLabel}>TYPE</span>
+                  <span className={styles.detailLabel}>ACCOUNT TYPE</span>
                   <span className={styles.detailValue}>{investmentData.accountType || 'Individual'}</span>
                 </div>
                 <div className={styles.detailItem}>
-                  <span className={styles.detailLabel}>STATUS</span>
-                  <span className={styles.detailValue}>{investmentData.status || 'Created'}</span>
+                  <span className={styles.detailLabel}>LOCKUP PERIOD</span>
+                  <span className={styles.detailValue}>
+                    {investmentData.lockupPeriod === '3-year' ? '3 Years' : '1 Year'}
+                  </span>
                 </div>
                 <div className={styles.detailItem}>
-                  <span className={styles.detailLabel}>AMOUNT</span>
-                  <span className={styles.detailValue}>${investmentData.amount?.toLocaleString() || '0'}</span>
+                  <span className={styles.detailLabel}>INTEREST RATE</span>
+                  <span className={styles.detailValue}>{investmentData.lockupPeriod === '1-year' ? '8%' : '10%'} APY</span>
                 </div>
                 <div className={styles.detailItem}>
-                  <span className={styles.detailLabel}>BOND VALUE</span>
-                  <span className={styles.detailValue}>${investmentData.amount?.toLocaleString() || '0'}</span>
-                </div>
-                <div className={styles.detailItem}>
-                  <span className={styles.detailLabel}>IS COMPOUNDED</span>
-                  <span className={styles.detailValue}>{investmentData.paymentFrequency === 'compounding' ? 'Yes' : 'No'}</span>
+                  <span className={styles.detailLabel}>PAYMENT TYPE</span>
+                  <span className={styles.detailValue}>
+                    {investmentData.paymentFrequency === 'monthly' ? 'Monthly Interest' : 'Compounding'}
+                  </span>
                 </div>
                 <div className={styles.detailItem}>
                   <span className={styles.detailLabel}>BONDS</span>
                   <span className={styles.detailValue}>{investmentData.bonds || '0'}</span>
                 </div>
-                <div className={styles.detailItem}>
-                  <span className={styles.detailLabel}>DISCOUNTED BOND AMOUNT</span>
-                  <span className={styles.detailValue}>${investmentData.amount?.toLocaleString() || '0'}</span>
-                </div>
-                <div className={styles.detailItem}>
-                  <span className={styles.detailLabel}>YEAR TO DATE INTEREST PAID</span>
-                  <span className={styles.detailValue}>${totalEarnings.toFixed(2)}</span>
-                </div>
-                <div className={styles.detailItem}>
-                  <span className={styles.detailLabel}>INCEPTION TO DATE INTEREST PAID</span>
-                  <span className={styles.detailValue}>${totalEarnings.toFixed(2)}</span>
-                </div>
-                <div className={styles.detailItem}>
-                  <span className={styles.detailLabel}>FIRST PAYMENT DATE</span>
-                  <span className={styles.detailValue}>-</span>
-                </div>
-                <div className={styles.detailItem}>
-                  <span className={styles.detailLabel}>LAST PAYMENT DATE</span>
-                  <span className={styles.detailValue}>-</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className={styles.offeringCard}>
-            <div className={styles.offeringHeader}>
-              <h3 className={styles.offeringTitle}>Offering</h3>
-              <button className={styles.expandButton}>⌄</button>
-            </div>
-            <div className={styles.offeringContent}>
-              <div className={styles.offeringGrid}>
-                <div className={styles.detailItem}>
-                  <span className={styles.detailLabel}>OFFERING</span>
-                  <span className={styles.detailValue}>-</span>
-                </div>
-                <div className={styles.detailItem}>
-                  <span className={styles.detailLabel}>TERM</span>
-                  <span className={styles.detailValue}>{investmentData.lockupPeriod || '-'}</span>
-                </div>
-                <div className={styles.detailItem}>
-                  <span className={styles.detailLabel}>INTEREST RATE</span>
-                  <span className={styles.detailValue}>{investmentData.lockupPeriod === '1-year' ? '8%' : '10%'}</span>
-                </div>
+                {investmentData.status === 'confirmed' && investmentData.confirmedAt && (
+                  <div className={styles.detailItem}>
+                    <span className={styles.detailLabel}>CONFIRMED DATE</span>
+                    <span className={styles.detailValue}>{formatDate(investmentData.confirmedAt)}</span>
+                  </div>
+                )}
+                {investmentData.status === 'confirmed' && calculation.lockdownEndDate && (
+                  <div className={styles.detailItem}>
+                    <span className={styles.detailLabel}>LOCKDOWN END DATE</span>
+                    <span className={styles.detailValue}>{formatDate(calculation.lockdownEndDate)}</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {activeTab === 'earnings' && (
+      {activeTab === 'withdrawal' && calculation.isWithdrawable && (
         <div className={styles.tabContent}>
-          <div className={styles.earningsCard}>
-            <h3 className={styles.earningsTitle}>Earnings Summary</h3>
-            <div className={styles.earningsGrid}>
-              <div className={styles.earningsItem}>
-                <span className={styles.earningsLabel}>TOTAL EARNED</span>
-                <span className={styles.earningsValue}>${totalEarnings.toFixed(2)}</span>
+          <div className={styles.withdrawalCard}>
+            <h3 className={styles.withdrawalTitle}>Withdrawal Available</h3>
+            <div className={styles.withdrawalInfo}>
+              <p className={styles.withdrawalText}>
+                Your investment lockdown period has ended. You can now withdraw the full amount.
+              </p>
+              <div className={styles.withdrawalBreakdown}>
+                <div className={styles.breakdownItem}>
+                  <span className={styles.detailLabel}>PRINCIPAL AMOUNT</span>
+                  <span className={styles.detailValue}>{formatCurrency(investmentData.amount)}</span>
+                </div>
+                <div className={styles.breakdownItem}>
+                  <span className={styles.detailLabel}>TOTAL EARNINGS</span>
+                  <span className={styles.detailValue}>{formatCurrency(calculation.totalEarnings)}</span>
+                </div>
+                <div className={styles.breakdownItem}>
+                  <span className={styles.detailLabel}>TOTAL WITHDRAWAL</span>
+                  <span className={styles.detailValue}><strong>{formatCurrency(calculation.currentValue)}</strong></span>
+                </div>
               </div>
-              <div className={styles.earningsItem}>
-                <span className={styles.earningsLabel}>MONTHLY EARNINGS</span>
-                <span className={styles.earningsValue}>${monthlyEarnings.toFixed(2)}</span>
-              </div>
-              <div className={styles.earningsItem}>
-                <span className={styles.earningsLabel}>MONTHS ELAPSED</span>
-                <span className={styles.earningsValue}>{monthsElapsed}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'banking' && (
-        <div className={styles.tabContent}>
-          <div className={styles.bankingCard}>
-            <h3 className={styles.bankingTitle}>Banking Information</h3>
-            <div className={styles.bankingGrid}>
-              <div className={styles.detailItem}>
-                <span className={styles.detailLabel}>FUNDING METHOD</span>
-                <span className={styles.detailValue}>{investmentData.banking?.fundingMethod || '-'}</span>
-              </div>
-              <div className={styles.detailItem}>
-                <span className={styles.detailLabel}>EARNINGS METHOD</span>
-                <span className={styles.detailValue}>{investmentData.banking?.earningsMethod || '-'}</span>
-              </div>
+              <button
+                onClick={handleWithdrawal}
+                disabled={isWithdrawing}
+                className={styles.withdrawButton}
+              >
+                {isWithdrawing ? 'Processing Withdrawal...' : `Withdraw ${formatCurrency(calculation.currentValue)}`}
+              </button>
             </div>
           </div>
         </div>
