@@ -125,10 +125,6 @@ export default function InvestmentReviewForm() {
                 <span className={styles.label}>Estimated annual earnings:</span>
                 <span className={styles.value}>${investmentData.anticipatedEarnings || 'N/A'}</span>
               </div>
-              <div className={styles.infoItem}>
-                <span className={styles.label}>Account Type:</span>
-                <span className={styles.value}>{investmentData.accountType || 'N/A'}</span>
-              </div>
             </div>
           </div>
         )}
@@ -199,7 +195,11 @@ export default function InvestmentReviewForm() {
             <div className={styles.infoGrid}>
               <div className={styles.infoItem}>
                 <span className={styles.label}>Funding Method:</span>
-                <span className={styles.value}>{investmentData.banking?.fundingMethod === 'bank-account' ? 'Bank Account' : 'Wire Transfer'}</span>
+                <span className={styles.value}>{investmentData.banking?.fundingMethod === 'bank-transfer' ? 'Bank Transfer' : 'Wire Transfer'}</span>
+              </div>
+              <div className={styles.infoItem}>
+                <span className={styles.label}>Bank:</span>
+                <span className={styles.value}>{investmentData.banking?.bank?.nickname || (investmentData.banking?.fundingMethod === 'bank-transfer' ? 'Default Bank' : 'N/A')}</span>
               </div>
               <div className={styles.infoItem}>
                 <span className={styles.label}>Earnings Method:</span>

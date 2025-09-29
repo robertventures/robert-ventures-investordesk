@@ -33,9 +33,12 @@
 }
 
 .disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
   pointer-events: none;
+  background: #f9fafb;
+  border-color: #d1d5db;
+  color: #9ca3af;
 }
 
 .card:focus,

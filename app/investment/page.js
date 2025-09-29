@@ -20,9 +20,10 @@ export default function InvestmentPage() {
 
   const [selectedAccountType, setSelectedAccountType] = useState('individual')
   const [lockedAccountType, setLockedAccountType] = useState(null)
+  const [userAccountType, setUserAccountType] = useState(null)
   const [investmentAmount, setInvestmentAmount] = useState(0)
   const [investmentPaymentFrequency, setInvestmentPaymentFrequency] = useState('compounding')
-  const [investmentLockup, setInvestmentLockup] = useState('1-year')
+  const [investmentLockup, setInvestmentLockup] = useState('3-year')
   const [investmentSummary, setInvestmentSummary] = useState(null)
   const [identitySummary, setIdentitySummary] = useState(null)
   const formattedInvestmentSummary = useMemo(() => {
@@ -116,10 +117,11 @@ export default function InvestmentPage() {
         if (data.success && data.user?.isAdmin) {
           window.location.href = '/dashboard'
         }
-        // Load locked account type if present to enforce in UI
-        if (data.success && data.user?.lockedAccountType) {
-          setLockedAccountType(data.user.lockedAccountType)
-          setSelectedAccountType(data.user.lockedAccountType)
+        // Load user's account type and set as locked
+        if (data.success && data.user?.accountType) {
+          setUserAccountType(data.user.accountType)
+          setLockedAccountType(data.user.accountType)
+          setSelectedAccountType(data.user.accountType)
         }
         
         // Load existing draft investment data if it exists
@@ -182,13 +184,16 @@ export default function InvestmentPage() {
             <div className={stepStyles.cardBody}>
               <div className={stepStyles.sectionSpacer}>
                 <TabbedInvestmentType
-                  onCompleted={() => {}}
-                  showContinueButton={false}
-                  autoSaveOnSelect
-                  onChange={setSelectedAccountType}
                   selectedValue={selectedAccountType}
                   lockedAccountType={lockedAccountType}
+                  showContinueButton={false}
+                  onChange={setSelectedAccountType}
                 />
+                {lockedAccountType && (
+                  <p className={stepStyles.accountTypeDescription}>
+                    Your account type is determined by your first investment and cannot be changed for future investments.
+                  </p>
+                )}
               </div>
               <InvestmentForm 
                 accountType={selectedAccountType}

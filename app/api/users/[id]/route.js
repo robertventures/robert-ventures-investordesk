@@ -17,6 +17,33 @@ export async function PUT(request, { params }) {
       )
     }
 
+    // Custom action: change user password
+    if (body._action === 'changePassword') {
+      const usersData = await getUsers()
+      const userIndex = usersData.users.findIndex(u => u.id === id)
+      if (userIndex === -1) {
+        return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 })
+      }
+      const user = usersData.users[userIndex]
+      const { currentPassword, newPassword } = body
+      if (!currentPassword || !newPassword) {
+        return NextResponse.json({ success: false, error: 'Missing password fields' }, { status: 400 })
+      }
+      // Basic current password check (plaintext in demo). In production, use hashing.
+      if ((user.password || '') !== currentPassword) {
+        return NextResponse.json({ success: false, error: 'Current password is incorrect' }, { status: 400 })
+      }
+      if (newPassword.length < 8) {
+        return NextResponse.json({ success: false, error: 'Password must be at least 8 characters' }, { status: 400 })
+      }
+      const updatedUser = { ...user, password: newPassword, updatedAt: new Date().toISOString() }
+      usersData.users[userIndex] = updatedUser
+      if (!await saveUsers(usersData)) {
+        return NextResponse.json({ success: false, error: 'Failed to update password' }, { status: 500 })
+      }
+      return NextResponse.json({ success: true, user: updatedUser })
+    }
+
     // Custom action: start investment intent (append to user's investments array)
     if (body._action === 'startInvestment' && body.investment) {
       const usersData = await getUsers()
@@ -29,14 +56,13 @@ export async function PUT(request, { params }) {
         return NextResponse.json({ success: false, error: 'Admins cannot create investments' }, { status: 403 })
       }
 
-      // Account type lock enforcement - only for confirmed investments
-      const existingInvestments = Array.isArray(user.investments) ? user.investments : []
-      const lockedType = user.lockedAccountType || existingInvestments.find(inv => inv.status === 'confirmed' && inv.accountType)?.accountType
-      if (lockedType && body.investment.accountType && body.investment.accountType !== lockedType) {
-        return NextResponse.json({ success: false, error: `Account type is locked to ${lockedType} for this user.` }, { status: 400 })
+      // Use user's account type for new investments
+      const userAccountType = user.accountType
+      if (userAccountType && body.investment.accountType && body.investment.accountType !== userAccountType) {
+        return NextResponse.json({ success: false, error: `Account type must be ${userAccountType} for this user.` }, { status: 400 })
       }
-      if (lockedType && !body.investment.accountType) {
-        body.investment.accountType = lockedType
+      if (userAccountType && !body.investment.accountType) {
+        body.investment.accountType = userAccountType
       }
 
       const investmentId = Date.now().toString()
@@ -49,12 +75,12 @@ export async function PUT(request, { params }) {
       }
 
       const existing = Array.isArray(user.investments) ? user.investments : []
-      // Only lock account type if the new investment is being created as confirmed
-      const nextLocked = user.lockedAccountType || (newInvestment.status === 'confirmed' ? newInvestment.accountType : null)
+      // Ensure user has account type set from this investment
+      const shouldSetAccountType = newInvestment.accountType && !user.accountType
       const updatedUser = {
         ...user,
         investments: [...existing, newInvestment],
-        ...(nextLocked ? { lockedAccountType: nextLocked } : {}),
+        ...(shouldSetAccountType ? { accountType: newInvestment.accountType } : {}),
         updatedAt: new Date().toISOString()
       }
       usersData.users[userIndex] = updatedUser
@@ -82,11 +108,11 @@ export async function PUT(request, { params }) {
         return NextResponse.json({ success: false, error: 'Investment not found' }, { status: 404 })
       }
 
-      // Account type lock enforcement - only for confirmed investments
-      const committedType = user.lockedAccountType || investments.find(inv => inv.status === 'confirmed' && inv.accountType)?.accountType
+      // Account type enforcement - must match user's account type
+      const userAccountType = user.accountType
       const incomingType = body.fields.accountType
-      if (committedType && incomingType && incomingType !== committedType) {
-        return NextResponse.json({ success: false, error: `Account type is locked to ${committedType} for this user.` }, { status: 400 })
+      if (userAccountType && incomingType && incomingType !== userAccountType) {
+        return NextResponse.json({ success: false, error: `Account type must be ${userAccountType} for this user.` }, { status: 400 })
       }
 
       const updatedInvestment = {
@@ -95,28 +121,37 @@ export async function PUT(request, { params }) {
         updatedAt: new Date().toISOString()
       }
       
-      // Calculate lockdown end date and start compounding ONLY when investment becomes confirmed
-      if (body.fields.status === 'confirmed' && !updatedInvestment.lockdownEndDate) {
-        // Use current app time as the confirmation date (when admin/bank confirms)
+      // On confirmation, set server-driven confirmation date and lockdown end date
+      if (body.fields.status === 'confirmed') {
+        // Always derive confirmation date from server app time (supports time machine)
         const appTime = await getCurrentAppTime()
         const confirmedDate = new Date(appTime)
         const lockupYears = updatedInvestment.lockupPeriod === '3-year' ? 3 : 1
-        const lockdownEndDate = new Date(confirmedDate)
-        lockdownEndDate.setFullYear(lockdownEndDate.getFullYear() + lockupYears)
-        updatedInvestment.lockdownEndDate = lockdownEndDate.toISOString()
         
-        // Set confirmation date for compound calculations (actual confirmation date)
-        if (!updatedInvestment.confirmedAt) {
-          updatedInvestment.confirmedAt = confirmedDate.toISOString()
+        // Calculate lockdown end date if missing
+        if (!updatedInvestment.lockdownEndDate) {
+          const lockdownEndDate = new Date(confirmedDate)
+          lockdownEndDate.setFullYear(lockdownEndDate.getFullYear() + lockupYears)
+          updatedInvestment.lockdownEndDate = lockdownEndDate.toISOString()
+        }
+        
+        // Override any client-provided confirmedAt with authoritative server/app time
+        updatedInvestment.confirmedAt = confirmedDate.toISOString()
+
+        // Audit metadata: who confirmed and how
+        if (body.adminUserId) {
+          updatedInvestment.confirmedByAdminId = body.adminUserId
+          updatedInvestment.confirmationSource = 'admin'
+        } else if (!updatedInvestment.confirmationSource) {
+          updatedInvestment.confirmationSource = 'system'
         }
       }
       
       investments[invIndex] = updatedInvestment
-      
-      // Only lock account type when investment status becomes confirmed
-      const shouldLockAccountType = updatedInvestment.status === 'confirmed' && updatedInvestment.accountType
-      const nextLockedType = user.lockedAccountType || (shouldLockAccountType ? updatedInvestment.accountType : null)
-      const updatedUser = { ...user, investments, ...(nextLockedType ? { lockedAccountType: nextLockedType } : {}), updatedAt: new Date().toISOString() }
+
+      // Ensure user account type is set if this investment has one and user doesn't
+      const shouldSetAccountType = updatedInvestment.accountType && !user.accountType
+      const updatedUser = { ...user, investments, ...(shouldSetAccountType ? { accountType: updatedInvestment.accountType } : {}), updatedAt: new Date().toISOString() }
       usersData.users[userIndex] = updatedUser
       if (!await saveUsers(usersData)) {
         return NextResponse.json({ success: false, error: 'Failed to update investment' }, { status: 500 })
@@ -124,41 +159,6 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ success: true, user: updatedUser, investment: updatedInvestment })
     }
 
-    // Custom action: approve or reject account deletion request
-    if (body._action === 'approveDeletion' || body._action === 'rejectDeletion') {
-      const usersData = await getUsers()
-      const userIndex = usersData.users.findIndex(u => u.id === id)
-      if (userIndex === -1) {
-        return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 })
-      }
-      const user = usersData.users[userIndex]
-      if (user.isAdmin) {
-        return NextResponse.json({ success: false, error: 'Cannot modify admin account' }, { status: 403 })
-      }
-
-      if (body._action === 'approveDeletion') {
-        // Delete the user account
-        usersData.users.splice(userIndex, 1)
-        if (!await saveUsers(usersData)) {
-          return NextResponse.json({ success: false, error: 'Failed to delete user account' }, { status: 500 })
-        }
-        return NextResponse.json({ success: true, message: 'Account deleted successfully' })
-      } else {
-        // Reject deletion request - remove deletion fields
-        const updatedUser = {
-          ...user,
-          deletionRequestedAt: undefined,
-          deletionReason: undefined,
-          accountStatus: undefined,
-          updatedAt: new Date().toISOString()
-        }
-        usersData.users[userIndex] = updatedUser
-        if (!await saveUsers(usersData)) {
-          return NextResponse.json({ success: false, error: 'Failed to reject deletion request' }, { status: 500 })
-        }
-        return NextResponse.json({ success: true, user: updatedUser })
-      }
-    }
 
     // Fallback: Update user with whatever fields are provided
     const result = await updateUser(id, body)

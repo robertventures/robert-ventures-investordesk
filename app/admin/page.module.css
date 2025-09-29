@@ -1,58 +1,58 @@
 .main {
   min-height: 100vh;
-  background: #f8fafc;
+  background: var(--color-app-bg);
   padding-bottom: 64px;
 }
 
 .container {
   max-width: 1400px;
   margin: 0 auto;
-  padding: 32px 24px;
+  padding: var(--space-6) var(--space-5);
 }
 
 .content {
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 24px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
 }
 
 .title {
-  font-size: 28px;
-  margin: 0 0 8px 0;
+  font-size: var(--text-3xl);
+  margin: 0 0 var(--space-1) 0;
 }
 
 .subtitle {
-  color: #64748b;
-  margin: 0 0 16px 0;
+  color: var(--color-muted);
+  margin: 0 0 var(--space-3) 0;
 }
 
 .headerRow {
-  margin-bottom: 24px;
+  margin-bottom: var(--space-5);
 }
 
 .metrics {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  margin: 16px 0 24px;
+  gap: var(--space-3);
+  margin: var(--space-3) 0 var(--space-5);
 }
 
 .metric {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 16px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
 }
 
 .metricLabel {
-  font-size: 12px;
-  color: #64748b;
+  font-size: var(--text-xs);
+  color: var(--color-muted);
   letter-spacing: 0.08em;
 }
 
 .metricValue {
-  font-size: 24px;
+  font-size: var(--text-3xl);
   font-weight: 600;
 }
 
@@ -65,31 +65,31 @@
   background: none;
   border: none;
   padding: 0;
-  color: #2563eb;
+  color: var(--color-info);
   cursor: pointer;
   text-decoration: underline;
 }
 
 .secondaryButton {
-  border: 1px solid #e2e8f0;
-  background: #fff;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
   padding: 6px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 
 .dangerButton {
-  border: 1px solid #ef4444;
-  background: #ef4444;
+  border: 1px solid var(--color-danger);
+  background: var(--color-danger);
   color: #fff;
   padding: 6px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 
 .actionGroup {
   display: flex;
-  gap: 8px;
+  gap: var(--space-1);
 }
 
 .table {
@@ -98,7 +98,7 @@
 }
 
 .table th, .table td {
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--color-border);
   padding: 12px;
   text-align: left;
 }
@@ -106,17 +106,17 @@
 .investments {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-1);
 }
 
 .invRow {
   display: flex;
-  gap: 16px;
+  gap: var(--space-3);
   align-items: center;
   justify-content: space-between;
-  border: 1px dashed #e2e8f0;
+  border: 1px dashed var(--color-border);
   padding: 8px 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
 }
 
 .invCol {
@@ -128,57 +128,57 @@
 }
 
 .approveButton {
-  border: 1px solid #16a34a;
+  border: 1px solid var(--color-success);
   color: #fff;
-  background: #16a34a;
+  background: var(--color-success);
   padding: 8px 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 
 .approveButton:disabled {
-  border-color: #94a3b8;
-  background: #94a3b8;
+  border-color: var(--color-disabled);
+  background: var(--color-disabled);
   cursor: not-allowed;
 }
 
 .muted {
-  color: #94a3b8;
+  color: var(--color-disabled);
 }
 
 /* Time Machine Styles */
 .timeMachineSection {
-  background: #f8fafc;
-  border: 2px solid #e2e8f0;
-  border-radius: 8px;
+  background: var(--color-surface);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-md);
   padding: 20px;
-  margin: 24px 0;
+  margin: var(--space-5) 0;
 }
 
 .timeMachineTitle {
-  margin: 0 0 16px 0;
-  font-size: 18px;
+  margin: 0 0 var(--space-3) 0;
+  font-size: var(--text-lg);
   font-weight: 600;
-  color: #1f2937;
+  color: var(--color-accent);
 }
 
 .activeIndicator {
-  color: #dc2626;
+  color: var(--color-danger-dark);
   font-weight: 700;
-  font-size: 14px;
+  font-size: var(--text-sm);
 }
 
 .timeMachineControls {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 24px;
+  gap: var(--space-5);
   align-items: start;
 }
 
 .timeDisplay {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-1);
 }
 
 .timeRow {
@@ -186,9 +186,9 @@
   justify-content: space-between;
   align-items: center;
   padding: 8px 12px;
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
 }
 
 .timeLabel {
@@ -210,8 +210,8 @@
 .timeInput {
   padding: 8px 12px;
   border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-size: 14px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
 }
 
 .timeMachineButton {
@@ -219,14 +219,14 @@
   color: white;
   border: none;
   padding: 10px 16px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-weight: 600;
   cursor: pointer;
   transition: background-color 0.2s;
 }
 
 .timeMachineButton:hover {
-  background: #2563eb;
+  background: var(--color-info);
 }
 
 .timeMachineButton:disabled {
@@ -235,18 +235,18 @@
 }
 
 .resetTimeButton {
-  background: #ef4444;
+  background: var(--color-danger);
   color: white;
   border: none;
   padding: 10px 16px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-weight: 600;
   cursor: pointer;
   transition: background-color 0.2s;
 }
 
 .resetTimeButton:hover {
-  background: #dc2626;
+  background: var(--color-danger-dark);
 }
 
 .resetTimeButton:disabled {
@@ -257,20 +257,14 @@
 @media (max-width: 768px) {
   .timeMachineControls {
     grid-template-columns: 1fr;
-    gap: 16px;
+    gap: var(--space-3);
   }
 }
 
-.deletionReason {
-  max-width: 300px;
-  word-wrap: break-word;
-  font-size: 14px;
-  line-height: 1.4;
-}
 
 .emptyState {
   text-align: center;
-  color: #94a3b8;
+  color: var(--color-disabled);
   font-style: italic;
   padding: 40px;
 }
@@ -278,21 +272,21 @@
 .dashboardContent {
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  gap: var(--space-6);
 }
 
 .dashboardSection {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 24px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
 }
 
 .sectionTitle {
   font-size: 20px;
   font-weight: 600;
-  margin: 0 0 16px 0;
-  color: #1f2937;
+  margin: 0 0 var(--space-3) 0;
+  color: var(--color-accent);
 }
 
 .activitySummary {
@@ -304,7 +298,7 @@
 .activityItem {
   margin: 0;
   padding: 12px 0;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--color-border);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -322,21 +316,21 @@
   width: 100%;
   max-width: 400px;
   padding: 12px 16px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  font-size: 14px;
-  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  background: var(--color-bg);
 }
 
 .searchInput:focus {
   outline: none;
-  border-color: #2563eb;
+  border-color: var(--color-info);
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
 
 @media (max-width: 768px) {
   .container {
-    padding: 12px;
+    padding: var(--space-2);
   }
 
   .main {
@@ -345,7 +339,7 @@
 
 
   .dashboardSection {
-    padding: 16px;
+    padding: var(--space-3);
   }
 }
 

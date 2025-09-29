@@ -75,7 +75,9 @@
   transition: all 0.2s ease;
   font-family: 'Inter', sans-serif;
   box-sizing: border-box;
+  -webkit-appearance: none;
   -moz-appearance: textfield;
+  appearance: none;
 }
 
 .amountInput:focus {
@@ -104,10 +106,10 @@
 }
 
 /* Payment Frequency Section */
+
 .radioGroup {
-  display: flex;
-  flex-direction: row;
-  justify-content: center;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 24px;
 }
 
@@ -117,9 +119,10 @@
   cursor: pointer;
   padding: 20px;
   border: 2px solid #e5e7eb;
-  border-radius: 6px;
+  border-radius: 8px;
   background: #ffffff;
   transition: all 0.2s ease;
+  position: relative;
 }
 .radioOption.disabled {
   opacity: 0.5;
@@ -127,8 +130,19 @@
 }
 
 .radioOption:hover {
-  border-color: #d1d5db;
-  background: #f9fafb;
+  border-color: #1a1a1a;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.radioOptionSelected {
+  border-color: #1a1a1a;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+}
+
+.radioOption:focus-within {
+  outline: none;
+  border-color: #1a1a1a;
+  box-shadow: 0 0 0 3px rgba(26, 26, 26, 0.1);
 }
 
 .radioInput {
@@ -288,7 +302,7 @@
   }
   
   .radioGroup {
-    flex-direction: column;
+    grid-template-columns: 1fr;
     gap: 16px;
   }
   

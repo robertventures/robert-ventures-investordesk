@@ -10,7 +10,7 @@ export default function InvestmentForm({ onCompleted, onReviewSummary, disableAu
     paymentFrequency: initialPaymentFrequency === 'monthly' || initialPaymentFrequency === 'compounding' ? initialPaymentFrequency : 'compounding'
   })
   const [errors, setErrors] = useState({})
-  const [selectedLockup, setSelectedLockup] = useState(initialLockup === '1-year' || initialLockup === '3-year' ? initialLockup : '1-year')
+  const [selectedLockup, setSelectedLockup] = useState(initialLockup === '1-year' || initialLockup === '3-year' ? initialLockup : '3-year')
   const [isAmountFocused, setIsAmountFocused] = useState(false)
   const [displayAmount, setDisplayAmount] = useState('')
 
@@ -287,6 +287,7 @@ export default function InvestmentForm({ onCompleted, onReviewSummary, disableAu
                   <span className={styles.currencyPrefix}>$</span>
                   <input
                     type="text"
+                    inputMode="numeric"
                     name="investmentAmount"
                     value={isAmountFocused ? displayAmount : (formData.investmentAmount > 0 ? formData.investmentAmount.toLocaleString() : '')}
                     onChange={handleInputChange}
@@ -307,9 +308,9 @@ export default function InvestmentForm({ onCompleted, onReviewSummary, disableAu
 
         {/* Step 2: Enter Payment Frequency */}
         <div className={styles.section}>
-          <h2 className={styles.sectionTitle}>2. Enter Payment Frequency</h2>
+          <h2 className={styles.sectionTitle}>2. Select Payment Frequency</h2>
           <div className={styles.radioGroup}>
-            <label className={styles.radioOption}>
+            <label className={`${styles.radioOption} ${formData.paymentFrequency === 'compounding' ? styles.radioOptionSelected : ''}`}>
               <input
                 type="radio"
                 name="paymentFrequency"
@@ -323,7 +324,7 @@ export default function InvestmentForm({ onCompleted, onReviewSummary, disableAu
               </div>
             </label>
             
-            <label className={`${styles.radioOption} ${accountType === 'ira' ? styles.disabled : ''}`}>
+            <label className={`${styles.radioOption} ${accountType === 'ira' ? styles.disabled : ''} ${formData.paymentFrequency === 'monthly' ? styles.radioOptionSelected : ''}`}>
               <input
                 type="radio"
                 name="paymentFrequency"
@@ -349,20 +350,6 @@ export default function InvestmentForm({ onCompleted, onReviewSummary, disableAu
           
           <div className={styles.investmentCards}>
             <div 
-              className={`${styles.investmentCard} ${selectedLockup === '1-year' ? styles.selected : ''}`}
-              onClick={() => { setSelectedLockup('1-year'); if (typeof onValuesChange === 'function') onValuesChange({ amount: formData.investmentAmount, paymentFrequency: formData.paymentFrequency, lockupPeriod: '1-year' }) }}
-              role="button"
-            >
-              <div className={styles.cardHeader}>
-                <h3 className={styles.cardTitle}>1-Year Lock-Up</h3>
-                <div className={styles.cardYield}>8% APY</div>
-              </div>
-              <div className={styles.cardEarnings}>
-                Estimated annual earnings: <span className={styles.earningsAmount}>${parseFloat(annualEarnings1Year).toLocaleString()}</span>
-              </div>
-            </div>
-            
-            <div 
               className={`${styles.investmentCard} ${selectedLockup === '3-year' ? styles.selected : ''}`}
               onClick={() => { setSelectedLockup('3-year'); if (typeof onValuesChange === 'function') onValuesChange({ amount: formData.investmentAmount, paymentFrequency: formData.paymentFrequency, lockupPeriod: '3-year' }) }}
               role="button"
@@ -373,6 +360,20 @@ export default function InvestmentForm({ onCompleted, onReviewSummary, disableAu
               </div>
               <div className={styles.cardEarnings}>
                 Estimated annual earnings: <span className={styles.earningsAmount}>${parseFloat(annualEarnings3Year).toLocaleString()}</span>
+              </div>
+            </div>
+
+            <div 
+              className={`${styles.investmentCard} ${selectedLockup === '1-year' ? styles.selected : ''}`}
+              onClick={() => { setSelectedLockup('1-year'); if (typeof onValuesChange === 'function') onValuesChange({ amount: formData.investmentAmount, paymentFrequency: formData.paymentFrequency, lockupPeriod: '1-year' }) }}
+              role="button"
+            >
+              <div className={styles.cardHeader}>
+                <h3 className={styles.cardTitle}>1-Year Lock-Up</h3>
+                <div className={styles.cardYield}>8% APY</div>
+              </div>
+              <div className={styles.cardEarnings}>
+                Estimated annual earnings: <span className={styles.earningsAmount}>${parseFloat(annualEarnings1Year).toLocaleString()}</span>
               </div>
             </div>
           </div>

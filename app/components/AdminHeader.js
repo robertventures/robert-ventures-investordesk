@@ -87,10 +87,10 @@ export default function AdminHeader({ onTabChange, activeTab }) {
             Investments
           </button>
           <button
-            onClick={() => onTabChange('deletions')}
-            className={`${styles.navItem} ${activeTab === 'deletions' ? styles.active : ''}`}
+            onClick={() => onTabChange('withdrawals')}
+            className={`${styles.navItem} ${activeTab === 'withdrawals' ? styles.active : ''}`}
           >
-            Deletion Requests
+            Withdrawals
           </button>
         </nav>
 
@@ -112,7 +112,7 @@ export default function AdminHeader({ onTabChange, activeTab }) {
             <button className={styles.mobileNavItem} onClick={() => handleNavSelect('dashboard')}>Dashboard</button>
             <button className={styles.mobileNavItem} onClick={() => handleNavSelect('accounts')}>Accounts</button>
             <button className={styles.mobileNavItem} onClick={() => handleNavSelect('investments')}>Investments</button>
-            <button className={styles.mobileNavItem} onClick={() => handleNavSelect('deletions')}>Deletion Requests</button>
+            <button className={styles.mobileNavItem} onClick={() => handleNavSelect('withdrawals')}>Withdrawals</button>
             <div className={styles.mobileDivider}></div>
             <button className={styles.mobileNavItem} onClick={() => { setShowMobileNav(false); handleLogout() }}>Sign Out</button>
           </div>

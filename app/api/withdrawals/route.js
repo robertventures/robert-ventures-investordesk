@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getUsers, saveUsers } from '../../../lib/database'
 import { calculateInvestmentValue, calculateWithdrawalAmount } from '../../../lib/investmentCalculations'
+import { getCurrentAppTime } from '../../../lib/appTime'
 
 // POST - Create withdrawal request
 export async function POST(request) {
@@ -42,17 +43,23 @@ export async function POST(request) {
       }, { status: 400 })
     }
 
-    // Calculate current value and withdrawal eligibility
-    const currentValue = calculateInvestmentValue(investment)
-    const withdrawalDetails = calculateWithdrawalAmount(investment, currentValue)
-    
-    if (!withdrawalDetails.canWithdraw) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Investment is still in lockdown period',
-        lockdownEndDate: withdrawalDetails.lockdownEndDate
-      }, { status: 400 })
-    }
+    // Calculate current value (as of app time) and set up 90-day notice period
+    const appTime = await getCurrentAppTime()
+    const now = new Date(appTime || new Date().toISOString())
+    const currentValue = calculateInvestmentValue(investment, now.toISOString())
+    // Notice period starts now; withdrawal eligible at the later of lockdown end or notice end
+    const noticeStartAt = now.toISOString()
+    const noticeEndDate = new Date(now)
+    noticeEndDate.setDate(noticeEndDate.getDate() + 90)
+    const lockdownEnd = currentValue.lockdownEndDate ? new Date(currentValue.lockdownEndDate) : new Date(now)
+    const payoutEligibleAt = new Date(Math.max(lockdownEnd.getTime(), noticeEndDate.getTime())).toISOString()
+
+    // For monthly payout investments: withdraw principal only
+    const isMonthly = investment.paymentFrequency === 'monthly'
+    const principalAmount = investment.amount
+    const compAmount = currentValue.currentValue
+    const withdrawableAmount = isMonthly ? principalAmount : compAmount
+    const earningsAmount = isMonthly ? 0 : (currentValue.totalEarnings || 0)
 
     // Create withdrawal record
     const withdrawalId = Date.now().toString()
@@ -60,11 +67,14 @@ export async function POST(request) {
       id: withdrawalId,
       investmentId,
       userId,
-      amount: withdrawalDetails.withdrawableAmount,
-      principalAmount: withdrawalDetails.principalAmount,
-      earningsAmount: withdrawalDetails.earningsAmount,
-      status: 'pending',
-      requestedAt: new Date().toISOString(),
+      amount: withdrawableAmount,
+      principalAmount: principalAmount,
+      earningsAmount: earningsAmount,
+      status: 'notice',
+      requestedAt: now.toISOString(),
+      noticeStartAt,
+      noticeEndAt: noticeEndDate.toISOString(),
+      payoutEligibleAt,
       investment: {
         originalAmount: investment.amount,
         lockupPeriod: investment.lockupPeriod,
@@ -74,14 +84,16 @@ export async function POST(request) {
       }
     }
 
-    // Update investment status to withdrawn
+    // Update investment status to reflect withdrawal notice period
     investments[invIndex] = {
       ...investment,
-      status: 'withdrawn',
-      withdrawnAt: new Date().toISOString(),
+      status: 'withdrawal_notice',
+      withdrawalNoticeStartAt: noticeStartAt,
+      withdrawalNoticeEndAt: noticeEndDate.toISOString(),
+      payoutEligibleAt,
       withdrawalId,
-      finalValue: withdrawalDetails.withdrawableAmount,
-      totalEarnings: withdrawalDetails.earningsAmount,
+      finalValue: withdrawableAmount,
+      totalEarnings: earningsAmount,
       updatedAt: new Date().toISOString()
     }
 

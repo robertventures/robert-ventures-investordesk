@@ -107,3 +107,14 @@
 }
 .confirm input { accent-color: #1a1a1a; margin-top: 2px; }
 
+.warning {
+  margin-top: 12px;
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  color: #9a3412;
+  border-radius: 6px;
+  padding: 12px 16px;
+}
+.warningTitle { font-weight: 600; margin-bottom: 6px; }
+.warningList { margin: 0; padding-left: 18px; }
+

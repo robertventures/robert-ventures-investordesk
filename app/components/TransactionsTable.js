@@ -9,6 +9,8 @@ export default function TransactionsTable() {
   const [userData, setUserData] = useState(null)
   const [transactions, setTransactions] = useState([])
   const [earnings, setEarnings] = useState([])
+  const [withdrawals, setWithdrawals] = useState([])
+  const [appTime, setAppTime] = useState(null)
 
   useEffect(() => {
     const loadData = async () => {
@@ -16,32 +18,44 @@ export default function TransactionsTable() {
       if (!userId) return
 
       try {
+        // Get current app time to ensure earnings/payouts align with time machine
+        const timeRes = await fetch('/api/admin/time-machine')
+        const timeData = await timeRes.json()
+        const currentAppTime = timeData.success ? timeData.appTime : new Date().toISOString()
+        setAppTime(currentAppTime)
+
+        // Backfill persistent transactions prior to loading
+        await fetch('/api/migrate-transactions', { method: 'POST' })
+
         const res = await fetch(`/api/users/${userId}`)
         const data = await res.json()
         if (data.success && data.user) {
           setUserData(data.user)
+          const persisted = Array.isArray(data.user.transactions) ? data.user.transactions : []
           
-          // Convert investments to transaction format
+          // Convert investments to transaction format (for purchases tab)
           const investments = data.user.investments || []
           const transactionData = investments.map(inv => {
             // Calculate actual earnings for this investment
             let actualEarnings = 0
-            // Only accrue/display earnings for approved investments
-            const isApproved = inv.status === 'approved' || inv.status === 'invested'
-            if (isApproved && inv.amount && inv.paymentFrequency && inv.lockupPeriod) {
-              const investmentDate = new Date(inv.createdAt || inv.signedAt || new Date())
-              const now = new Date()
-              const monthsElapsed = Math.floor((now - investmentDate) / (1000 * 60 * 60 * 24 * 30.44))
+            // Only accrue/display earnings for confirmed investments from confirmedAt
+            const isConfirmed = inv.status === 'confirmed'
+            if (isConfirmed && inv.amount && inv.paymentFrequency && inv.lockupPeriod && inv.confirmedAt) {
+              const startDate = new Date(inv.confirmedAt)
+              // Accrue starting the day AFTER confirmation
+              startDate.setDate(startDate.getDate() + 1)
+              const now = new Date(currentAppTime)
+              const monthsElapsed = Math.floor((now - startDate) / (1000 * 60 * 60 * 24 * 30.44))
               
               if (inv.paymentFrequency === 'monthly') {
                 const annualRate = inv.lockupPeriod === '1-year' ? 0.08 : 0.10
                 const monthlyRate = annualRate / 12
                 const monthlyEarnings = inv.amount * monthlyRate
-                actualEarnings = monthlyEarnings * monthsElapsed
+                actualEarnings = Math.max(0, monthlyEarnings * monthsElapsed)
               } else if (inv.paymentFrequency === 'compounding') {
                 const annualRate = inv.lockupPeriod === '1-year' ? 0.08 : 0.10
                 const monthlyRate = annualRate / 12
-                actualEarnings = inv.amount * Math.pow(1 + monthlyRate, monthsElapsed) - inv.amount
+                actualEarnings = Math.max(0, inv.amount * Math.pow(1 + monthlyRate, monthsElapsed) - inv.amount)
               }
             }
             
@@ -49,7 +63,7 @@ export default function TransactionsTable() {
               id: inv.id,
               recordId: inv.id.slice(-3).toUpperCase() + 'D',
               transactionDate: inv.createdAt ? new Date(inv.createdAt).toLocaleDateString() : '-',
-              type: inv.accountType || 'Individual',
+              type: 'Investment',
               offeringType: 'S1',
               associatedTo: `${data.user.firstName} ${data.user.lastName}`,
               status: inv.status ? inv.status[0].toUpperCase() + inv.status.slice(1) : 'Pending',
@@ -64,49 +78,52 @@ export default function TransactionsTable() {
             }
           })
           
-          // Generate earnings data for monthly payment investments
-          const earningsData = []
-          investments.forEach(inv => {
-            const isApproved = inv.status === 'approved' || inv.status === 'invested'
-            if (isApproved && inv.paymentFrequency === 'monthly' && inv.amount && inv.lockupPeriod) {
-              const investmentDate = new Date(inv.createdAt || inv.signedAt || new Date())
-              const now = new Date()
-              const monthsElapsed = Math.floor((now - investmentDate) / (1000 * 60 * 60 * 24 * 30.44))
-              
-              if (monthsElapsed > 0) {
-                const annualRate = inv.lockupPeriod === '1-year' ? 0.08 : 0.10
-                const monthlyRate = annualRate / 12
-                const monthlyEarnings = inv.amount * monthlyRate
-                
-                // Generate individual monthly earnings records
-                for (let month = 1; month <= monthsElapsed; month++) {
-                  const earningsDate = new Date(investmentDate)
-                  earningsDate.setMonth(earningsDate.getMonth() + month)
-                  
-                  earningsData.push({
-                    id: `${inv.id}-earnings-${month}`,
-                    recordId: `${inv.id.slice(-3).toUpperCase()}E${month.toString().padStart(2, '0')}`,
-                    transactionDate: earningsDate.toLocaleDateString(),
-                    type: 'Monthly Distribution',
-                    offeringType: 'S1',
-                    associatedTo: `${data.user.firstName} ${data.user.lastName}`,
-                    status: 'Completed',
-                    amount: monthlyEarnings,
-                    bonds: inv.bonds || 0,
-                    rate: inv.lockupPeriod === '1-year' ? '8.00%' : '10.00%',
-                    term: inv.lockupPeriod === '1-year' ? '1' : '3',
-                    isCompounded: 'No',
-                    maturityDate: '-',
-                    ytdEarned: `$${monthlyEarnings.toFixed(2)}`,
-                    total: `$${(monthlyEarnings * month).toFixed(2)}`
-                  })
-                }
-              }
-            }
-          })
+          // Build earnings tab from persisted monthly_distribution events
+          const earningsData = persisted
+            .filter(ev => ev.type === 'monthly_distribution')
+            .sort((a, b) => new Date(a.date) - new Date(b.date))
+            .map(ev => ({
+              id: ev.id,
+              recordId: `${String(ev.investmentId).slice(-3).toUpperCase()}E${String(ev.monthIndex || 0).toString().padStart(2, '0')}`,
+              transactionDate: new Date(ev.date).toLocaleDateString(),
+              type: 'Monthly Distribution',
+              offeringType: 'S1',
+              associatedTo: `${data.user.firstName} ${data.user.lastName}`,
+              status: 'Completed',
+              amount: ev.amount || 0,
+              bonds: 0,
+              rate: ev.lockupPeriod === '1-year' ? '8.00%' : '10.00%',
+              term: ev.lockupPeriod === '1-year' ? '1' : '3',
+              isCompounded: 'No',
+              maturityDate: '-',
+              ytdEarned: `$${Number(ev.amount || 0).toFixed(2)}`,
+              total: `$${Number(ev.amount || 0).toFixed(2)}`
+            }))
+
+          // Fetch withdrawals for this user and include them
+          const wdRes = await fetch(`/api/withdrawals?userId=${userId}`)
+          const wdData = await wdRes.json()
+          const withdrawalRecords = (wdData.success ? wdData.withdrawals : []).map(wd => ({
+            id: wd.id,
+            recordId: wd.id.slice(-3).toUpperCase() + 'W',
+            transactionDate: wd.requestedAt ? new Date(wd.requestedAt).toLocaleDateString() : '-',
+            type: 'Withdrawal Request',
+            offeringType: 'S1',
+            associatedTo: `${data.user.firstName} ${data.user.lastName}`,
+            status: wd.status ? wd.status[0].toUpperCase() + wd.status.slice(1) : 'Pending',
+            amount: wd.amount || 0,
+            bonds: wd.investment?.originalAmount ? Math.round((wd.investment.originalAmount / 10)) : 0,
+            rate: wd.investment?.lockupPeriod === '1-year' ? '8.00%' : '10.00%',
+            term: wd.investment?.lockupPeriod === '1-year' ? '1' : '3',
+            isCompounded: wd.investment?.paymentFrequency === 'compounding' ? 'Yes' : 'No',
+            maturityDate: wd.investment?.lockdownEndDate ? new Date(wd.investment.lockdownEndDate).toLocaleDateString() : '-',
+            ytdEarned: `$${(wd.earningsAmount || 0).toFixed(2)}`,
+            total: `$${(wd.amount || 0).toFixed(2)}`
+          }))
           
           setTransactions(transactionData)
           setEarnings(earningsData)
+          setWithdrawals(withdrawalRecords)
         }
       } catch (e) {
         console.error('Failed to load transaction data', e)
@@ -143,6 +160,12 @@ export default function TransactionsTable() {
         >
           💰 EARNINGS
         </button>
+        <button 
+          className={`${styles.tab} ${activeTab === 'withdrawals' ? styles.active : ''}`}
+          onClick={() => setActiveTab('withdrawals')}
+        >
+          🏦 WITHDRAWALS
+        </button>
       </div>
       
       {activeTab === 'earnings' && earnings.length === 0 ? (
@@ -176,22 +199,26 @@ export default function TransactionsTable() {
               </tr>
             </thead>
             <tbody>
-              {(activeTab === 'purchases' ? transactions : earnings).length === 0 ? (
+              {(activeTab === 'purchases' ? transactions : activeTab === 'earnings' ? earnings : withdrawals).length === 0 ? (
                 <tr>
                   <td colSpan="16" className={styles.noData}>
                     No {activeTab} found
                   </td>
                 </tr>
               ) : (
-                (activeTab === 'purchases' ? transactions : earnings).map((tx, index) => (
+                (activeTab === 'purchases' ? transactions : activeTab === 'earnings' ? earnings : withdrawals).map((tx, index) => (
                   <tr key={tx.id}>
                     <td>
-                      <button 
-                        onClick={() => router.push(`/investment-details/${tx.id}`)}
-                        className={styles.detailsLink}
-                      >
-                        Details
-                      </button>
+                      {activeTab === 'withdrawals' ? (
+                        <span className={styles.detailsLink} style={{ opacity: 0.6, cursor: 'default' }}>—</span>
+                      ) : (
+                        <button 
+                          onClick={() => router.push(`/investment-details/${tx.id}`)}
+                          className={styles.detailsLink}
+                        >
+                          Details
+                        </button>
+                      )}
                     </td>
                     <td>{tx.recordId}</td>
                     <td>{tx.transactionDate}</td>
@@ -200,7 +227,7 @@ export default function TransactionsTable() {
                     <td>{tx.associatedTo}</td>
                     <td>
                       {(() => {
-                        const isGreen = tx.status === 'Completed' || tx.status === 'Approved' || tx.status === 'Invested'
+                        const isGreen = tx.status === 'Completed' || tx.status === 'Approved' || tx.status === 'Invested' || tx.status === 'Confirmed'
                         return (
                           <span className={`${styles.status} ${isGreen ? styles.completed : styles.pending}`}>
                             {tx.status}
@@ -233,7 +260,7 @@ export default function TransactionsTable() {
       {activeTab === 'earnings' && earnings.length === 0 ? null : (
         <div className={styles.pagination}>
           <div className={styles.paginationInfo}>
-            Showing 1 - {(activeTab === 'purchases' ? transactions : earnings).length} of {(activeTab === 'purchases' ? transactions : earnings).length}
+            Showing 1 - {(activeTab === 'purchases' ? transactions : activeTab === 'earnings' ? earnings : withdrawals).length} of {(activeTab === 'purchases' ? transactions : activeTab === 'earnings' ? earnings : withdrawals).length}
           </div>
           <div className={styles.paginationControls}>
             <button className={styles.paginationButton} disabled>←</button>

@@ -19,8 +19,16 @@ export default function ProfileView() {
   // City names should not contain digits
   const formatCity = (value = '') => value.replace(/[0-9]/g, '')
 
-  // Phone numbers should not contain letters
-  const formatPhone = (value = '') => value.replace(/[^0-9+]/g, '')
+  // Format US phone numbers as (XXX) XXX-XXXX while typing (ignore leading country code 1)
+  const formatPhone = (value = '') => {
+    const digitsOnly = (value || '').replace(/\D/g, '')
+    const withoutCountry = digitsOnly.startsWith('1') ? digitsOnly.slice(1) : digitsOnly
+    const len = withoutCountry.length
+    if (len === 0) return ''
+    if (len <= 3) return `(${withoutCountry}`
+    if (len <= 6) return `(${withoutCountry.slice(0, 3)}) ${withoutCountry.slice(3)}`
+    return `(${withoutCountry.slice(0, 3)}) ${withoutCountry.slice(3, 6)}-${withoutCountry.slice(6, 10)}`
+  }
 
   const parseDateString = (value = '') => {
     const [year, month, day] = (value || '').split('-').map(Number)
@@ -44,9 +52,9 @@ export default function ProfileView() {
   const [isSaving, setIsSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [errors, setErrors] = useState({})
-  const [showDeleteModal, setShowDeleteModal] = useState(false)
-  const [deletionReason, setDeletionReason] = useState('')
-  const [isRequestingDeletion, setIsRequestingDeletion] = useState(false)
+  const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' })
+  const [isChangingPassword, setIsChangingPassword] = useState(false)
+  const [passwordChangeSuccess, setPasswordChangeSuccess] = useState(false)
 
   useEffect(() => {
     const loadUser = async () => {
@@ -62,14 +70,14 @@ export default function ProfileView() {
             firstName: data.user.firstName || '',
             lastName: data.user.lastName || '',
             email: data.user.email || '',
-            phoneNumber: data.user.phoneNumber || '',
+            phoneNumber: formatPhone(data.user.phoneNumber || ''),
             dob: data.user.dob || '',
             ssn: data.user.ssn || '',
             jointHolder: data.user.jointHolder ? {
               firstName: data.user.jointHolder.firstName || '',
               lastName: data.user.jointHolder.lastName || '',
               email: data.user.jointHolder.email || '',
-              phone: data.user.jointHolder.phone || '',
+              phone: formatPhone(data.user.jointHolder.phone || ''),
               dob: data.user.jointHolder.dob || '',
               ssn: data.user.jointHolder.ssn || '',
               address: {
@@ -207,6 +215,57 @@ export default function ProfileView() {
     setSaveSuccess(false)
   }
 
+  const handlePasswordChange = (e) => {
+    const { name, value } = e.target
+    setPasswordForm(prev => ({ ...prev, [name]: value }))
+    setPasswordChangeSuccess(false)
+  }
+
+  const validatePasswordForm = () => {
+    const pwdErrors = {}
+    if (!passwordForm.currentPassword.trim()) pwdErrors.currentPassword = 'Required'
+    if (!passwordForm.newPassword.trim()) pwdErrors.newPassword = 'Required'
+    if (!passwordForm.confirmPassword.trim()) pwdErrors.confirmPassword = 'Required'
+    if (passwordForm.newPassword && passwordForm.newPassword.length < 8) pwdErrors.newPassword = 'Min length 8'
+    if (passwordForm.newPassword && !/[A-Z]/.test(passwordForm.newPassword)) pwdErrors.newPassword = 'Include an uppercase letter'
+    if (passwordForm.newPassword && !/[a-z]/.test(passwordForm.newPassword)) pwdErrors.newPassword = 'Include a lowercase letter'
+    if (passwordForm.newPassword && !/[0-9]/.test(passwordForm.newPassword)) pwdErrors.newPassword = 'Include a number'
+    if (passwordForm.newPassword && !/[!@#$%^&*(),.?":{}|<>\-_=+\[\];']/ .test(passwordForm.newPassword)) pwdErrors.newPassword = 'Include a special character'
+    if (passwordForm.newPassword && passwordForm.confirmPassword && passwordForm.newPassword !== passwordForm.confirmPassword) pwdErrors.confirmPassword = 'Passwords do not match'
+    setErrors(prev => ({ ...prev, ...pwdErrors }))
+    return Object.keys(pwdErrors).length === 0
+  }
+
+  const handleChangePassword = async () => {
+    if (!validatePasswordForm()) return
+    setIsChangingPassword(true)
+    setPasswordChangeSuccess(false)
+    try {
+      const userId = localStorage.getItem('currentUserId')
+      const res = await fetch(`/api/users/${userId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          _action: 'changePassword',
+          currentPassword: passwordForm.currentPassword,
+          newPassword: passwordForm.newPassword
+        })
+      })
+      const data = await res.json()
+      if (!data.success) {
+        alert(data.error || 'Failed to change password')
+        return
+      }
+      setPasswordChangeSuccess(true)
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' })
+    } catch (e) {
+      console.error('Failed to change password', e)
+      alert('An error occurred. Please try again.')
+    } finally {
+      setIsChangingPassword(false)
+    }
+  }
+
   const handleAuthorizedRepChange = (e) => {
     const { name, value } = e.target
     setFormData(prev => ({ ...prev, authorizedRepresentative: { ...prev.authorizedRepresentative, [name]: value } }))
@@ -231,7 +290,11 @@ export default function ProfileView() {
     if (!formData.lastName.trim()) newErrors.lastName = 'Required'
     if (!/\S+@\S+\.\S+/.test(formData.email)) newErrors.email = 'Invalid email'
     if (!formData.phoneNumber.trim()) newErrors.phoneNumber = 'Required'
-    else if (/[a-zA-Z]/.test(formData.phoneNumber)) newErrors.phoneNumber = 'Phone number cannot contain letters'
+    else {
+      const raw = formData.phoneNumber.replace(/\D/g, '')
+      const normalized = raw.length === 11 && raw.startsWith('1') ? raw.slice(1) : raw
+      if (normalized.length !== 10) newErrors.phoneNumber = 'Enter a valid US 10-digit phone'
+    }
     if (formData.dob && !isAdultDob(formData.dob)) newErrors.dob = `Enter a valid date (YYYY-MM-DD). Min ${MIN_DOB}. Must be 18+.`
     if (formData.address) {
       if (!formData.address.street1.trim()) newErrors.street1 = 'Required'
@@ -276,7 +339,11 @@ export default function ProfileView() {
       if (!formData.jointHolder.lastName.trim()) newErrors.jointLastName = 'Required'
       if (!formData.jointHolder.email.trim() || !/\S+@\S+\.\S+/.test(formData.jointHolder.email)) newErrors.jointEmail = 'Valid email required'
       if (!formData.jointHolder.phone.trim()) newErrors.jointPhone = 'Required'
-      else if (/[a-zA-Z]/.test(formData.jointHolder.phone)) newErrors.jointPhone = 'Phone number cannot contain letters'
+      else {
+        const rawJoint = formData.jointHolder.phone.replace(/\D/g, '')
+        const normalizedJoint = rawJoint.length === 11 && rawJoint.startsWith('1') ? rawJoint.slice(1) : rawJoint
+        if (normalizedJoint.length !== 10) newErrors.jointPhone = 'Enter a valid US 10-digit phone'
+      }
       if (!formData.jointHolder.dob || !isAdultDob(formData.jointHolder.dob)) newErrors.jointDob = `Enter a valid date (YYYY-MM-DD). Min ${MIN_DOB}. Must be 18+.`
       if (!formData.jointHolder.ssn.trim()) newErrors.jointSsn = 'Required'
       if (formData.jointHolder.address) {
@@ -423,6 +490,23 @@ export default function ProfileView() {
   const hasEntityInvestment = Array.isArray(userData?.investments) && userData.investments.some(inv => inv.accountType === 'entity')
   const showEntitySection = hasEntityInvestment || !!userData?.entity
 
+  // Banking derived values (read-only display)
+  const availableBanks = Array.isArray(userData?.bankAccounts) ? userData.bankAccounts : []
+  const defaultBankId = userData?.banking?.defaultBankAccountId || null
+  const defaultBank = (defaultBankId ? availableBanks.find(b => b.id === defaultBankId) : null) || availableBanks[0] || null
+  const fundingMethodLabel = userData?.banking?.fundingMethod === 'bank-transfer'
+    ? 'Bank Transfer'
+    : userData?.banking?.fundingMethod === 'wire-transfer'
+      ? 'Wire Transfer'
+      : 'Not set'
+  const payoutMethodLabel = userData?.banking?.payoutMethod === 'bank-account'
+    ? 'Bank Account'
+    : userData?.banking?.payoutMethod === 'check'
+      ? 'Check'
+      : userData?.banking?.payoutMethod === 'compounding'
+        ? 'Compounding'
+        : 'Not set'
+
   return (
     <div className={styles.profileContainer}>
       <div className={styles.header}>
@@ -466,7 +550,7 @@ export default function ProfileView() {
               </div>
               <div className={styles.field}>
                 <label className={styles.label}>Phone</label>
-                <input className={`${styles.input} ${errors.phoneNumber ? styles.inputError : ''}`} name="phoneNumber" value={formData.phoneNumber} onChange={handleChange} />
+                <input className={`${styles.input} ${errors.phoneNumber ? styles.inputError : ''}`} type="tel" name="phoneNumber" value={formData.phoneNumber} onChange={handleChange} placeholder="(555) 555-5555" />
               </div>
             </div>
           </div>
@@ -541,7 +625,7 @@ export default function ProfileView() {
                 </div>
                 <div className={styles.field}>
                   <label className={styles.label}>Phone</label>
-                  <input className={`${styles.input} ${errors.jointPhone ? styles.inputError : ''}`} name="phone" value={formData.jointHolder?.phone || ''} onChange={handleJointHolderChange} />
+                  <input className={`${styles.input} ${errors.jointPhone ? styles.inputError : ''}`} type="tel" name="phone" value={formData.jointHolder?.phone || ''} onChange={handleJointHolderChange} placeholder="(555) 555-5555" />
                 </div>
                 <div className={styles.field}>
                   <label className={styles.label}>Date of Birth</label>
@@ -778,93 +862,119 @@ export default function ProfileView() {
           </>
         )}
 
+        <div className={styles.actions}>
+          <button
+            className={styles.saveButton}
+            onClick={handleSave}
+            disabled={isSaving}
+          >
+            {isSaving ? 'Saving...' : 'Save Changes'}
+          </button>
+          {saveSuccess && <span className={styles.success}>Saved!</span>}
+        </div>
+
+        <section className={styles.section}>
+          <h2 className={styles.sectionTitle}>Banking Information</h2>
+
+          <div className={styles.subCard}>
+            <h3 className={styles.subSectionTitle}>Funding Account</h3>
+            <div className={styles.compactGrid}>
+              <div className={styles.field}>
+                <label className={styles.label}>Funding Method</label>
+                <div className={`${styles.value} ${styles.valueDisabled}`}>{fundingMethodLabel}</div>
+              </div>
+              <div className={styles.field}>
+                <label className={styles.label}>Bank</label>
+                <div className={`${styles.value} ${styles.valueDisabled}`}>{defaultBank ? (defaultBank.nickname || 'Default Bank') : 'Not connected'}</div>
+              </div>
+              <div className={styles.field}>
+                <label className={styles.label}>Type</label>
+                <div className={`${styles.value} ${styles.valueDisabled}`}>{defaultBank ? (defaultBank.type?.toUpperCase?.() || 'ACH') : '-'}</div>
+              </div>
+              <div className={styles.field}>
+                <label className={styles.label}>Status</label>
+                <div className={`${styles.value} ${styles.valueDisabled}`}>{defaultBank ? 'Connected' : 'Not connected'}</div>
+              </div>
+              <div className={styles.field}>
+                <label className={styles.label}>Last Used</label>
+                <div className={`${styles.value} ${styles.valueDisabled}`}>{defaultBank?.lastUsedAt ? new Date(defaultBank.lastUsedAt).toLocaleDateString() : '-'}</div>
+              </div>
+            </div>
+          </div>
+
+          <div className={styles.subCard}>
+            <h3 className={styles.subSectionTitle}>Payout Account</h3>
+            <div className={styles.compactGrid}>
+              <div className={styles.field}>
+                <label className={styles.label}>Payout Method</label>
+                <div className={`${styles.value} ${styles.valueDisabled}`}>{payoutMethodLabel}</div>
+              </div>
+              <div className={styles.field}>
+                <label className={styles.label}>Payout Bank</label>
+                <div className={`${styles.value} ${styles.valueDisabled}`}>
+                  {userData?.banking?.payoutMethod === 'bank-account' ? (defaultBank ? (defaultBank.nickname || 'Default Bank') : 'Not connected') : 'N/A'}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className={styles.section}>
+          <h2 className={styles.sectionTitle}>Security</h2>
+          <div className={styles.subCard}>
+            <h3 className={styles.subSectionTitle}>Change Password</h3>
+            <div className={styles.oneColumnGrid}>
+              <div className={styles.field}>
+                <label className={styles.label}>Current Password</label>
+                <input className={`${styles.input} ${errors.currentPassword ? styles.inputError : ''}`} type="password" name="currentPassword" value={passwordForm.currentPassword} onChange={handlePasswordChange} />
+              </div>
+            </div>
+            <div className={`${styles.compactGrid} ${styles.blockTopGap}`}>
+              <div className={styles.field}>
+                <label className={styles.label}>New Password</label>
+                <input className={`${styles.input} ${errors.newPassword ? styles.inputError : ''}`} type="password" name="newPassword" value={passwordForm.newPassword} onChange={handlePasswordChange} placeholder="At least 8 chars, mixed case, number, symbol" />
+              </div>
+              <div className={styles.field}>
+                <label className={styles.label}>Confirm New Password</label>
+                <input className={`${styles.input} ${errors.confirmPassword ? styles.inputError : ''}`} type="password" name="confirmPassword" value={passwordForm.confirmPassword} onChange={handlePasswordChange} />
+              </div>
+            </div>
+            <div className={`${styles.actions} ${styles.actionsInset}`}>
+              <button className={styles.saveButton} onClick={handleChangePassword} disabled={isChangingPassword}>
+                {isChangingPassword ? 'Updating...' : 'Update Password'}
+              </button>
+              {passwordChangeSuccess && <span className={styles.success}>Password updated</span>}
+            </div>
+          </div>
+        </section>
+
         <section className={styles.section}>
           <h2 className={styles.sectionTitle}>Account Information</h2>
           <div className={styles.fieldGrid}>
             <div className={styles.field}>
+              <label className={styles.label}>Account Type</label>
+              <div className={`${styles.value} ${styles.valueDisabled}`}>
+                {userData.accountType ? userData.accountType.charAt(0).toUpperCase() + userData.accountType.slice(1) : 'Not set'}
+              </div>
+            </div>
+            <div className={styles.field}>
               <label className={styles.label}>Account Created</label>
-              <div className={styles.value}>
+              <div className={`${styles.value} ${styles.valueDisabled}`}>
                 {userData.createdAt ? new Date(userData.createdAt).toLocaleDateString() : 'Not available'}
               </div>
             </div>
             <div className={styles.field}>
               <label className={styles.label}>Total Investments</label>
-              <div className={styles.value}>{userData.investments?.length || 0}</div>
+              <div className={`${styles.value} ${styles.valueDisabled}`}>{userData.investments?.length || 0}</div>
             </div>
             <div className={styles.field}>
               <label className={styles.label}>Account Status</label>
-              <div className={`${styles.value} ${styles.statusActive}`}>Active</div>
+              <div className={`${styles.value} ${styles.statusActive} ${styles.valueDisabled}`}>Active</div>
             </div>
-            <div className={styles.field}>
-              <label className={styles.label}>Last Login</label>
-              <div className={styles.value}>Today</div>
-            </div>
-          </div>
-          <div className={styles.actions}>
-            <button
-              className={styles.saveButton}
-              onClick={handleSave}
-              disabled={isSaving}
-            >
-              {isSaving ? 'Saving...' : 'Save Changes'}
-            </button>
-            {saveSuccess && <span className={styles.success}>Saved!</span>}
-            {(!userData.deletionRequestedAt || userData.accountStatus !== 'deletion_requested') && (
-              <button
-                className={styles.dangerButton}
-                onClick={() => setShowDeleteModal(true)}
-              >
-                Request Account Deletion
-              </button>
-            )}
-            {userData.deletionRequestedAt && userData.accountStatus === 'deletion_requested' && (
-              <div className={styles.deletionStatus}>
-                <span className={styles.deletionPending}>Deletion request pending review</span>
-              </div>
-            )}
           </div>
         </section>
       </div>
 
-      {showDeleteModal && (
-        <div className={styles.modalOverlay}>
-          <div className={styles.modal}>
-            <h3 className={styles.modalTitle}>Request Account Deletion</h3>
-            <p className={styles.modalText}>
-              Are you sure you want to request deletion of your account? This action will submit a request to our team for review.
-              Your account will remain active until the request is approved.
-            </p>
-            <div className={styles.modalField}>
-              <label className={styles.modalLabel}>Reason for deletion (optional)</label>
-              <textarea
-                className={styles.modalTextarea}
-                value={deletionReason}
-                onChange={(e) => setDeletionReason(e.target.value)}
-                placeholder="Please explain why you want to delete your account (optional)..."
-                rows={4}
-              />
-            </div>
-            <div className={styles.modalActions}>
-              <button
-                className={styles.modalCancelButton}
-                onClick={() => {
-                  setShowDeleteModal(false)
-                  setDeletionReason('')
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                className={styles.modalDeleteButton}
-                onClick={handleRequestDeletion}
-                disabled={isRequestingDeletion}
-              >
-                {isRequestingDeletion ? 'Submitting...' : 'Submit Request'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

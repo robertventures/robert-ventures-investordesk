@@ -10,7 +10,9 @@ export default function AdminPage() {
   const [users, setUsers] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [savingId, setSavingId] = useState(null)
-  const [activeTab, setActiveTab] = useState('dashboard') // 'dashboard' | 'investments' | 'accounts' | 'deletions'
+  const [activeTab, setActiveTab] = useState('dashboard') // 'dashboard' | 'investments' | 'accounts' | 'withdrawals'
+  const [withdrawals, setWithdrawals] = useState([])
+  const [isLoadingWithdrawals, setIsLoadingWithdrawals] = useState(false)
   const [investmentsSearch, setInvestmentsSearch] = useState('')
   const [accountsSearch, setAccountsSearch] = useState('')
   const [timeMachineData, setTimeMachineData] = useState({ appTime: null, isActive: false })
@@ -58,7 +60,8 @@ export default function AdminPage() {
           setNewAppTime(new Date(timeData.appTime).toISOString().slice(0, 16))
         }
 
-        // Notifications removed
+        // Load withdrawals
+        await loadWithdrawals()
       } catch (e) {
         console.error('Failed to load admin data', e)
       } finally {
@@ -67,6 +70,40 @@ export default function AdminPage() {
     }
     init()
   }, [router])
+
+  const loadWithdrawals = async () => {
+    try {
+      setIsLoadingWithdrawals(true)
+      const res = await fetch('/api/admin/withdrawals')
+      const data = await res.json()
+      if (data.success) setWithdrawals(data.withdrawals || [])
+    } catch (e) {
+      console.error('Failed to load withdrawals', e)
+    } finally {
+      setIsLoadingWithdrawals(false)
+    }
+  }
+
+  const actOnWithdrawal = async (action, userId, withdrawalId) => {
+    try {
+      const res = await fetch('/api/admin/withdrawals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, userId, withdrawalId })
+      })
+      const data = await res.json()
+      if (!data.success) {
+        alert(data.error || 'Failed to update withdrawal')
+        return
+      }
+      await loadWithdrawals()
+      await refreshUsers()
+      alert('Withdrawal updated successfully')
+    } catch (e) {
+      console.error('Failed to update withdrawal', e)
+      alert('An error occurred')
+    }
+  }
 
   const refreshUsers = async () => {
     try {
@@ -89,7 +126,8 @@ export default function AdminPage() {
         body: JSON.stringify({
           _action: 'updateInvestment',
           investmentId,
-          fields: { status: 'confirmed', confirmedAt: new Date().toISOString() }
+          adminUserId: currentUser?.id,
+          fields: { status: 'confirmed' }
         })
       })
       const data = await res.json()
@@ -174,51 +212,6 @@ export default function AdminPage() {
     }
   }
 
-  const approveDeletion = async (userId) => {
-    try {
-      setSavingId(userId)
-      const res = await fetch(`/api/users/${userId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ _action: 'approveDeletion' })
-      })
-      const data = await res.json()
-      if (!data.success) {
-        alert(data.error || 'Failed to approve deletion')
-        return
-      }
-      alert('Account deleted successfully')
-      await refreshUsers()
-    } catch (e) {
-      console.error('Approve deletion failed', e)
-      alert('An error occurred. Please try again.')
-    } finally {
-      setSavingId(null)
-    }
-  }
-
-  const rejectDeletion = async (userId) => {
-    try {
-      setSavingId(userId)
-      const res = await fetch(`/api/users/${userId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ _action: 'rejectDeletion' })
-      })
-      const data = await res.json()
-      if (!data.success) {
-        alert(data.error || 'Failed to reject deletion')
-        return
-      }
-      alert('Deletion request rejected')
-      await refreshUsers()
-    } catch (e) {
-      console.error('Reject deletion failed', e)
-      alert('An error occurred. Please try again.')
-    } finally {
-      setSavingId(null)
-    }
-  }
 
   const handleLogout = () => {
     localStorage.removeItem('currentUserId')
@@ -240,13 +233,13 @@ export default function AdminPage() {
 
   const nonAdminUsers = (users || []).filter(u => !u.isAdmin)
   const activeAccountsCount = nonAdminUsers.length
-  const investorsCount = nonAdminUsers.filter(u => (u.investments || []).length > 0).length
+  const investorsCount = nonAdminUsers.filter(u => (u.investments || []).some(inv => inv.status === 'confirmed')).length
   const { pendingTotal, raisedTotal } = nonAdminUsers.reduce((acc, u) => {
     (u.investments || []).forEach(inv => {
       const amount = inv.amount || 0
-      if (inv.status === 'approved' || inv.status === 'invested') {
+      if (inv.status === 'confirmed') {
         acc.raisedTotal += amount
-      } else {
+      } else if (inv.status !== 'withdrawn') {
         acc.pendingTotal += amount
       }
     })
@@ -362,9 +355,6 @@ export default function AdminPage() {
                   <p className={styles.activityItem}>
                     Pending investment approvals: <strong>{nonAdminUsers.reduce((count, u) => count + (u.investments || []).filter(inv => inv.status === 'pending').length, 0)}</strong>
                   </p>
-                  <p className={styles.activityItem}>
-                    Deletion requests: <strong>{nonAdminUsers.filter(user => user.deletionRequestedAt && user.accountStatus === 'deletion_requested').length}</strong>
-                  </p>
                 </div>
               </div>
             </div>
@@ -472,7 +462,7 @@ export default function AdminPage() {
                       <td>{user.isVerified ? 'Yes' : 'No'}</td>
                       <td>{(user.investments || []).length}</td>
                       <td>
-                        ${((user.investments || []).filter(inv => inv.status === 'approved' || inv.status === 'invested').reduce((sum, inv) => sum + (inv.amount || 0), 0)).toLocaleString()}
+                        ${((user.investments || []).filter(inv => inv.status === 'confirmed' || inv.status === 'approved' || inv.status === 'invested').reduce((sum, inv) => sum + (inv.amount || 0), 0)).toLocaleString()}
                       </td>
                       <td>
                         <div className={styles.actionGroup}>
@@ -512,75 +502,56 @@ export default function AdminPage() {
             </div>
           )}
 
-          {activeTab === 'deletions' && (
-            <div className={styles.tableContainer}>
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Email</th>
-                    <th>Requested</th>
-                    <th>Reason</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {nonAdminUsers
-                    .filter(user => user.deletionRequestedAt && user.accountStatus === 'deletion_requested')
-                    .map(user => (
-                      <tr key={user.id}>
-                        <td>
-                          <button
-                            className={styles.linkButton}
-                            onClick={() => router.push(`/admin/users/${user.id}`)}
-                          >
-                            {user.firstName || '-'} {user.lastName || ''}
-                          </button>
-                        </td>
-                        <td>{user.email}</td>
-                        <td>{user.deletionRequestedAt ? new Date(user.deletionRequestedAt).toLocaleDateString() : '-'}</td>
-                        <td>
-                          <div className={styles.deletionReason}>
-                            {user.deletionReason || 'No reason provided'}
-                          </div>
-                        </td>
-                        <td>
-                          <div className={styles.actionGroup}>
-                            <button
-                              className={styles.dangerButton}
-                              disabled={savingId === user.id}
-                              onClick={() => {
-                                if (confirm(`Are you sure you want to permanently delete ${user.firstName} ${user.lastName}'s account? This cannot be undone.`)) {
-                                  approveDeletion(user.id)
-                                }
-                              }}
-                            >
-                              {savingId === user.id ? 'Deleting...' : 'Approve Deletion'}
-                            </button>
-                            <button
-                              className={styles.secondaryButton}
-                              disabled={savingId === user.id}
-                              onClick={() => {
-                                if (confirm(`Are you sure you want to reject ${user.firstName} ${user.lastName}'s deletion request?`)) {
-                                  rejectDeletion(user.id)
-                                }
-                              }}
-                            >
-                              {savingId === user.id ? 'Rejecting...' : 'Reject Request'}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  {nonAdminUsers.filter(user => user.deletionRequestedAt && user.accountStatus === 'deletion_requested').length === 0 && (
+          {activeTab === 'withdrawals' && (
+            <div>
+              <div className={styles.headerRow}>
+                <h2 className={styles.sectionTitle}>Withdrawals</h2>
+                <button className={styles.secondaryButton} onClick={loadWithdrawals} disabled={isLoadingWithdrawals}>
+                  {isLoadingWithdrawals ? 'Refreshing...' : 'Refresh'}
+                </button>
+              </div>
+              <div className={styles.tableContainer}>
+                <table className={styles.table}>
+                  <thead>
                     <tr>
-                      <td colSpan="5" className={styles.emptyState}>No deletion requests pending review</td>
+                      <th>User</th>
+                      <th>Email</th>
+                      <th>Investment</th>
+                      <th>Amount</th>
+                      <th>Status</th>
+                      <th>Requested</th>
+                      <th>Eligible At</th>
+                      <th>Actions</th>
                     </tr>
-                  )}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {withdrawals.length === 0 ? (
+                      <tr><td colSpan="8" className={styles.muted}>No withdrawals</td></tr>
+                    ) : (
+                      withdrawals.map(w => (
+                        <tr key={w.id}>
+                          <td>{w.userId}</td>
+                          <td>{w.userEmail}</td>
+                          <td>{w.investmentId}</td>
+                          <td>${(w.amount || 0).toLocaleString()}</td>
+                          <td>{w.status}</td>
+                          <td>{w.requestedAt ? new Date(w.requestedAt).toLocaleString() : '-'}</td>
+                          <td>{w.payoutEligibleAt ? new Date(w.payoutEligibleAt).toLocaleString() : '-'}</td>
+                          <td>
+                            <div className={styles.actionGroup}>
+                              <button className={styles.approveButton} onClick={() => actOnWithdrawal('approve', w.userId, w.id)} disabled={w.status === 'approved'}>Approve</button>
+                              <button className={styles.dangerButton} onClick={() => actOnWithdrawal('reject', w.userId, w.id)} disabled={w.status === 'rejected'}>Reject</button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
+
 
           {/* Notifications UI removed */}
         </div>

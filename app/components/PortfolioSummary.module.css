@@ -10,7 +10,7 @@
 
 .content { display: flex; flex-direction: column; gap: var(--space-6); }
 
-.metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-3); }
+.metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); }
 
 .metric {
   display: flex;
@@ -91,7 +91,10 @@
   font-size: 28px;
   font-weight: 700;
   color: #1a1a1a;
-  margin: 0 0 var(--space-4) 0;
+  margin: var(--space-6) 0 var(--space-4) 0;
+}
+.transactionsWrapper {
+  margin-top: var(--space-6);
 }
 
 .investmentsList {
@@ -104,13 +107,13 @@
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  padding: 24px 32px;
+  padding: 20px 24px;
   margin-bottom: 16px;
   cursor: pointer;
   transition: all 0.2s ease;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
   min-height: 100px;
 }
 
@@ -123,13 +126,21 @@
 .cardTop {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
 }
 
 .cardLeft {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.amountLabel {
+  font-size: 12px;
+  color: var(--color-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .investmentAmount {
@@ -178,6 +189,17 @@
   color: #1a1a1a;
 }
 
+.investmentBadge {
+  display: inline-block;
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #e5e7eb;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
 .statusBadge {
   padding: 6px 12px;
   border-radius: 16px;
@@ -185,6 +207,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  margin-top: 2px;
 }
 
 .statusBadge.locked {
@@ -231,6 +254,11 @@
     gap: var(--space-2);
   }
   
+  .investmentCard {
+    padding: 16px 20px;
+    gap: 10px;
+  }
+  
   .cardRow {
     grid-template-columns: 1fr;
     gap: 12px;
@@ -244,6 +272,40 @@
   
   .cardActions {
     align-items: center;
+  }
+  
+  /* Improve mobile layout for investment card bottom row */
+  .cardBottom {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .cardBottom .compactMetric {
+    flex: 1 1 100%;
+  }
+  /* Make Investment ID span full width */
+  .cardBottom .compactMetric:first-child {
+    flex-basis: 100%;
+  }
+  /* Ensure long IDs wrap nicely on small screens */
+  .cardBottom .compactMetric:first-child .compactValue {
+    word-break: break-all;
+  }
+  /* Move View Details to its own line and align right */
+  .viewDetails {
+    width: 100%;
+    text-align: right;
+  }
+  /* Keep header row so status badge stays on the right */
+  .cardTop {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0;
+  }
+  .statusBadge {
+    align-self: auto;
+    margin-top: 2px;
   }
   
   .chartHeader {

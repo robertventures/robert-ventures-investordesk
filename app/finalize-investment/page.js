@@ -27,6 +27,9 @@ function ClientContent() {
   const [fundingMethod, setFundingMethod] = useState('')
   const [payoutMethod, setPayoutMethod] = useState('bank-account')
   const [isSaving, setIsSaving] = useState(false)
+  const [validationErrors, setValidationErrors] = useState([])
+  const [availableBanks, setAvailableBanks] = useState([])
+  const [selectedBankId, setSelectedBankId] = useState('')
 
   useEffect(() => {
     const load = async () => {
@@ -39,6 +42,16 @@ function ClientContent() {
         setUser(data.user)
         const inv = (data.user.investments || []).find(i => i.id === investmentId) || null
         setInvestment(inv)
+        const banks = Array.isArray(data.user.bankAccounts) ? data.user.bankAccounts : []
+        setAvailableBanks(banks)
+        // Preselect last used bank if present
+        if (banks.length > 0) {
+          const lastUsed = banks.reduce((latest, b) => {
+            const t = b.lastUsedAt ? new Date(b.lastUsedAt).getTime() : 0
+            return t > (latest.t || 0) ? { id: b.id, t } : latest
+          }, { id: '', t: 0 })
+          if (lastUsed.id) setSelectedBankId(lastUsed.id)
+        }
       }
     }
     load()
@@ -57,6 +70,7 @@ function ClientContent() {
     if (user?.banking) {
       setFundingMethod(user.banking.fundingMethod || '')
       setPayoutMethod(user.banking.payoutMethod || 'bank-account')
+      if (user.banking.defaultBankAccountId) setSelectedBankId(user.banking.defaultBankAccountId)
     }
   }, [user?.banking])
 
@@ -73,6 +87,13 @@ function ClientContent() {
       setFundingMethod('wire-transfer')
     }
   }, [investment?.accountType, fundingMethod])
+
+  // Clear validation errors when relevant inputs change
+  useEffect(() => {
+    if (validationErrors.length) {
+      setValidationErrors([])
+    }
+  }, [accredited, accreditedType, tenPercentConfirmed, fundingMethod, payoutMethod, selectedBankId])
 
   if (!user) return <div className={styles.loading}>Loading...</div>
 
@@ -181,7 +202,25 @@ function ClientContent() {
                   <span>Bank Transfer</span>
                 </label>
                 {fundingMethod === 'bank-transfer' && (
-                  <button type="button" className={styles.secondaryButton}>Connect Funding Bank Account</button>
+                  <div>
+                    {availableBanks.length > 0 ? (
+                      <div style={{ marginTop: 8 }}>
+                        <label style={{ fontWeight: 600, marginRight: 8 }}>Select Bank:</label>
+                        <select
+                          className={styles.secondaryButton}
+                          value={selectedBankId || ''}
+                          onChange={(e) => setSelectedBankId(e.target.value)}
+                        >
+                          {availableBanks.map(b => (
+                            <option key={b.id} value={b.id}>{b.nickname || 'Bank Account'}</option>
+                          ))}
+                          <option value="">Use Default Bank</option>
+                        </select>
+                      </div>
+                    ) : (
+                      <div className={styles.bankBox} style={{ marginTop: 8 }}>Default Bank will be used</div>
+                    )}
+                  </div>
                 )}
               </div>
             )}
@@ -280,22 +319,55 @@ function ClientContent() {
       <div className={styles.actions}>
         <button
           className={styles.primaryButton}
-          disabled={
-            isSaving ||
-            !accredited ||
-            (accredited === 'accredited' && !accreditedType) ||
-            (accredited === 'not_accredited' && !tenPercentConfirmed) ||
-            !fundingMethod
-          }
+          disabled={isSaving}
           onClick={async () => {
             if (!investment) return
+            // Validate required fields before continuing
+            const errors = []
+            if (!accredited) {
+              errors.push('Select whether you are an accredited investor.')
+            }
+            if (accredited === 'accredited' && !accreditedType) {
+              errors.push('Select an accredited investor type.')
+            }
+            if (accredited === 'not_accredited' && !tenPercentConfirmed) {
+              errors.push('Confirm the 10% investment limit acknowledgement.')
+            }
+            if (!fundingMethod) {
+              errors.push('Choose a funding method.')
+            }
+            if (investment?.paymentFrequency === 'monthly' && payoutMethod !== 'bank-account') {
+              errors.push('Select a payout method for monthly earnings.')
+            }
+            if (errors.length) {
+              setValidationErrors(errors)
+              return
+            }
             setIsSaving(true)
             try {
               const userId = user.id
               const investmentId = investment.id
               const earningsMethod = investment.paymentFrequency === 'monthly' ? payoutMethod : 'compounding'
+
+              // Determine bank account to use when bank-transfer is selected
+              let bankToUse = null
+              if (fundingMethod === 'bank-transfer') {
+                const nowIso = new Date().toISOString()
+                const existing = availableBanks.find(b => b.id === selectedBankId)
+                if (existing) {
+                  bankToUse = { ...existing, lastUsedAt: nowIso }
+                } else {
+                  bankToUse = {
+                    id: `bank-${Date.now()}`,
+                    nickname: 'Default Bank',
+                    type: 'ach',
+                    createdAt: nowIso,
+                    lastUsedAt: nowIso
+                  }
+                }
+              }
               
-              // Update the draft investment to pending status with compliance data
+              // Update the draft investment to pending status with compliance and banking data
               await fetch(`/api/users/${userId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
@@ -308,13 +380,24 @@ function ClientContent() {
                       accreditedType: accredited === 'accredited' ? accreditedType : null,
                       tenPercentLimitConfirmed: accredited === 'not_accredited' ? tenPercentConfirmed : null
                     },
+                    banking: {
+                      fundingMethod,
+                      earningsMethod,
+                      bank: bankToUse ? { id: bankToUse.id, nickname: bankToUse.nickname, type: bankToUse.type } : null
+                    },
                     status: 'pending',
                     submittedAt: new Date().toISOString()
                   }
                 })
               })
               
-              // Store banking details on user account (not investment-specific)
+              // Store banking details and bank accounts on user account
+              const nextBankAccounts = (() => {
+                if (!bankToUse) return availableBanks
+                const others = availableBanks.filter(b => b.id !== bankToUse.id)
+                return [bankToUse, ...others]
+              })()
+
               await fetch(`/api/users/${userId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
@@ -322,8 +405,10 @@ function ClientContent() {
                   banking: { 
                     fundingMethod, 
                     earningsMethod, 
-                    payoutMethod 
-                  }
+                    payoutMethod,
+                    ...(bankToUse ? { defaultBankAccountId: bankToUse.id } : {})
+                  },
+                  ...(bankToUse ? { bankAccounts: nextBankAccounts } : {})
                 })
               })
               
@@ -337,6 +422,16 @@ function ClientContent() {
         >
           {isSaving ? 'Saving...' : 'Continue'}
         </button>
+        {validationErrors.length > 0 && (
+          <div className={styles.warning}>
+            <div className={styles.warningTitle}>Please complete the following before continuing:</div>
+            <ul className={styles.warningList}>
+              {validationErrors.map((msg, idx) => (
+                <li key={idx}>{msg}</li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     </div>
   )
