@@ -19,6 +19,12 @@ function eventMeta(ev) {
       return { icon: '📈', iconClass: styles.distribution, title: 'Monthly Compounded' }
     case 'withdrawal_requested':
       return { icon: '🏦', iconClass: styles.withdrawal, title: 'Withdrawal Requested' }
+    case 'withdrawal_notice_started':
+      return { icon: '⏳', iconClass: styles.withdrawal, title: 'Withdrawal Notice Started' }
+    case 'withdrawal_approved':
+      return { icon: '✅', iconClass: styles.confirmed, title: 'Withdrawal Approved' }
+    case 'withdrawal_rejected':
+      return { icon: '❌', iconClass: styles.withdrawal, title: 'Withdrawal Rejected' }
     default:
       return { icon: '•', iconClass: '', title: ev.type }
   }

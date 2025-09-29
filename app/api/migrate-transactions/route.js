@@ -174,17 +174,45 @@ export async function POST() {
         }
       }
 
-      // Mirror withdrawals as events
+      // Mirror withdrawals as events based on status
       for (const wd of withdrawals) {
         if (!wd || !wd.id) continue
-        ensureEvent({
-          id: `tx-${wd.id}-withdrawal`,
-          type: 'withdrawal_requested',
+        const base = {
           investmentId: wd.investmentId,
-          amount: wd.amount || 0,
-          date: wd.requestedAt || new Date().toISOString(),
-          status: wd.status || 'pending'
-        })
+          amount: wd.amount || 0
+        }
+        if (wd.status === 'notice') {
+          ensureEvent({
+            id: `tx-${wd.id}-notice`,
+            type: 'withdrawal_notice_started',
+            ...base,
+            date: wd.noticeStartAt || wd.requestedAt || new Date().toISOString(),
+            noticeEndAt: wd.noticeEndAt || null,
+            payoutEligibleAt: wd.payoutEligibleAt || null
+          })
+        } else if (wd.status === 'approved') {
+          ensureEvent({
+            id: `tx-${wd.id}-approved`,
+            type: 'withdrawal_approved',
+            ...base,
+            date: wd.approvedAt || wd.paidAt || new Date().toISOString()
+          })
+        } else if (wd.status === 'rejected') {
+          ensureEvent({
+            id: `tx-${wd.id}-rejected`,
+            type: 'withdrawal_rejected',
+            ...base,
+            date: wd.rejectedAt || new Date().toISOString()
+          })
+        } else {
+          ensureEvent({
+            id: `tx-${wd.id}-requested`,
+            type: 'withdrawal_requested',
+            ...base,
+            date: wd.requestedAt || new Date().toISOString(),
+            status: wd.status || 'pending'
+          })
+        }
       }
 
       if (eventsCreated > 0) {

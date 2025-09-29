@@ -66,6 +66,21 @@ export default function InvestmentForm({ onCompleted, onReviewSummary, disableAu
   const annualEarnings1Year = (formData.investmentAmount * 0.08).toFixed(2)
   const annualEarnings3Year = (formData.investmentAmount * 0.10).toFixed(2)
 
+  // Upsell: how much more with compounding for selected lockup
+  const compoundingVsMonthlyDelta = (() => {
+    const amount = formData.investmentAmount || 0
+    if (amount <= 0) return 0
+    const isThreeYear = selectedLockup === '3-year'
+    const apy = isThreeYear ? 0.10 : 0.08
+    const years = isThreeYear ? 3 : 1
+    const monthlyRate = apy / 12
+    const totalMonths = years * 12
+    const compoundedEarnings = amount * Math.pow(1 + monthlyRate, totalMonths) - amount
+    const monthlyPaidEarnings = amount * apy * years
+    const delta = compoundedEarnings - monthlyPaidEarnings
+    return Math.max(0, Number(delta.toFixed(2)))
+  })()
+
   const buildSummary = (lockupPeriodSelection) => {
     const effectiveLockup = lockupPeriodSelection || selectedLockup
     const anticipated = effectiveLockup === '1-year' ? Number(earnings1Year) : Number(earnings3Year)
@@ -339,6 +354,11 @@ export default function InvestmentForm({ onCompleted, onReviewSummary, disableAu
               </div>
             </label>
           </div>
+          {formData.paymentFrequency === 'monthly' && compoundingVsMonthlyDelta > 0 && (
+            <div className={styles.radioDescription}>
+              You could earn <strong>${compoundingVsMonthlyDelta.toLocaleString()}</strong> more by choosing compounding for the {selectedLockup === '3-year' ? '3-year' : '1-year'} option.
+            </div>
+          )}
           {errors.paymentFrequency && (
             <div className={styles.errorMessage}>{errors.paymentFrequency}</div>
           )}

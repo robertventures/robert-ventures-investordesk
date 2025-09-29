@@ -12,6 +12,7 @@ export default function InvestmentDetailsContent({ investmentId }) {
   const [userData, setUserData] = useState(null)
   const [appTime, setAppTime] = useState(null)
   const [isWithdrawing, setIsWithdrawing] = useState(false)
+  const [withdrawalInfo, setWithdrawalInfo] = useState(null)
 
   useEffect(() => {
     const loadData = async () => {
@@ -35,6 +36,8 @@ export default function InvestmentDetailsContent({ investmentId }) {
           if (investment) {
             setInvestmentData(investment)
             setUserData(data.user)
+            const wd = (data.user.withdrawals || []).find(w => w.investmentId === investmentId)
+            if (wd) setWithdrawalInfo(wd)
           } else {
             router.push('/dashboard')
           }
@@ -62,8 +65,18 @@ export default function InvestmentDetailsContent({ investmentId }) {
       const data = await res.json()
       
       if (data.success) {
-        alert('Withdrawal request submitted successfully!')
-        router.push('/dashboard')
+        alert('Withdrawal notice started. You will be eligible for payout after the notice period.')
+        const wd = data.withdrawal
+        setWithdrawalInfo(wd)
+        setInvestmentData(prev => ({
+          ...prev,
+          status: 'withdrawal_notice',
+          withdrawalId: wd.id,
+          withdrawalNoticeStartAt: wd.noticeStartAt,
+          withdrawalNoticeEndAt: wd.noticeEndAt,
+          payoutEligibleAt: wd.payoutEligibleAt
+        }))
+        setActiveTab('withdrawal')
       } else {
         alert(data.error || 'Failed to process withdrawal')
       }
@@ -279,14 +292,16 @@ export default function InvestmentDetailsContent({ investmentId }) {
         </div>
       )}
 
-      {activeTab === 'withdrawal' && calculation.isWithdrawable && (
+      {activeTab === 'withdrawal' && (
         <div className={styles.tabContent}>
           <div className={styles.withdrawalCard}>
             <h3 className={styles.withdrawalTitle}>Withdrawal Available</h3>
             <div className={styles.withdrawalInfo}>
-              <p className={styles.withdrawalText}>
-                Your investment lockdown period has ended. You can now withdraw the full amount.
-              </p>
+              {investmentData.status === 'withdrawal_notice' ? (
+                <p className={styles.withdrawalText}>Withdrawal notice is in progress.</p>
+              ) : calculation.isWithdrawable ? (
+                <p className={styles.withdrawalText}>Your investment lockdown period has ended. You can now withdraw the full amount.</p>
+              ) : null}
               <div className={styles.withdrawalBreakdown}>
                 <div className={styles.breakdownItem}>
                   <span className={styles.detailLabel}>PRINCIPAL AMOUNT</span>
@@ -301,6 +316,36 @@ export default function InvestmentDetailsContent({ investmentId }) {
                   <span className={styles.detailValue}><strong>{formatCurrency(calculation.currentValue)}</strong></span>
                 </div>
               </div>
+              {investmentData.status === 'withdrawal_notice' && (
+                <div className={styles.withdrawalProjection}>
+                  <div className={styles.projectionHeader}>
+                    <h4 className={styles.projectionTitle}>Withdrawal Notice</h4>
+                    <span className={styles.projectionSub}>Payout after notice and admin approval</span>
+                  </div>
+                  <table className={styles.projectionTable}>
+                    <thead>
+                      <tr>
+                        <th>Stage</th>
+                        <th>Timestamp</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>Notice Started</td>
+                        <td>{investmentData.withdrawalNoticeStartAt ? new Date(investmentData.withdrawalNoticeStartAt).toLocaleString() : '-'}</td>
+                      </tr>
+                      <tr>
+                        <td>Notice Ends</td>
+                        <td>{investmentData.withdrawalNoticeEndAt ? new Date(investmentData.withdrawalNoticeEndAt).toLocaleString() : '-'}</td>
+                      </tr>
+                      <tr>
+                        <td>Payout Eligible At</td>
+                        <td>{investmentData.payoutEligibleAt ? new Date(investmentData.payoutEligibleAt).toLocaleString() : '-'}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
               <div className={styles.withdrawalProjection}>
                 <div className={styles.projectionHeader}>
                   <h4 className={styles.projectionTitle}>
@@ -339,13 +384,15 @@ export default function InvestmentDetailsContent({ investmentId }) {
                 </table>
                 <div className={styles.projectionNote}>For illustration only. Actual returns may vary.</div>
               </div>
-              <button
-                onClick={handleWithdrawal}
-                disabled={isWithdrawing}
-                className={styles.withdrawButton}
-              >
-                {isWithdrawing ? 'Processing Withdrawal...' : `Withdraw ${formatCurrency(calculation.currentValue)}`}
-              </button>
+              {investmentData.status !== 'withdrawal_notice' && (
+                <button
+                  onClick={handleWithdrawal}
+                  disabled={isWithdrawing}
+                  className={styles.withdrawButton}
+                >
+                  {isWithdrawing ? 'Processing Withdrawal...' : `Withdraw ${formatCurrency(calculation.currentValue)}`}
+                </button>
+              )}
             </div>
           </div>
         </div>
