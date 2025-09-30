@@ -75,12 +75,17 @@ export async function PUT(request, { params }) {
       }
 
       const existing = Array.isArray(user.investments) ? user.investments : []
-      // Ensure user has account type set from this investment
-      const shouldSetAccountType = newInvestment.accountType && !user.accountType
+      // Remove older drafts of the same account type, keep only the newest
+      const accountTypeForDraft = newInvestment.accountType || null
+      const filtered = existing.filter(inv => {
+        if (!inv || inv.status !== 'draft') return true
+        if (!accountTypeForDraft) return true
+        return (inv.accountType || null) !== accountTypeForDraft
+      })
+      // Do NOT lock the user's account type on draft investments. Only lock later when investment becomes pending/confirmed.
       const updatedUser = {
         ...user,
-        investments: [...existing, newInvestment],
-        ...(shouldSetAccountType ? { accountType: newInvestment.accountType } : {}),
+        investments: [...filtered, newInvestment],
         updatedAt: new Date().toISOString()
       }
       usersData.users[userIndex] = updatedUser
@@ -115,24 +120,24 @@ export async function PUT(request, { params }) {
         return NextResponse.json({ success: false, error: `Account type must be ${userAccountType} for this user.` }, { status: 400 })
       }
 
-      const updatedInvestment = {
+      let updatedInvestment = {
         ...investments[invIndex],
         ...body.fields,
         updatedAt: new Date().toISOString()
       }
       
-      // On confirmation, set server-driven confirmation date and lockdown end date
+      // On confirmation, set server-driven confirmation date and lock up end date
       if (body.fields.status === 'confirmed') {
         // Always derive confirmation date from server app time (supports time machine)
         const appTime = await getCurrentAppTime()
         const confirmedDate = new Date(appTime)
         const lockupYears = updatedInvestment.lockupPeriod === '3-year' ? 3 : 1
         
-        // Calculate lockdown end date if missing
-        if (!updatedInvestment.lockdownEndDate) {
-          const lockdownEndDate = new Date(confirmedDate)
-          lockdownEndDate.setFullYear(lockdownEndDate.getFullYear() + lockupYears)
-          updatedInvestment.lockdownEndDate = lockdownEndDate.toISOString()
+        // Calculate lock up end date if missing
+        if (!updatedInvestment.lockupEndDate) {
+          const lockupEndDate = new Date(confirmedDate)
+          lockupEndDate.setFullYear(lockupEndDate.getFullYear() + lockupYears)
+          updatedInvestment.lockupEndDate = lockupEndDate.toISOString()
         }
         
         // Override any client-provided confirmedAt with authoritative server/app time
@@ -149,14 +154,66 @@ export async function PUT(request, { params }) {
       
       investments[invIndex] = updatedInvestment
 
-      // Ensure user account type is set if this investment has one and user doesn't
-      const shouldSetAccountType = updatedInvestment.accountType && !user.accountType
+      // If investment transitions out of draft (pending/confirmed) and user has any other drafts
+      // with a different accountType, remove those stale drafts to avoid conflicting drafts.
+      const transitionedOutOfDraft = investments[invIndex].status === 'pending' || investments[invIndex].status === 'confirmed'
+      if (transitionedOutOfDraft && updatedInvestment.accountType) {
+        const keepAccountType = updatedInvestment.accountType
+        const beforeCount = investments.length
+        for (let i = investments.length - 1; i >= 0; i--) {
+          const inv = investments[i]
+          if (!inv) continue
+          if (inv.status === 'draft' && inv.accountType && inv.accountType !== keepAccountType) {
+            investments.splice(i, 1)
+          }
+        }
+        if (investments.length !== beforeCount) {
+          // Ensure variable still references the updated instance after potential splice operations
+          const idx = investments.findIndex(inv => inv.id === updatedInvestment.id)
+          if (idx !== -1) updatedInvestment = investments[idx]
+        }
+      }
+
+      // Lock user account type only when investment transitions to pending or confirmed
+      const isLockingStatus = updatedInvestment.status === 'pending' || updatedInvestment.status === 'confirmed'
+      const shouldSetAccountType = isLockingStatus && updatedInvestment.accountType && !user.accountType
       const updatedUser = { ...user, investments, ...(shouldSetAccountType ? { accountType: updatedInvestment.accountType } : {}), updatedAt: new Date().toISOString() }
       usersData.users[userIndex] = updatedUser
       if (!await saveUsers(usersData)) {
         return NextResponse.json({ success: false, error: 'Failed to update investment' }, { status: 500 })
       }
       return NextResponse.json({ success: true, user: updatedUser, investment: updatedInvestment })
+    }
+
+    // Custom action: delete draft investment by id
+    if (body._action === 'deleteInvestment' && body.investmentId) {
+      const usersData = await getUsers()
+      const userIndex = usersData.users.findIndex(u => u.id === id)
+      if (userIndex === -1) {
+        return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 })
+      }
+      const user = usersData.users[userIndex]
+      if (user.isAdmin) {
+        return NextResponse.json({ success: false, error: 'Admins cannot modify investments' }, { status: 403 })
+      }
+      const investments = Array.isArray(user.investments) ? user.investments : []
+      const invIndex = investments.findIndex(inv => inv.id === body.investmentId)
+      if (invIndex === -1) {
+        return NextResponse.json({ success: false, error: 'Investment not found' }, { status: 404 })
+      }
+      const inv = investments[invIndex]
+      if (inv.status !== 'draft') {
+        return NextResponse.json({ success: false, error: 'Only draft investments can be deleted' }, { status: 400 })
+      }
+
+      // Remove the investment
+      investments.splice(invIndex, 1)
+      const updatedUser = { ...user, investments, updatedAt: new Date().toISOString() }
+      usersData.users[userIndex] = updatedUser
+      if (!await saveUsers(usersData)) {
+        return NextResponse.json({ success: false, error: 'Failed to delete investment' }, { status: 500 })
+      }
+      return NextResponse.json({ success: true, user: updatedUser })
     }
 
 

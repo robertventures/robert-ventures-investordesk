@@ -116,7 +116,7 @@ export default function TransactionsTable() {
             rate: wd.investment?.lockupPeriod === '1-year' ? '8.00%' : '10.00%',
             term: wd.investment?.lockupPeriod === '1-year' ? '1' : '3',
             isCompounded: wd.investment?.paymentFrequency === 'compounding' ? 'Yes' : 'No',
-            maturityDate: wd.investment?.lockdownEndDate ? new Date(wd.investment.lockdownEndDate).toLocaleDateString() : '-',
+            maturityDate: wd.investment?.lockupEndDate ? new Date(wd.investment.lockupEndDate).toLocaleDateString() : '-',
             ytdEarned: `$${(wd.earningsAmount || 0).toFixed(2)}`,
             total: `$${(wd.amount || 0).toFixed(2)}`
           }))

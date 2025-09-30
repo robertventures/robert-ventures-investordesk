@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getUsers, saveUsers } from '../../../lib/database'
 
-// POST - Migrate existing investments to add missing confirmedAt and lockdownEndDate fields
+// POST - Migrate existing investments to add missing confirmedAt and lockupEndDate fields
 export async function POST(request) {
   try {
     const usersData = await getUsers()
@@ -14,10 +14,10 @@ export async function POST(request) {
       
       for (const investment of user.investments) {
         // Migrate old 'pending' investments that should now be 'confirmed'
-        // AND remove lockdown/confirmation dates from investments that should just be 'pending'
+        // AND remove lock up/confirmation dates from investments that should just be 'pending'
         if (investment.status === 'pending') {
-          // Check if this investment has lockdown dates (meaning it was already "confirmed" in old system)
-          if (investment.lockdownEndDate || investment.confirmedAt) {
+          // Check if this investment has lock up dates (meaning it was already "confirmed" in old system)
+          if (investment.lockupEndDate || investment.confirmedAt) {
             // This was already confirmed, change status to 'confirmed'
             investment.status = 'confirmed'
             investment.updatedAt = new Date().toISOString()
@@ -25,9 +25,9 @@ export async function POST(request) {
             migratedCount++
           } else {
             // This is truly pending (waiting for admin confirmation)
-            // Remove any lockdown/confirmation dates that shouldn't be there
+            // Remove any lock up/confirmation dates that shouldn't be there
             if (investment.confirmedAt) delete investment.confirmedAt
-            if (investment.lockdownEndDate) delete investment.lockdownEndDate
+            if (investment.lockupEndDate) delete investment.lockupEndDate
             investment.updatedAt = new Date().toISOString()
             userUpdated = true
             migratedCount++

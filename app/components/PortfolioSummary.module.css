@@ -189,6 +189,26 @@
   color: #1a1a1a;
 }
 
+/* Right-aligned action area (e.g., Resume / Delete) */
+.cardActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+
+.deleteDraft {
+  color: #b91c1c;
+  font-weight: 600;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+.deleteDraft:hover {
+  text-decoration: underline;
+}
+
 .investmentBadge {
   display: inline-block;
   background: #f3f4f6;
@@ -218,6 +238,12 @@
 .statusBadge.available {
   background: #d1fae5;
   color: #065f46;
+}
+
+/* Draft status badge (yellow like locked) */
+.statusBadge.draft {
+  background: #fef3c7;
+  color: #92400e;
 }
 
 .viewDetails {
@@ -306,6 +332,16 @@
   .statusBadge {
     align-self: auto;
     margin-top: 2px;
+  }
+  /* Actions area on mobile */
+  .cardActions {
+    width: 100%;
+    justify-content: space-between;
+    margin-left: 0;
+  }
+  .cardActions .viewDetails {
+    width: auto;
+    text-align: right;
   }
   
   .chartHeader {

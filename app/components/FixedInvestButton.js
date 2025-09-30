@@ -23,6 +23,10 @@ export default function FixedInvestButton() {
   }, [])
 
   const handleMakeInvestment = () => {
+    try {
+      // Force a fresh draft on new investment flow
+      localStorage.removeItem('currentInvestmentId')
+    } catch {}
     router.push('/investment')
   }
 

@@ -97,13 +97,33 @@ export default function PortfolioSummary() {
                 totalEarnings: 0,
                 monthsElapsed: 0,
                 isWithdrawable: false,
-                lockdownEndDate: null
+                lockupEndDate: null
               },
               status: {
                 status: 'pending',
                 statusLabel: 'Pending Confirmation',
                 isActive: false,
                 isLocked: true
+              }
+            })
+          })
+          
+          // Add draft investments to display to allow resuming
+          draftInvestments.forEach(inv => {
+            investmentDetails.push({
+              ...inv,
+              calculation: {
+                currentValue: inv.amount,
+                totalEarnings: 0,
+                monthsElapsed: 0,
+                isWithdrawable: false,
+                lockupEndDate: null
+              },
+              status: {
+                status: 'draft',
+                statusLabel: 'Draft',
+                isActive: false,
+                isLocked: false
               }
             })
           })
@@ -174,8 +194,13 @@ export default function PortfolioSummary() {
     return () => ro.disconnect()
   }, [])
 
-  const handleInvestmentClick = (investmentId) => {
-    router.push(`/investment-details/${investmentId}`)
+  const handleInvestmentClick = (inv) => {
+    if (inv?.status?.status === 'draft') {
+      try { localStorage.setItem('currentInvestmentId', inv.id) } catch {}
+      router.push('/investment')
+      return
+    }
+    router.push(`/investment-details/${inv.id}`)
   }
 
   if (!userData) {
@@ -298,22 +323,36 @@ export default function PortfolioSummary() {
         </div>
       </div>
       
-      {/* Activity embedded on main dashboard */}
+      {/* Activity embedded on main dashboard (above investments) */}
       <div className={styles.transactionsWrapper}>
         <h2 className={styles.investmentsTitle}>ACTIVITY</h2>
         <TransactionsList limit={5} />
       </div>
 
-      {/* Investments Section - Moved to Bottom */}
-      {portfolioData.investments.length > 0 && (
-        <div className={styles.investmentsSection}>
-          <h2 className={styles.investmentsTitle}>INVESTMENTS</h2>
+      {/* Investments Section - Always visible with empty state */}
+      <div className={styles.investmentsSection}>
+        <h2 className={styles.investmentsTitle}>INVESTMENTS</h2>
+        {portfolioData.investments.length === 0 ? (
+          <div className={styles.investmentsList}>
+            <div className={styles.investmentCard} style={{ cursor: 'default' }}>
+              <div className={styles.cardTop}>
+                <div className={styles.cardLeft}>
+                  <div className={styles.amountLabel}>No investments yet</div>
+                  <div className={styles.investmentType}>Start your first investment to begin earning</div>
+                </div>
+              </div>
+              <div className={styles.cardBottom}>
+                <div className={styles.viewDetails} onClick={() => router.push('/investment')}>Start an Investment →</div>
+              </div>
+            </div>
+          </div>
+        ) : (
           <div className={styles.investmentsList}>
             {portfolioData.investments.map(inv => (
               <div 
                 key={inv.id} 
                 className={styles.investmentCard}
-                onClick={() => handleInvestmentClick(inv.id)}
+                onClick={() => handleInvestmentClick(inv)}
               >
                 <div className={styles.cardTop}>
                   <div className={styles.cardLeft}>
@@ -323,7 +362,7 @@ export default function PortfolioSummary() {
                       {inv.lockupPeriod === '3-year' ? '3Y' : '1Y'} • {inv.paymentFrequency === 'monthly' ? 'Monthly' : 'Compound'}
                     </div>
                   </div>
-                  <span className={`${styles.statusBadge} ${inv.status.isLocked ? styles.locked : styles.available}`}>
+                  <span className={`${styles.statusBadge} ${inv.status.status === 'draft' ? styles.draft : (inv.status.isLocked ? styles.locked : styles.available)}`}>
                     {inv.status.statusLabel === 'Available for Withdrawal' ? 'Available' : inv.status.statusLabel}
                   </span>
                 </div>
@@ -334,7 +373,7 @@ export default function PortfolioSummary() {
                   </div>
                   <div className={styles.compactMetric}>
                     <span className={styles.compactLabel}>Approval Date</span>
-                    <span className={styles.compactValue}>{inv.confirmedAt ? formatDate(inv.confirmedAt) : 'Pending Approval'}</span>
+                    <span className={styles.compactValue}>{inv.confirmedAt ? formatDate(inv.confirmedAt) : (inv.status.status === 'pending' ? 'Pending Approval' : '—')}</span>
                   </div>
                   <div className={styles.compactMetric}>
                     <span className={styles.compactLabel}>Current Bond Value</span>
@@ -344,13 +383,104 @@ export default function PortfolioSummary() {
                     <span className={styles.compactLabel}>Earnings</span>
                     <span className={styles.compactValue}>{formatCurrency(inv.calculation.totalEarnings)}</span>
                   </div>
-                  <div className={styles.viewDetails}>View Details →</div>
+                  {/* Actions: Resume/View; show Delete for drafts */}
+                  <div className={styles.cardActions}>
+                    {inv.status.status === 'draft' && (
+                      <button
+                        className={styles.deleteDraft}
+                        onClick={async (e) => {
+                          e.stopPropagation()
+                          if (!confirm('Delete this draft? This cannot be undone.')) return
+                          try {
+                            const userId = localStorage.getItem('currentUserId')
+                            const res = await fetch(`/api/users/${userId}`, {
+                              method: 'PUT',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ _action: 'deleteInvestment', investmentId: inv.id })
+                            })
+                            const data = await res.json()
+                            if (!data.success) {
+                              alert(data.error || 'Failed to delete draft')
+                              return
+                            }
+                            // Refresh local view
+                            setUserData(data.user)
+                            // Recompute portfolio from updated user
+                            const nextInvestments = data.user.investments || []
+                            const confirmedInvestments = nextInvestments.filter(i => i.status === 'confirmed')
+                            const pendingInvestments = nextInvestments.filter(i => i.status === 'pending')
+                            const draftInvestments = nextInvestments.filter(i => i.status === 'draft')
+                            const transactions = Array.isArray(data.user.transactions) ? data.user.transactions : []
+                            let totalInvested = 0
+                            let totalEarnings = 0
+                            let totalCurrentValue = 0
+                            const investmentDetails = []
+                            const currentAppTime = appTime || new Date().toISOString()
+                            confirmedInvestments.forEach(i => {
+                              const calculation = calculateInvestmentValue(i, currentAppTime)
+                              const status = getInvestmentStatus(i, currentAppTime)
+                              totalInvested += i.amount || 0
+                              if (i.paymentFrequency === 'monthly') {
+                                const paid = transactions
+                                  .filter(ev => ev.type === 'monthly_distribution' && ev.investmentId === i.id && new Date(ev.date) <= new Date(currentAppTime))
+                                  .reduce((sum, ev) => sum + (Number(ev.amount) || 0), 0)
+                                totalEarnings += Math.round(paid * 100) / 100
+                              } else {
+                                totalEarnings += calculation.totalEarnings
+                              }
+                              if (i.paymentFrequency === 'monthly') {
+                                totalCurrentValue += i.amount || 0
+                              } else {
+                                totalCurrentValue += calculation.currentValue
+                              }
+                              investmentDetails.push({ ...i, calculation, status })
+                            })
+                            const totalPending = [...pendingInvestments, ...draftInvestments].reduce((sum, i) => sum + (i.amount || 0), 0)
+                            pendingInvestments.forEach(i => {
+                              investmentDetails.push({
+                                ...i,
+                                calculation: { currentValue: i.amount, totalEarnings: 0, monthsElapsed: 0, isWithdrawable: false, lockupEndDate: null },
+                                status: { status: 'pending', statusLabel: 'Pending Confirmation', isActive: false, isLocked: true }
+                              })
+                            })
+                            draftInvestments.forEach(i => {
+                              investmentDetails.push({
+                                ...i,
+                                calculation: { currentValue: i.amount, totalEarnings: 0, monthsElapsed: 0, isWithdrawable: false, lockupEndDate: null },
+                                status: { status: 'draft', statusLabel: 'Draft', isActive: false, isLocked: false }
+                              })
+                            })
+                            setPortfolioData({
+                              totalInvested,
+                              totalPending,
+                              totalEarnings,
+                              totalCurrentValue,
+                              investments: investmentDetails
+                            })
+                          } catch (e) {
+                            console.error('Failed to delete draft', e)
+                            alert('Failed to delete draft')
+                          }
+                        }}
+                      >
+                        Delete Draft
+                      </button>
+                    )}
+                    <div className={styles.viewDetails}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleInvestmentClick(inv)
+                      }}
+                    >
+                      {inv.status.status === 'draft' ? 'Resume Draft →' : 'View Details →'}
+                    </div>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }

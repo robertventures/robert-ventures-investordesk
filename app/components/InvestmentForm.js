@@ -208,54 +208,10 @@ export default function InvestmentForm({ onCompleted, onReviewSummary, disableAu
         bonds,
       }
 
-      let existingInvestmentId = typeof window !== 'undefined' ? localStorage.getItem('currentInvestmentId') : null
-      const requiresNewDraft = async () => {
-        try {
-          const checkRes = await fetch(`/api/users/${userId}`)
-          if (!checkRes.ok) throw new Error('Failed to load user investments')
-          const checkData = await checkRes.json()
-          const investments = Array.isArray(checkData?.user?.investments) ? checkData.user.investments : []
-          const currentInvestment = investments.find(inv => inv.id === existingInvestmentId)
-          if (!currentInvestment) return true
-          return currentInvestment.status !== 'draft'
-        } catch (err) {
-          console.error('Failed to verify existing investment draft', err)
-          return true
-        }
-      }
+      // Always start a fresh draft for a new investment flow
+      try { if (typeof window !== 'undefined') localStorage.removeItem('currentInvestmentId') } catch {}
 
-      if (existingInvestmentId && await requiresNewDraft()) {
-        if (typeof window !== 'undefined') localStorage.removeItem('currentInvestmentId')
-        existingInvestmentId = null
-      }
-
-      if (existingInvestmentId) {
-        // Update existing draft investment instead of creating a new one
-        const updateRes = await fetch(`/api/users/${userId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            _action: 'updateInvestment',
-            investmentId: existingInvestmentId,
-            fields: { ...investmentPayload, status: 'draft' }
-          })
-        })
-        const updateData = await updateRes.json()
-        if (!updateData.success) {
-          // If the server says the investment does not exist, clear stale id and create new
-          if (updateData.error === 'Investment not found') {
-            if (typeof window !== 'undefined') localStorage.removeItem('currentInvestmentId')
-          } else {
-            alert(updateData.error || 'Failed to update investment')
-            return
-          }
-        } else {
-          notifyCompletion(existingInvestmentId, lockupPeriod)
-          return
-        }
-      }
-
-      // No existing investment: create draft investment
+      // Create new draft investment
       const res = await fetch(`/api/users/${userId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -315,6 +271,11 @@ export default function InvestmentForm({ onCompleted, onReviewSummary, disableAu
                 </div>
                 {errors.investmentAmount && (
                   <div className={`${styles.errorMessage} ${styles.amountError}`}>{errors.investmentAmount}</div>
+                )}
+                {formData.investmentAmount > 100000 && (
+                  <div className={styles.wireTransferNotice}>
+                    For investments above $100,000, payment must be made through wire transfer.
+                  </div>
                 )}
               </div>
             </div>

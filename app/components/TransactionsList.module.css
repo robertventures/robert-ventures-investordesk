@@ -1,4 +1,4 @@
-.listSection { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-4); margin-top: var(--space-6); }
+.listSection { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-4); }
 
 .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-3); }
 .title { font-size: 28px; font-weight: 700; color: #111827; margin: 0; }

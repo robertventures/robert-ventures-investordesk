@@ -267,10 +267,10 @@ export default function InvestmentDetailsContent({ investmentId }) {
                   <span className={styles.detailLabel}>BOND APPROVED</span>
                   <span className={styles.detailValue}>{investmentData.confirmedAt ? formatDate(investmentData.confirmedAt) : 'Pending Approval'}</span>
                 </div>
-                {investmentData.status === 'confirmed' && calculation.lockdownEndDate && (
+                {investmentData.status === 'confirmed' && calculation.lockupEndDate && (
                   <div className={styles.detailItem}>
-                    <span className={styles.detailLabel}>LOCKDOWN END DATE</span>
-                    <span className={styles.detailValue}>{formatDate(calculation.lockdownEndDate)}</span>
+                    <span className={styles.detailLabel}>LOCK UP END DATE</span>
+                    <span className={styles.detailValue}>{formatDate(calculation.lockupEndDate)}</span>
                   </div>
                 )}
               </div>
@@ -300,7 +300,7 @@ export default function InvestmentDetailsContent({ investmentId }) {
               {investmentData.status === 'withdrawal_notice' ? (
                 <p className={styles.withdrawalText}>Withdrawal notice is in progress.</p>
               ) : calculation.isWithdrawable ? (
-                <p className={styles.withdrawalText}>Your investment lockdown period has ended. You can now withdraw the full amount.</p>
+                <p className={styles.withdrawalText}>Your investment lock up period has ended. You can now withdraw the full amount.</p>
               ) : null}
               <div className={styles.withdrawalBreakdown}>
                 <div className={styles.breakdownItem}>

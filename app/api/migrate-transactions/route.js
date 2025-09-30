@@ -20,17 +20,20 @@ export async function POST() {
     for (const user of usersData.users) {
       const investments = Array.isArray(user.investments) ? user.investments : []
       const withdrawals = Array.isArray(user.withdrawals) ? user.withdrawals : []
-      if (investments.length === 0 && withdrawals.length === 0) continue
 
       if (!Array.isArray(user.transactions)) {
         user.transactions = []
       }
 
       // Remove any future-dated generated events if app time moved backwards
+      // Also prune events tied to investments that no longer exist
+      const existingInvestmentIds = new Set((investments || []).map(i => i.id))
       user.transactions = user.transactions.filter(ev => {
         if (!ev || !ev.date) return true
         const evDate = new Date(ev.date)
         if (evDate > now) return false
+        // If this event references an investment that is gone, drop it
+        if (ev.investmentId && !existingInvestmentIds.has(ev.investmentId)) return false
         return true
       })
 
@@ -43,6 +46,16 @@ export async function POST() {
           return true
         }
         return false
+      }
+
+      // Account created event (always present when user.createdAt exists)
+      if (user.createdAt) {
+        ensureEvent({
+          id: `tx-${user.id}-account-created`,
+          type: 'account_created',
+          amount: 0,
+          date: user.createdAt
+        })
       }
 
       // Investment events

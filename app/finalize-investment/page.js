@@ -35,10 +35,13 @@ function ClientContent() {
     const load = async () => {
       const userId = localStorage.getItem('currentUserId')
       const investmentId = localStorage.getItem('currentInvestmentId')
-      if (!userId) return
+      if (!userId) {
+        window.location.href = '/'
+        return
+      }
       const res = await fetch(`/api/users/${userId}`)
       const data = await res.json()
-      if (data.success) {
+      if (data.success && data.user) {
         setUser(data.user)
         const inv = (data.user.investments || []).find(i => i.id === investmentId) || null
         setInvestment(inv)
@@ -52,6 +55,14 @@ function ClientContent() {
           }, { id: '', t: 0 })
           if (lastUsed.id) setSelectedBankId(lastUsed.id)
         }
+      } else {
+        try {
+          localStorage.removeItem('currentUserId')
+          localStorage.removeItem('signupEmail')
+          localStorage.removeItem('currentInvestmentId')
+        } catch {}
+        window.location.href = '/'
+        return
       }
     }
     load()
@@ -88,6 +99,13 @@ function ClientContent() {
     }
   }, [investment?.accountType, fundingMethod])
 
+  // Force wire transfer for investments above $100,000
+  useEffect(() => {
+    if (investment?.amount > 100000 && fundingMethod !== 'wire-transfer') {
+      setFundingMethod('wire-transfer')
+    }
+  }, [investment?.amount, fundingMethod])
+
   // Clear validation errors when relevant inputs change
   useEffect(() => {
     if (validationErrors.length) {
@@ -98,6 +116,7 @@ function ClientContent() {
   if (!user) return <div className={styles.loading}>Loading...</div>
 
   const isIra = investment?.accountType === 'ira'
+  const requiresWireTransfer = investment?.amount > 100000
 
   return (
     <div className={styles.sections}>
@@ -189,7 +208,7 @@ function ClientContent() {
         <div className={styles.subSection}>
           <div className={styles.groupTitle}>Funding</div>
           <div className={styles.radioGroup}>
-            {!isIra && (
+            {!isIra && !requiresWireTransfer && (
               <div className={styles.radioOption}>
                 <label>
                   <input

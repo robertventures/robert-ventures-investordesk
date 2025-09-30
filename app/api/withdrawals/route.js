@@ -47,12 +47,12 @@ export async function POST(request) {
     const appTime = await getCurrentAppTime()
     const now = new Date(appTime || new Date().toISOString())
     const currentValue = calculateInvestmentValue(investment, now.toISOString())
-    // Notice period starts now; withdrawal eligible at the later of lockdown end or notice end
+    // Notice period starts now; withdrawal eligible at the later of lock up end or notice end
     const noticeStartAt = now.toISOString()
     const noticeEndDate = new Date(now)
     noticeEndDate.setDate(noticeEndDate.getDate() + 90)
-    const lockdownEnd = currentValue.lockdownEndDate ? new Date(currentValue.lockdownEndDate) : new Date(now)
-    const payoutEligibleAt = new Date(Math.max(lockdownEnd.getTime(), noticeEndDate.getTime())).toISOString()
+    const lockupEnd = currentValue.lockupEndDate ? new Date(currentValue.lockupEndDate) : new Date(now)
+    const payoutEligibleAt = new Date(Math.max(lockupEnd.getTime(), noticeEndDate.getTime())).toISOString()
 
     // For monthly payout investments: withdraw principal only
     const isMonthly = investment.paymentFrequency === 'monthly'
@@ -80,7 +80,7 @@ export async function POST(request) {
         lockupPeriod: investment.lockupPeriod,
         paymentFrequency: investment.paymentFrequency,
         confirmedAt: investment.confirmedAt,
-        lockdownEndDate: investment.lockdownEndDate
+        lockupEndDate: investment.lockupEndDate
       }
     }
 

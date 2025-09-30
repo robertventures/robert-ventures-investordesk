@@ -16,6 +16,8 @@ export default function InvestmentPage() {
   const [isStep2Completed, setIsStep2Completed] = useState(false)
   const [reviewModeStep1, setReviewModeStep1] = useState(false)
   const [reviewModeStep2, setReviewModeStep2] = useState(false)
+  const [step1Confirmed, setStep1Confirmed] = useState(false)
+  const [step2Confirmed, setStep2Confirmed] = useState(false)
   const [step2Unlocked, setStep2Unlocked] = useState(false)
 
   const [selectedAccountType, setSelectedAccountType] = useState('individual')
@@ -114,6 +116,16 @@ export default function InvestmentPage() {
       try {
         const res = await fetch(`/api/users/${userId}`)
         const data = await res.json()
+        // If the account no longer exists, clear session and redirect
+        if (!data.success || !data.user) {
+          try {
+            localStorage.removeItem('currentUserId')
+            localStorage.removeItem('signupEmail')
+            localStorage.removeItem('currentInvestmentId')
+          } catch {}
+          window.location.href = '/'
+          return
+        }
         if (data.success && data.user?.isAdmin) {
           window.location.href = '/dashboard'
         }
@@ -150,34 +162,59 @@ export default function InvestmentPage() {
   const shouldShowSummaryStep1 = reviewModeStep1 && isStep1Completed && Boolean(investmentSummary)
   // Keep incomplete steps expanded regardless of active step
   const showStep1Edit = (!isStep1Completed) || (activeStep === 1 && !shouldShowSummaryStep1)
-  const isStep1Collapsed = isStep1Completed && !showStep1Edit
+  const isStep1Collapsed = step1Confirmed && !showStep1Edit
 
   const shouldShowSummaryStep2 = reviewModeStep2 && isStep2Completed && Boolean(identitySummary)
   // Keep incomplete steps expanded regardless of active step
   const showStep2Edit = (!isStep2Completed) || (activeStep === 2 && !shouldShowSummaryStep2)
-  const isStep2Collapsed = !step2Unlocked || (isStep2Completed && !showStep2Edit)
-  const canFinalize = shouldShowSummaryStep1 && shouldShowSummaryStep2
+  const isStep2Collapsed = !step2Unlocked || (step2Confirmed && !showStep2Edit)
+  const canFinalize = step1Confirmed && step2Confirmed
 
   return (
     <main className={styles.main}>
       <Header />
       <div className={styles.container}>
         <section className={`${stepStyles.card} ${isStep1Collapsed ? stepStyles.collapsed : ''}`}>
-          <header className={stepStyles.cardHeader} onClick={() => { setActiveStep(1); setReviewModeStep1(false) }}>
+          <header className={stepStyles.cardHeader} onClick={() => { setActiveStep(1); setReviewModeStep1(false); setStep1Confirmed(false) }}>
             <div className={stepStyles.stepCircle}>1</div>
             <h2 className={stepStyles.cardTitle}>Investment</h2>
-            {isStep1Completed && <div className={stepStyles.checkmark}>✓</div>}
+            {step1Confirmed && <div className={stepStyles.checkmark}>✓</div>}
           </header>
           {shouldShowSummaryStep1 && (
             <div className={stepStyles.reviewBlock}>
               {renderSummary(formattedInvestmentSummary)}
-              <button
-                type="button"
-                className={stepStyles.secondaryButton}
-                onClick={() => { setReviewModeStep1(false); setActiveStep(1) }}
-              >
-                Edit Selection
-              </button>
+              {!step1Confirmed ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <button
+                    type="button"
+                    className={stepStyles.primaryButton}
+                    onClick={() => {
+                      setStep1Confirmed(true)
+                      setStep2Unlocked(true)
+                      if (!isStep2Completed) {
+                        setActiveStep(2)
+                      }
+                    }}
+                  >
+                    Confirm Information
+                  </button>
+                  <button
+                    type="button"
+                    className={stepStyles.secondaryButton}
+                    onClick={() => { setReviewModeStep1(false); setActiveStep(1) }}
+                  >
+                    Edit Selection
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className={stepStyles.secondaryButton}
+                  onClick={() => { setReviewModeStep1(false); setActiveStep(1); setStep1Confirmed(false) }}
+                >
+                  Edit Selection
+                </button>
+              )}
             </div>
           )}
           {showStep1Edit && (
@@ -209,8 +246,7 @@ export default function InvestmentPage() {
                 onCompleted={() => {
                   setIsStep1Completed(true)
                   setReviewModeStep1(true)
-                  setStep2Unlocked(true)
-                  setActiveStep(2)
+                  // Don't unlock step 2 or change active step until user confirms
                 }}
                 disableAuthGuard
               />
@@ -219,10 +255,10 @@ export default function InvestmentPage() {
         </section>
 
         <section className={`${stepStyles.card} ${isStep2Collapsed ? stepStyles.collapsed : ''}`}>
-          <header className={stepStyles.cardHeader} onClick={() => { setStep2Unlocked(true); setActiveStep(2); setReviewModeStep2(false) }}>
+          <header className={stepStyles.cardHeader} onClick={() => { setStep2Unlocked(true); setActiveStep(2); setReviewModeStep2(false); setStep2Confirmed(false) }}>
             <div className={stepStyles.stepCircle}>2</div>
             <h2 className={stepStyles.cardTitle}>Investor Information</h2>
-            {isStep2Completed && <div className={stepStyles.checkmark}>✓</div>}
+            {step2Confirmed && <div className={stepStyles.checkmark}>✓</div>}
           </header>
           {showStep2Edit && (
             <div className={stepStyles.cardBody}>
@@ -242,13 +278,36 @@ export default function InvestmentPage() {
           {shouldShowSummaryStep2 && (
             <div className={stepStyles.reviewBlock}>
               {renderSummary(formattedIdentitySummary)}
-              <button
-                type="button"
-                className={`${stepStyles.secondaryButton}`}
-                onClick={() => { setReviewModeStep2(false); setActiveStep(2) }}
-              >
-                Edit Information
-              </button>
+              {!step2Confirmed ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <button
+                    type="button"
+                    className={stepStyles.primaryButton}
+                    onClick={() => {
+                      setStep2Confirmed(true)
+                      // Ensure step 1 is also in review mode
+                      setReviewModeStep1(v => (isStep1Completed ? true : v))
+                    }}
+                  >
+                    Confirm Information
+                  </button>
+                  <button
+                    type="button"
+                    className={stepStyles.secondaryButton}
+                    onClick={() => { setReviewModeStep2(false); setActiveStep(2) }}
+                  >
+                    Edit Information
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className={stepStyles.secondaryButton}
+                  onClick={() => { setReviewModeStep2(false); setActiveStep(2); setStep2Confirmed(false) }}
+                >
+                  Edit Information
+                </button>
+              )}
             </div>
           )}
         </section>

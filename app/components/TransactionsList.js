@@ -9,10 +9,12 @@ function formatCurrency(amount) {
 
 function eventMeta(ev) {
   switch (ev.type) {
+    case 'account_created':
+      return { icon: '👤', iconClass: styles.created, title: 'Account Created' }
     case 'investment_created':
-      return { icon: '🧾', iconClass: styles.created, title: 'Bond Created' }
+      return { icon: '🧾', iconClass: styles.created, title: 'Investment Created' }
     case 'investment_confirmed':
-      return { icon: '✅', iconClass: styles.confirmed, title: 'Bond Approved' }
+      return { icon: '✅', iconClass: styles.confirmed, title: 'Investment Confirmed' }
     case 'monthly_distribution':
       return { icon: '💸', iconClass: styles.distribution, title: 'Monthly Payout' }
     case 'monthly_compounded':
