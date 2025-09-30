@@ -265,7 +265,7 @@ export default function InvestmentDetailsContent({ investmentId }) {
                 </div>
                 <div className={styles.detailItem}>
                   <span className={styles.detailLabel}>BOND APPROVED</span>
-                  <span className={styles.detailValue}>{investmentData.confirmedAt ? formatDate(investmentData.confirmedAt) : 'Pending Approval'}</span>
+                <span className={styles.detailValue}>{investmentData.confirmedAt ? formatDate(investmentData.confirmedAt) : 'Pending'}</span>
                 </div>
                 {investmentData.status === 'confirmed' && calculation.lockupEndDate && (
                   <div className={styles.detailItem}>

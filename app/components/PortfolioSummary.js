@@ -101,7 +101,7 @@ export default function PortfolioSummary() {
               },
               status: {
                 status: 'pending',
-                statusLabel: 'Pending Confirmation',
+                statusLabel: 'Pending',
                 isActive: false,
                 isLocked: true
               }
@@ -128,6 +128,17 @@ export default function PortfolioSummary() {
             })
           })
           
+          // Sort investments: drafts first, then by creation date (most recent first)
+          investmentDetails.sort((a, b) => {
+            // Drafts always come first
+            if (a.status.status === 'draft' && b.status.status !== 'draft') return -1
+            if (a.status.status !== 'draft' && b.status.status === 'draft') return 1
+            // Within same status group, sort by creation date (most recent first)
+            const dateA = new Date(a.createdAt || 0)
+            const dateB = new Date(b.createdAt || 0)
+            return dateB - dateA
+          })
+
           const nextPortfolio = {
             totalInvested,
             totalPending,
@@ -373,7 +384,7 @@ export default function PortfolioSummary() {
                   </div>
                   <div className={styles.compactMetric}>
                     <span className={styles.compactLabel}>Approval Date</span>
-                    <span className={styles.compactValue}>{inv.confirmedAt ? formatDate(inv.confirmedAt) : (inv.status.status === 'pending' ? 'Pending Approval' : '—')}</span>
+                    <span className={styles.compactValue}>{inv.confirmedAt ? formatDate(inv.confirmedAt) : (inv.status.status === 'pending' ? 'Pending' : '—')}</span>
                   </div>
                   <div className={styles.compactMetric}>
                     <span className={styles.compactLabel}>Current Bond Value</span>
@@ -440,7 +451,7 @@ export default function PortfolioSummary() {
                               investmentDetails.push({
                                 ...i,
                                 calculation: { currentValue: i.amount, totalEarnings: 0, monthsElapsed: 0, isWithdrawable: false, lockupEndDate: null },
-                                status: { status: 'pending', statusLabel: 'Pending Confirmation', isActive: false, isLocked: true }
+                                status: { status: 'pending', statusLabel: 'Pending', isActive: false, isLocked: true }
                               })
                             })
                             draftInvestments.forEach(i => {
@@ -449,6 +460,16 @@ export default function PortfolioSummary() {
                                 calculation: { currentValue: i.amount, totalEarnings: 0, monthsElapsed: 0, isWithdrawable: false, lockupEndDate: null },
                                 status: { status: 'draft', statusLabel: 'Draft', isActive: false, isLocked: false }
                               })
+                            })
+                            // Sort investments: drafts first, then by creation date (most recent first)
+                            investmentDetails.sort((a, b) => {
+                              // Drafts always come first
+                              if (a.status.status === 'draft' && b.status.status !== 'draft') return -1
+                              if (a.status.status !== 'draft' && b.status.status === 'draft') return 1
+                              // Within same status group, sort by creation date (most recent first)
+                              const dateA = new Date(a.createdAt || 0)
+                              const dateB = new Date(b.createdAt || 0)
+                              return dateB - dateA
                             })
                             setPortfolioData({
                               totalInvested,

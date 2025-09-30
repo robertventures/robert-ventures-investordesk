@@ -34,6 +34,12 @@
 .viewAllButton { background: transparent; color: var(--color-accent); border: none; cursor: pointer; font-weight: 600; }
 .viewAllButton:hover { text-decoration: underline; }
 
+/* Expanded details */
+.detailsBox { margin-top: 8px; border-top: 1px dashed #e5e7eb; padding-top: 8px; display: grid; grid-template-columns: 140px 1fr; row-gap: 6px; column-gap: 8px; font-size: 12px; color: #374151; }
+.detailRow { display: contents; }
+.detailKey { color: #6b7280; }
+.detailVal { color: #111827; font-weight: 500; overflow-wrap: anywhere; }
+
 @media (max-width: 768px) {
   .event { grid-template-columns: 24px 1fr; }
   .amount { display: none; }

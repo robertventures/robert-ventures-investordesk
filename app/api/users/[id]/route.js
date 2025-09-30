@@ -56,6 +56,38 @@ export async function PUT(request, { params }) {
         return NextResponse.json({ success: false, error: 'Admins cannot create investments' }, { status: 403 })
       }
 
+      // VALIDATION: Investment amount must be positive
+      if (typeof body.investment.amount === 'number' && body.investment.amount <= 0) {
+        return NextResponse.json({ success: false, error: 'Investment amount must be greater than zero' }, { status: 400 })
+      }
+
+      // VALIDATION: Investment amount minimum $1,000
+      if (typeof body.investment.amount === 'number' && body.investment.amount < 1000) {
+        return NextResponse.json({ success: false, error: 'Minimum investment amount is $1,000' }, { status: 400 })
+      }
+
+      // VALIDATION: Investment amount must be divisible by $10
+      if (typeof body.investment.amount === 'number' && body.investment.amount % 10 !== 0) {
+        return NextResponse.json({ success: false, error: 'Investment amount must be in $10 increments' }, { status: 400 })
+      }
+
+      // VALIDATION: Payment frequency must be valid
+      const validFrequencies = ['compounding', 'monthly']
+      if (body.investment.paymentFrequency && !validFrequencies.includes(body.investment.paymentFrequency)) {
+        return NextResponse.json({ success: false, error: 'Payment frequency must be "compounding" or "monthly"' }, { status: 400 })
+      }
+
+      // VALIDATION: Lockup period must be valid
+      const validLockups = ['1-year', '3-year']
+      if (body.investment.lockupPeriod && !validLockups.includes(body.investment.lockupPeriod)) {
+        return NextResponse.json({ success: false, error: 'Lockup period must be "1-year" or "3-year"' }, { status: 400 })
+      }
+
+      // VALIDATION: IRA accounts cannot use monthly payment frequency (Bug #2)
+      if (body.investment.accountType === 'ira' && body.investment.paymentFrequency === 'monthly') {
+        return NextResponse.json({ success: false, error: 'IRA accounts can only use compounding payment frequency' }, { status: 400 })
+      }
+
       // Use user's account type for new investments
       const userAccountType = user.accountType
       if (userAccountType && body.investment.accountType && body.investment.accountType !== userAccountType) {
@@ -75,13 +107,8 @@ export async function PUT(request, { params }) {
       }
 
       const existing = Array.isArray(user.investments) ? user.investments : []
-      // Remove older drafts of the same account type, keep only the newest
-      const accountTypeForDraft = newInvestment.accountType || null
-      const filtered = existing.filter(inv => {
-        if (!inv || inv.status !== 'draft') return true
-        if (!accountTypeForDraft) return true
-        return (inv.accountType || null) !== accountTypeForDraft
-      })
+      // Remove all existing drafts so only one draft exists at a time
+      const filtered = existing.filter(inv => inv?.status !== 'draft')
       // Do NOT lock the user's account type on draft investments. Only lock later when investment becomes pending/confirmed.
       const updatedUser = {
         ...user,
@@ -113,6 +140,33 @@ export async function PUT(request, { params }) {
         return NextResponse.json({ success: false, error: 'Investment not found' }, { status: 404 })
       }
 
+      // VALIDATION: Investment amount must be positive (if being updated)
+      if (typeof body.fields.amount === 'number' && body.fields.amount <= 0) {
+        return NextResponse.json({ success: false, error: 'Investment amount must be greater than zero' }, { status: 400 })
+      }
+
+      // VALIDATION: Investment amount minimum $1,000 (if being updated)
+      if (typeof body.fields.amount === 'number' && body.fields.amount < 1000) {
+        return NextResponse.json({ success: false, error: 'Minimum investment amount is $1,000' }, { status: 400 })
+      }
+
+      // VALIDATION: Investment amount must be divisible by $10 (if being updated)
+      if (typeof body.fields.amount === 'number' && body.fields.amount % 10 !== 0) {
+        return NextResponse.json({ success: false, error: 'Investment amount must be in $10 increments' }, { status: 400 })
+      }
+
+      // VALIDATION: Payment frequency must be valid (if being updated)
+      const validFrequencies = ['compounding', 'monthly']
+      if (body.fields.paymentFrequency && !validFrequencies.includes(body.fields.paymentFrequency)) {
+        return NextResponse.json({ success: false, error: 'Payment frequency must be "compounding" or "monthly"' }, { status: 400 })
+      }
+
+      // VALIDATION: Lockup period must be valid (if being updated)
+      const validLockups = ['1-year', '3-year']
+      if (body.fields.lockupPeriod && !validLockups.includes(body.fields.lockupPeriod)) {
+        return NextResponse.json({ success: false, error: 'Lockup period must be "1-year" or "3-year"' }, { status: 400 })
+      }
+
       // Account type enforcement - must match user's account type
       const userAccountType = user.accountType
       const incomingType = body.fields.accountType
@@ -124,6 +178,12 @@ export async function PUT(request, { params }) {
         ...investments[invIndex],
         ...body.fields,
         updatedAt: new Date().toISOString()
+      }
+
+      // VALIDATION: IRA accounts cannot use monthly payment frequency (Bug #2)
+      // Check the merged investment after applying fields
+      if (updatedInvestment.accountType === 'ira' && updatedInvestment.paymentFrequency === 'monthly') {
+        return NextResponse.json({ success: false, error: 'IRA accounts can only use compounding payment frequency' }, { status: 400 })
       }
       
       // On confirmation, set server-driven confirmation date and lock up end date
@@ -154,24 +214,19 @@ export async function PUT(request, { params }) {
       
       investments[invIndex] = updatedInvestment
 
-      // If investment transitions out of draft (pending/confirmed) and user has any other drafts
-      // with a different accountType, remove those stale drafts to avoid conflicting drafts.
+      // If investment transitions out of draft (pending/confirmed), remove ALL remaining drafts
       const transitionedOutOfDraft = investments[invIndex].status === 'pending' || investments[invIndex].status === 'confirmed'
-      if (transitionedOutOfDraft && updatedInvestment.accountType) {
-        const keepAccountType = updatedInvestment.accountType
-        const beforeCount = investments.length
+      if (transitionedOutOfDraft) {
         for (let i = investments.length - 1; i >= 0; i--) {
           const inv = investments[i]
           if (!inv) continue
-          if (inv.status === 'draft' && inv.accountType && inv.accountType !== keepAccountType) {
+          if (inv.status === 'draft') {
             investments.splice(i, 1)
           }
         }
-        if (investments.length !== beforeCount) {
-          // Ensure variable still references the updated instance after potential splice operations
-          const idx = investments.findIndex(inv => inv.id === updatedInvestment.id)
-          if (idx !== -1) updatedInvestment = investments[idx]
-        }
+        // Ensure variable still references the updated instance after potential splice operations
+        const idx = investments.findIndex(inv => inv.id === updatedInvestment.id)
+        if (idx !== -1) updatedInvestment = investments[idx]
       }
 
       // Lock user account type only when investment transitions to pending or confirmed

@@ -65,8 +65,15 @@ export async function POST() {
         const lockup = inv.lockupPeriod
         const payFreq = inv.paymentFrequency
 
-        // Created event
-        if (inv.createdAt) {
+        // Created event: only for non-draft investments. If draft, ensure any previous created event is removed.
+        if (inv.status === 'draft') {
+          // Purge any previously created event for this draft investment
+          const createdId = `tx-${invId}-created`
+          if (existingIds.has(createdId)) {
+            user.transactions = user.transactions.filter(ev => ev.id !== createdId)
+            existingIds.delete(createdId)
+          }
+        } else if (inv.createdAt) {
           ensureEvent({
             id: `tx-${invId}-created`,
             type: 'investment_created',

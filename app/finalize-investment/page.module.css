@@ -118,3 +118,62 @@
 .warningTitle { font-weight: 600; margin-bottom: 6px; }
 .warningList { margin: 0; padding-left: 18px; }
 
+.signatureInput {
+  width: 100%;
+  padding: 16px 20px;
+  border: 2px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 16px;
+  font-weight: 500;
+  color: #1a1a1a;
+  background: #ffffff;
+  transition: all 0.2s ease;
+  font-family: 'Inter', sans-serif;
+  box-sizing: border-box;
+}
+
+.signatureInput:focus {
+  outline: none;
+  border-color: #1a1a1a;
+  box-shadow: 0 0 0 3px rgba(26, 26, 26, 0.1);
+}
+
+.signatureInput::placeholder {
+  color: #9ca3af;
+  font-weight: 400;
+}
+
+.downloadButton {
+  width: 100%;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 14px 20px;
+  font-weight: 600;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: #1a1a1a;
+}
+
+.downloadButton:hover {
+  background: #e5e7eb;
+  border-color: #9ca3af;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.lockedButton {
+  width: 100%;
+  background: #6b7280;
+  color: #fff;
+  border: none;
+  padding: 14px 20px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 16px;
+  cursor: not-allowed;
+  opacity: 0.8;
+}
+
+

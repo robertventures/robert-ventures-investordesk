@@ -32,11 +32,12 @@ function eventMeta(ev) {
   }
 }
 
-export default function TransactionsList({ limit = null, showViewAll = true, filterInvestmentId = null }) {
+export default function TransactionsList({ limit = null, showViewAll = true, filterInvestmentId = null, expandable = false }) {
   const router = useRouter()
   const [events, setEvents] = useState([])
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [expandedId, setExpandedId] = useState(null)
 
   useEffect(() => {
     const load = async () => {
@@ -77,8 +78,9 @@ export default function TransactionsList({ limit = null, showViewAll = true, fil
           const isDistribution = ev.type === 'monthly_distribution'
           const isWithdrawal = ev.type === 'withdrawal_requested'
           const amountClass = isWithdrawal ? styles.negative : styles.positive
+          const isExpanded = expandable && expandedId === ev.id
           return (
-            <div className={styles.event} key={ev.id}>
+            <div className={styles.event} key={ev.id} onClick={() => { if (expandable) setExpandedId(prev => prev === ev.id ? null : ev.id) }} style={{ cursor: expandable ? 'pointer' : 'default' }}>
               <div className={`${styles.icon} ${meta.iconClass}`}>{meta.icon}</div>
               <div className={styles.content}>
                 <div className={styles.primary}>{meta.title}</div>
@@ -90,13 +92,26 @@ export default function TransactionsList({ limit = null, showViewAll = true, fil
                   {ev.investmentId ? (
                     <span
                       className={`${styles.investmentBadge} ${styles.clickable}`}
-                      onClick={() => router.push(`/investment-details/${ev.investmentId}`)}
+                      onClick={(e) => { e.stopPropagation(); router.push(`/investment-details/${ev.investmentId}`) }}
                       title={ev.investmentId}
                     >
                       Investment {String(ev.investmentId).slice(-6)}
                     </span>
                   ) : null}
                 </div>
+                {isExpanded && (
+                  <div className={styles.detailsBox}>
+                    <div className={styles.detailRow}><span className={styles.detailKey}>Event ID</span><span className={styles.detailVal}>{ev.id}</span></div>
+                    <div className={styles.detailRow}><span className={styles.detailKey}>Type</span><span className={styles.detailVal}>{ev.type}</span></div>
+                    {ev.lockupPeriod ? <div className={styles.detailRow}><span className={styles.detailKey}>Lockup</span><span className={styles.detailVal}>{ev.lockupPeriod}</span></div> : null}
+                    {ev.paymentFrequency ? <div className={styles.detailRow}><span className={styles.detailKey}>Payment</span><span className={styles.detailVal}>{ev.paymentFrequency}</span></div> : null}
+                    {typeof ev.monthIndex !== 'undefined' ? <div className={styles.detailRow}><span className={styles.detailKey}>Month Index</span><span className={styles.detailVal}>{ev.monthIndex}</span></div> : null}
+                    {ev.payoutStatus ? <div className={styles.detailRow}><span className={styles.detailKey}>Payout Status</span><span className={styles.detailVal}>{ev.payoutStatus}</span></div> : null}
+                    {ev.payoutBankNickname ? <div className={styles.detailRow}><span className={styles.detailKey}>Bank</span><span className={styles.detailVal}>{ev.payoutBankNickname}</span></div> : null}
+                    {ev.noticeEndAt ? <div className={styles.detailRow}><span className={styles.detailKey}>Notice Ends</span><span className={styles.detailVal}>{new Date(ev.noticeEndAt).toLocaleDateString()}</span></div> : null}
+                    {ev.payoutEligibleAt ? <div className={styles.detailRow}><span className={styles.detailKey}>Payout Eligible</span><span className={styles.detailVal}>{new Date(ev.payoutEligibleAt).toLocaleDateString()}</span></div> : null}
+                  </div>
+                )}
               </div>
               <div className={`${styles.amount} ${amountClass}`}>
                 {formatCurrency(ev.amount || 0)}
