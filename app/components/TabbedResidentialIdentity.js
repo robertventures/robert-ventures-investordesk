@@ -536,7 +536,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
             </div>
             <div className={styles.field}> 
               <label className={styles.label}>Zip Code</label>
-              <input className={`${styles.input} ${errors['authorizedRep.zip'] ? styles.inputError : ''}`} name="authorizedRep.zip" value={form.authorizedRep.zip} onChange={handleChange} placeholder="Enter ZIP code" />
+              <input className={`${styles.input} ${errors['authorizedRep.zip'] ? styles.inputError : ''}`} name="authorizedRep.zip" value={form.authorizedRep.zip} onChange={handleChange} placeholder="Enter ZIP code" inputMode="numeric" />
               {errors['authorizedRep.zip'] && <span className={styles.error}>{errors['authorizedRep.zip']}</span>}
             </div>
             <div className={styles.field}> 
@@ -618,7 +618,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
         </div>
         <div className={styles.field}> 
           <label className={styles.label}>Zip Code</label>
-          <input className={`${styles.input} ${errors.zip ? styles.inputError : ''}`} name="zip" value={form.zip} onChange={handleChange} placeholder="Enter ZIP code" />
+          <input className={`${styles.input} ${errors.zip ? styles.inputError : ''}`} name="zip" value={form.zip} onChange={handleChange} placeholder="Enter ZIP code" inputMode="numeric" />
           {errors.zip && <span className={styles.error}>{errors.zip}</span>}
         </div>
         <div className={styles.field}> 
@@ -744,7 +744,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
               </div>
               <div className={styles.field}> 
                 <label className={styles.label}>Zip Code</label>
-                <input className={`${styles.input} ${errors['jointHolder.zip'] ? styles.inputError : ''}`} name="jointHolder.zip" value={form.jointHolder.zip} onChange={handleChange} placeholder="Enter ZIP code" />
+                <input className={`${styles.input} ${errors['jointHolder.zip'] ? styles.inputError : ''}`} name="jointHolder.zip" value={form.jointHolder.zip} onChange={handleChange} placeholder="Enter ZIP code" inputMode="numeric" />
                 {errors['jointHolder.zip'] && <span className={styles.error}>{errors['jointHolder.zip']}</span>}
               </div>
               <div className={styles.field}> 

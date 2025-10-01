@@ -60,10 +60,74 @@
   font-family: 'Inter', sans-serif;
 }
 
+/* Force consistent styling for select elements on mobile/iOS */
+select.input {
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
+  -webkit-border-radius: 6px !important;
+  -moz-border-radius: 6px !important;
+  border-radius: 6px !important;
+  background: #ffffff !important;
+  border: 2px solid #e5e7eb !important;
+  color: #1a1a1a !important;
+  font-family: 'Inter', sans-serif !important;
+  font-size: 16px !important;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e") !important;
+  background-position: right 16px center !important;
+  background-repeat: no-repeat !important;
+  background-size: 16px !important;
+  padding: 16px 20px !important;
+  padding-right: 48px !important;
+  cursor: pointer;
+  -webkit-box-shadow: none !important;
+  box-shadow: none !important;
+}
+
+/* Override iOS blue focus ring and styling on select elements */
+select.input:focus,
+select.input:active,
+select.input:focus-visible {
+  -webkit-tap-highlight-color: transparent !important;
+  -webkit-focus-ring-color: transparent !important;
+  -webkit-user-select: none !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(26, 26, 26, 0.1) !important;
+  border-color: #1a1a1a !important;
+  background-color: #ffffff !important;
+}
+
 .input:focus {
   outline: none;
   border-color: #1a1a1a;
   box-shadow: 0 0 0 3px rgba(26, 26, 26, 0.1);
+}
+
+/* Force consistent styling for date inputs on mobile/iOS */
+input[type="date"].input {
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
+  background: #ffffff !important;
+  border: 2px solid #e5e7eb !important;
+  color: #1a1a1a !important;
+  font-family: 'Inter', sans-serif !important;
+  font-size: 16px !important;
+  padding: 16px 20px !important;
+  -webkit-box-shadow: none !important;
+  box-shadow: none !important;
+}
+
+/* Override iOS styling for date inputs in focus state */
+input[type="date"].input:focus,
+input[type="date"].input:active,
+input[type="date"].input:focus-visible {
+  -webkit-tap-highlight-color: transparent !important;
+  -webkit-focus-ring-color: transparent !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(26, 26, 26, 0.1) !important;
+  border-color: #1a1a1a !important;
+  background-color: #ffffff !important;
 }
 
 /* Make calendar picker indicator clickable but not interfere with tab navigation */
