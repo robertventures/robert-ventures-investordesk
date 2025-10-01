@@ -5,6 +5,7 @@ import DashboardHeader from '../components/DashboardHeader'
 import PortfolioSummary from '../components/PortfolioSummary'
 import ProfileView from '../components/ProfileView'
 import DocumentsView from '../components/DocumentsView'
+import TransactionsList from '../components/TransactionsList'
 import FixedInvestButton from '../components/FixedInvestButton'
 import styles from './page.module.css'
 
@@ -46,15 +47,19 @@ export default function DashboardPage() {
     setActiveView(view)
     const newSearchParams = new URLSearchParams(searchParams.toString())
     newSearchParams.set('section', view)
-    if (view === 'activity') {
-      router.replace(`/notifications?${newSearchParams.toString()}`, { scroll: false })
-    } else {
-      router.replace(`/dashboard?${newSearchParams.toString()}`, { scroll: false })
-    }
+    router.replace(`/dashboard?${newSearchParams.toString()}`, { scroll: false })
   }
 
   const renderContent = () => {
     switch (activeView) {
+      case 'activity':
+        return (
+          <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '24px' }}>
+            <h1 style={{ margin: '0 0 16px 0' }}>Activity</h1>
+            <p style={{ margin: '0 0 16px 0', color: '#6b7280' }}>Click an activity item to view full details.</p>
+            <TransactionsList limit={null} showViewAll={false} expandable={true} />
+          </div>
+        )
       case 'profile':
         return <ProfileView />
       case 'documents':

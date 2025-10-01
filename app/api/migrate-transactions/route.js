@@ -2,6 +2,72 @@ import { NextResponse } from 'next/server'
 import { getUsers, saveUsers } from '../../../lib/database'
 import { getCurrentAppTime } from '../../../lib/appTime'
 
+// Helper functions matching investmentCalculations.js
+const MS_PER_DAY = 24 * 60 * 60 * 1000
+
+const toUtcStartOfDay = (value) => {
+  const date = new Date(value)
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()))
+}
+
+const addDaysUtc = (date, days) => {
+  return new Date(date.getTime() + days * MS_PER_DAY)
+}
+
+const getDaysInMonthUtc = (date) => {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate()
+}
+
+const diffDaysInclusive = (startDate, endDate) => {
+  return Math.floor((endDate.getTime() - startDate.getTime()) / MS_PER_DAY) + 1
+}
+
+const buildAccrualSegments = (startDate, endDate) => {
+  if (endDate < startDate) return []
+
+  const segments = []
+  let cursor = startDate
+
+  const pushPartial = (segmentStart, segmentEnd, daysInMonth) => {
+    const days = diffDaysInclusive(segmentStart, segmentEnd)
+    segments.push({
+      type: 'partial',
+      start: segmentStart,
+      end: segmentEnd,
+      days,
+      daysInMonth
+    })
+  }
+
+  if (cursor.getUTCDate() !== 1) {
+    const daysInMonth = getDaysInMonthUtc(cursor)
+    const monthEnd = toUtcStartOfDay(new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth(), daysInMonth)))
+    const segmentEnd = monthEnd < endDate ? monthEnd : endDate
+    pushPartial(cursor, segmentEnd, daysInMonth)
+    cursor = addDaysUtc(segmentEnd, 1)
+  }
+
+  while (cursor <= endDate) {
+    const daysInMonth = getDaysInMonthUtc(cursor)
+    const monthEnd = toUtcStartOfDay(new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth(), daysInMonth)))
+    if (monthEnd <= endDate) {
+      segments.push({
+        type: 'full',
+        start: cursor,
+        end: monthEnd,
+        days: daysInMonth,
+        daysInMonth
+      })
+      cursor = addDaysUtc(monthEnd, 1)
+    } else {
+      pushPartial(cursor, endDate, daysInMonth)
+      break
+    }
+  }
+
+  return segments
+}
+
 // POST - Generate and persist transaction events for users (idempotent per period)
 // - investment_created
 // - investment_confirmed
@@ -100,13 +166,13 @@ export async function POST() {
 
         // Monthly distributions for monthly payout investments (prorated first month)
         if (inv.status === 'confirmed' && inv.paymentFrequency === 'monthly' && inv.confirmedAt) {
-          const confirmedAt = new Date(inv.confirmedAt)
-          // Start day after confirmation
-          const startDate = new Date(confirmedAt)
-          startDate.setDate(startDate.getDate() + 1)
+          const confirmedDate = new Date(inv.confirmedAt)
+          // Interest starts accruing from the day AFTER confirmation
+          const accrualStartDate = addDaysUtc(toUtcStartOfDay(confirmedDate), 1)
 
           const annualRate = inv.lockupPeriod === '1-year' ? 0.08 : 0.10
           const monthlyRate = annualRate / 12
+          
           // Resolve payout destination (mocked as connected)
           const payoutMethod = user?.banking?.payoutMethod || 'bank-account'
           const investmentBank = inv?.banking?.bank
@@ -119,63 +185,98 @@ export async function POST() {
               payoutBankNickname = acct.nickname || 'Primary Account'
             }
           }
-          let periodStart = new Date(startDate)
+          
+          // Find all completed month-end boundaries
+          const completedMonthEnds = []
+          let cursor = new Date(accrualStartDate)
+          
+          while (true) {
+            const monthEnd = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 0))
+            if (monthEnd >= now) break
+            completedMonthEnds.push(monthEnd)
+            cursor = addDaysUtc(monthEnd, 1)
+          }
+          
+          if (completedMonthEnds.length === 0) continue
+          
+          // Build segments up to the last completed month end
+          const lastCompletedMonthEnd = completedMonthEnds[completedMonthEnds.length - 1]
+          const segments = buildAccrualSegments(accrualStartDate, lastCompletedMonthEnd)
+          
+          // Generate distribution events for each segment
           let monthIndex = 1
-          while (periodStart <= now) {
-            // Period end: same day next month
-            const periodEnd = new Date(periodStart)
-            periodEnd.setMonth(periodEnd.getMonth() + 1)
-            if (periodEnd > now) break
-
-            // Proration fraction based on days within the start month
-            const daysInMonth = new Date(periodStart.getFullYear(), periodStart.getMonth() + 1, 0).getDate()
-            const daysFromStartToMonthEnd = daysInMonth - periodStart.getDate() + 1
-            const fraction = monthIndex === 1 ? (daysFromStartToMonthEnd / daysInMonth) : 1
-            const monthlyAmount = (inv.amount || 0) * monthlyRate * fraction
-
-            const eventId = `tx-${invId}-md-${periodEnd.getFullYear()}-${String(periodEnd.getMonth() + 1).padStart(2, '0')}`
+          segments.forEach(segment => {
+            const monthlyInterest = (inv.amount || 0) * monthlyRate
+            let distributionAmount = 0
+            
+            if (segment.type === 'full') {
+              distributionAmount = monthlyInterest
+            } else {
+              const prorated = monthlyInterest * (segment.days / segment.daysInMonth)
+              distributionAmount = prorated
+            }
+            
+            const eventId = `tx-${invId}-md-${segment.end.getUTCFullYear()}-${String(segment.end.getUTCMonth() + 1).padStart(2, '0')}`
             ensureEvent({
               id: eventId,
               type: 'monthly_distribution',
               investmentId: invId,
-              amount: Math.round(monthlyAmount * 100) / 100,
+              amount: Math.round(distributionAmount * 100) / 100,
               lockupPeriod: lockup,
               paymentFrequency: payFreq,
-              date: periodEnd.toISOString(),
+              date: segment.end.toISOString(),
               monthIndex,
               payoutMethod,
               payoutBankId,
               payoutBankNickname,
               payoutStatus: 'completed'
             })
-
-            periodStart = periodEnd
+            
             monthIndex += 1
-          }
+          })
         }
 
         // Monthly compounding events (prorated first month, compounding principal)
         if (inv.status === 'confirmed' && inv.paymentFrequency === 'compounding' && inv.confirmedAt) {
-          const confirmedAt = new Date(inv.confirmedAt)
-          const startDate = new Date(confirmedAt)
-          startDate.setDate(startDate.getDate() + 1)
+          const confirmedDate = new Date(inv.confirmedAt)
+          // Interest starts accruing from the day AFTER confirmation
+          const accrualStartDate = addDaysUtc(toUtcStartOfDay(confirmedDate), 1)
 
           const annualRate = inv.lockupPeriod === '1-year' ? 0.08 : 0.10
           const monthlyRate = annualRate / 12
-          let periodStart = new Date(startDate)
-          let principal = amount
+          
+          // Find all completed month-end boundaries
+          const completedMonthEnds = []
+          let cursor = new Date(accrualStartDate)
+          
+          while (true) {
+            const monthEnd = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 0))
+            if (monthEnd >= now) break
+            completedMonthEnds.push(monthEnd)
+            cursor = addDaysUtc(monthEnd, 1)
+          }
+          
+          if (completedMonthEnds.length === 0) continue
+          
+          // Build segments up to the last completed month end
+          const lastCompletedMonthEnd = completedMonthEnds[completedMonthEnds.length - 1]
+          const segments = buildAccrualSegments(accrualStartDate, lastCompletedMonthEnd)
+          
+          // Generate compounding events for each segment
           let monthIndex = 1
-          while (periodStart <= now) {
-            const periodEnd = new Date(periodStart)
-            periodEnd.setMonth(periodEnd.getMonth() + 1)
-            if (periodEnd > now) break
-
-            const daysInMonth = new Date(periodStart.getFullYear(), periodStart.getMonth() + 1, 0).getDate()
-            const daysFromStartToMonthEnd = daysInMonth - periodStart.getDate() + 1
-            const fraction = monthIndex === 1 ? (daysFromStartToMonthEnd / daysInMonth) : 1
-            const interest = principal * monthlyRate * fraction
-
-            const eventId = `tx-${invId}-mc-${periodEnd.getFullYear()}-${String(periodEnd.getMonth() + 1).padStart(2, '0')}`
+          let balance = amount
+          
+          segments.forEach(segment => {
+            let interest = 0
+            
+            if (segment.type === 'full') {
+              interest = balance * monthlyRate
+            } else {
+              const dailyRate = monthlyRate / segment.daysInMonth
+              interest = balance * dailyRate * segment.days
+            }
+            
+            const eventId = `tx-${invId}-mc-${segment.end.getUTCFullYear()}-${String(segment.end.getUTCMonth() + 1).padStart(2, '0')}`
             ensureEvent({
               id: eventId,
               type: 'monthly_compounded',
@@ -183,14 +284,15 @@ export async function POST() {
               amount: Math.round(interest * 100) / 100,
               lockupPeriod: lockup,
               paymentFrequency: payFreq,
-              date: periodEnd.toISOString(),
-              monthIndex
+              date: segment.end.toISOString(),
+              monthIndex,
+              principal: Math.round(balance * 100) / 100
             })
 
-            principal += interest
-            periodStart = periodEnd
+            // Compound the interest into balance for next period
+            balance += interest
             monthIndex += 1
-          }
+          })
         }
       }
 
