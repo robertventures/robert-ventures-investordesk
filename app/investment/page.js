@@ -183,38 +183,13 @@ export default function InvestmentPage() {
           {shouldShowSummaryStep1 && (
             <div className={stepStyles.reviewBlock}>
               {renderSummary(formattedInvestmentSummary)}
-              {!step1Confirmed ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <button
-                    type="button"
-                    className={stepStyles.primaryButton}
-                    onClick={() => {
-                      setStep1Confirmed(true)
-                      setStep2Unlocked(true)
-                      if (!isStep2Completed) {
-                        setActiveStep(2)
-                      }
-                    }}
-                  >
-                    Confirm Information
-                  </button>
-                  <button
-                    type="button"
-                    className={stepStyles.secondaryButton}
-                    onClick={() => { setReviewModeStep1(false); setActiveStep(1) }}
-                  >
-                    Edit Selection
-                  </button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  className={stepStyles.secondaryButton}
-                  onClick={() => { setReviewModeStep1(false); setActiveStep(1); setStep1Confirmed(false) }}
-                >
-                  Edit Selection
-                </button>
-              )}
+              <button
+                type="button"
+                className={stepStyles.secondaryButton}
+                onClick={() => { setReviewModeStep1(false); setActiveStep(1); setStep1Confirmed(false) }}
+              >
+                Edit Selection
+              </button>
             </div>
           )}
           {showStep1Edit && (
@@ -246,7 +221,11 @@ export default function InvestmentPage() {
                 onCompleted={() => {
                   setIsStep1Completed(true)
                   setReviewModeStep1(true)
-                  // Don't unlock step 2 or change active step until user confirms
+                  setStep1Confirmed(true)
+                  setStep2Unlocked(true)
+                  if (!isStep2Completed) {
+                    setActiveStep(2)
+                  }
                 }}
                 disableAuthGuard
               />
@@ -268,6 +247,8 @@ export default function InvestmentPage() {
                 onCompleted={() => {
                   setIsStep2Completed(true)
                   setReviewModeStep2(true)
+                  setStep2Unlocked(true)
+                  setStep2Confirmed(true)
                   // Do not collapse step 1 unless it was actually completed
                   setReviewModeStep1(v => (isStep1Completed ? true : v))
                   setActiveStep(2)
@@ -278,36 +259,13 @@ export default function InvestmentPage() {
           {shouldShowSummaryStep2 && (
             <div className={stepStyles.reviewBlock}>
               {renderSummary(formattedIdentitySummary)}
-              {!step2Confirmed ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <button
-                    type="button"
-                    className={stepStyles.primaryButton}
-                    onClick={() => {
-                      setStep2Confirmed(true)
-                      // Ensure step 1 is also in review mode
-                      setReviewModeStep1(v => (isStep1Completed ? true : v))
-                    }}
-                  >
-                    Confirm Information
-                  </button>
-                  <button
-                    type="button"
-                    className={stepStyles.secondaryButton}
-                    onClick={() => { setReviewModeStep2(false); setActiveStep(2) }}
-                  >
-                    Edit Information
-                  </button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  className={stepStyles.secondaryButton}
-                  onClick={() => { setReviewModeStep2(false); setActiveStep(2); setStep2Confirmed(false) }}
-                >
-                  Edit Information
-                </button>
-              )}
+              <button
+                type="button"
+                className={stepStyles.secondaryButton}
+                onClick={() => { setReviewModeStep2(false); setActiveStep(2); setStep2Confirmed(false) }}
+              >
+                Edit Information
+              </button>
             </div>
           )}
         </section>
@@ -339,5 +297,3 @@ export default function InvestmentPage() {
     </main>
   )
 }
-
-

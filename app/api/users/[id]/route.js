@@ -211,6 +211,18 @@ export async function PUT(request, { params }) {
           updatedInvestment.confirmationSource = 'system'
         }
       }
+      // On rejection, stamp server time and audit metadata
+      else if (body.fields.status === 'rejected') {
+        const appTime = await getCurrentAppTime()
+        const rejectedDate = new Date(appTime)
+        updatedInvestment.rejectedAt = rejectedDate.toISOString()
+        if (body.adminUserId) {
+          updatedInvestment.rejectedByAdminId = body.adminUserId
+          updatedInvestment.rejectionSource = 'admin'
+        } else if (!updatedInvestment.rejectionSource) {
+          updatedInvestment.rejectionSource = 'system'
+        }
+      }
       
       investments[invIndex] = updatedInvestment
 

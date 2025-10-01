@@ -144,6 +144,33 @@ export default function AdminPage() {
     }
   }
 
+  const rejectInvestment = async (userId, investmentId) => {
+    try {
+      setSavingId(investmentId)
+      const res = await fetch(`/api/users/${userId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          _action: 'updateInvestment',
+          investmentId,
+          adminUserId: currentUser?.id,
+          fields: { status: 'rejected' }
+        })
+      })
+      const data = await res.json()
+      if (!data.success) {
+        alert(data.error || 'Failed to reject investment')
+        return
+      }
+      await refreshUsers()
+    } catch (e) {
+      console.error('Reject failed', e)
+      alert('An error occurred. Please try again.')
+    } finally {
+      setSavingId(null)
+    }
+  }
+
   const updateAppTime = async () => {
     if (!newAppTime) {
       alert('Please enter a valid date and time')
@@ -239,7 +266,7 @@ export default function AdminPage() {
       const amount = inv.amount || 0
       if (inv.status === 'confirmed') {
         acc.raisedTotal += amount
-      } else if (inv.status !== 'withdrawn') {
+      } else if (inv.status !== 'withdrawn' && inv.status !== 'rejected') {
         acc.pendingTotal += amount
       }
     })
@@ -395,15 +422,25 @@ export default function AdminPage() {
                                 <div className={styles.invCol}><b>Status:</b> {inv.status}</div>
                                 <div className={styles.invCol}><b>Created:</b> {inv.createdAt ? new Date(inv.createdAt).toLocaleDateString() : '-'}</div>
                                 <div className={styles.invActions}>
-                                  <button
-                                    className={styles.approveButton}
-                                    disabled={savingId === inv.id || inv.status === 'confirmed' || inv.status === 'withdrawn'}
-                                    onClick={() => approveInvestment(user.id, inv.id)}
-                                  >
-                                    {inv.status === 'confirmed' ? 'Confirmed' : 
-                                     inv.status === 'withdrawn' ? 'Withdrawn' : 
-                                     (savingId === inv.id ? 'Confirming...' : 'Confirm')}
-                                  </button>
+                                  <div className={styles.actionGroup}>
+                                    <button
+                                      className={styles.approveButton}
+                                      disabled={savingId === inv.id || inv.status === 'confirmed' || inv.status === 'withdrawn' || inv.status === 'rejected'}
+                                      onClick={() => approveInvestment(user.id, inv.id)}
+                                    >
+                                      {inv.status === 'confirmed' ? 'Confirmed' : 
+                                       inv.status === 'withdrawn' ? 'Withdrawn' : 
+                                       inv.status === 'rejected' ? 'Rejected' :
+                                       (savingId === inv.id ? 'Confirming...' : 'Confirm')}
+                                    </button>
+                                    <button
+                                      className={styles.dangerButton}
+                                      disabled={savingId === inv.id || inv.status === 'rejected' || inv.status === 'confirmed' || inv.status === 'withdrawn'}
+                                      onClick={() => rejectInvestment(user.id, inv.id)}
+                                    >
+                                      {inv.status === 'rejected' ? 'Rejected' : (savingId === inv.id ? 'Rejecting...' : 'Reject')}
+                                    </button>
+                                  </div>
                                 </div>
                               </div>
                             ))}
