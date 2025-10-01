@@ -31,6 +31,105 @@
   text-align: center;
 }
 
+.documentsList {
+  width: 100%;
+  max-width: 1200px;
+  margin-bottom: 40px;
+  text-align: left;
+}
+
+.sectionTitle {
+  font-size: 20px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0 0 24px 0;
+}
+
+.documentsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 20px;
+}
+
+.documentCard {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 24px;
+  display: flex;
+  gap: 16px;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.documentCard:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-2px);
+}
+
+.documentIcon {
+  font-size: 32px;
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
+.documentInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.documentTitle {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0 0 12px 0;
+}
+
+.documentDetails {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 16px;
+  font-size: 14px;
+  color: #6b7280;
+  line-height: 1.4;
+}
+
+.documentDetails p {
+  margin: 0;
+}
+
+.documentActions {
+  display: flex;
+  align-items: flex-start;
+}
+
+.downloadButton {
+  background: #10b981;
+  color: #ffffff;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.downloadButton:hover {
+  background: #059669;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);
+}
+
+.loading {
+  font-size: 16px;
+  color: #6b7280;
+  padding: 40px;
+}
+
 .emptyState {
   margin-bottom: 40px;
   max-width: 500px;
@@ -128,28 +227,51 @@
   .documentsContainer {
     padding: 20px;
   }
-  
+
   .title {
     font-size: 24px;
   }
-  
+
   .emptyIcon {
     font-size: 48px;
   }
-  
+
   .emptyTitle {
     font-size: 20px;
   }
-  
+
   .documentTypes {
     grid-template-columns: 1fr;
   }
-  
+
+  .documentsGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .documentCard {
+    flex-direction: column;
+    padding: 16px;
+  }
+
+  .documentIcon {
+    align-self: flex-start;
+  }
+
+  .documentDetails {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .documentActions {
+    margin-top: 12px;
+    justify-content: flex-end;
+  }
+
   .actions {
     flex-direction: column;
     width: 100%;
   }
-  
+
   .uploadButton,
   .requestButton {
     width: 100%;

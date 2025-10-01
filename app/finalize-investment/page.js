@@ -31,7 +31,6 @@ function ClientContent() {
   const [availableBanks, setAvailableBanks] = useState([])
   const [selectedBankId, setSelectedBankId] = useState('')
   const [agreeToTerms, setAgreeToTerms] = useState(false)
-  const [agreementLocked, setAgreementLocked] = useState(false)
   const [showDetails, setShowDetails] = useState(false)
 
   useEffect(() => {
@@ -197,7 +196,7 @@ function ClientContent() {
         </div>
       </Section>
 
-      <Section title="Document Signup" raw>
+      <Section title="Bond Documents" raw>
         <div className={styles.rows}>
           <div>
             <button
@@ -217,9 +216,6 @@ function ClientContent() {
                     firstName: user.firstName,
                     lastName: user.lastName,
                     email: user.email,
-                    phoneNumber: user.phoneNumber,
-                    dateOfBirth: user.dob,
-                    ssn: user.ssn,
                     address: user.address
                   },
                   investment: {
@@ -251,9 +247,6 @@ function ClientContent() {
                     firstName: user.jointHolder.firstName,
                     lastName: user.jointHolder.lastName,
                     email: user.jointHolder.email,
-                    phone: user.jointHolder.phone,
-                    dateOfBirth: user.jointHolder.dob,
-                    ssn: user.jointHolder.ssn,
                     address: user.jointHolder.address,
                     holdingType: user.jointHoldingType
                   }
@@ -280,23 +273,6 @@ function ClientContent() {
             <input type="checkbox" id="agree" checked={agreeToTerms} onChange={(e) => setAgreeToTerms(e.target.checked)} />
             <label htmlFor="agree">I have reviewed the agreement and agree to the terms.</label>
           </div>
-
-          {agreeToTerms && (
-            <div style={{ marginTop: 16 }}>
-              <button
-                type="button"
-                className={agreementLocked ? styles.lockedButton : styles.primaryButton}
-                onClick={() => {
-                  if (!agreementLocked) {
-                    setAgreementLocked(true)
-                  }
-                }}
-                disabled={agreementLocked}
-              >
-                {agreementLocked ? '🔒 Agreement Locked' : 'Sign & Lock Agreement'}
-              </button>
-            </div>
-          )}
         </div>
       </Section>
 
@@ -455,9 +431,6 @@ function ClientContent() {
             if (investment?.paymentFrequency === 'monthly' && payoutMethod !== 'bank-account') {
               errors.push('Select a payout method for monthly earnings.')
             }
-            if (!agreementLocked) {
-              errors.push('Please sign and lock the investment agreement.')
-            }
             if (errors.length) {
               setValidationErrors(errors)
               return
@@ -523,6 +496,44 @@ function ClientContent() {
                       signature: {
                         name: [user.firstName, user.lastName].filter(Boolean).join(' '),
                         signedAt: new Date().toISOString()
+                      },
+                      agreement: {
+                        agreementDate: new Date().toISOString(),
+                        investor: {
+                          accountType: investment.accountType,
+                          firstName: user.firstName,
+                          lastName: user.lastName,
+                          email: user.email,
+                          address: user.address
+                        },
+                        investment: {
+                          id: investment.id,
+                          amount: investment.amount,
+                          bonds: investment.bonds,
+                          paymentFrequency: investment.paymentFrequency,
+                          lockupPeriod: investment.lockupPeriod,
+                          accountType: investment.accountType,
+                          status: investment.status,
+                          createdAt: investment.createdAt,
+                          updatedAt: investment.updatedAt
+                        },
+                        ...(investment.accountType === 'entity' && (user.entity || user.entityName) ? {
+                          entity: {
+                            name: user.entity?.name || user.entityName,
+                            taxId: user.entity?.taxId,
+                            registrationDate: user.entity?.registrationDate,
+                            address: user.entity?.address
+                          }
+                        } : {}),
+                        ...(investment.accountType === 'joint' && user.jointHolder ? {
+                          jointHolder: {
+                            firstName: user.jointHolder.firstName,
+                            lastName: user.jointHolder.lastName,
+                            email: user.jointHolder.email,
+                            address: user.jointHolder.address,
+                            holdingType: user.jointHoldingType
+                          }
+                        } : {})
                       }
                     },
                     status: 'pending',
