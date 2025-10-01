@@ -90,11 +90,11 @@ export default function DashboardHeader({ onViewChange, activeView }) {
           >
             Documents
           </button>
-          <button 
-            onClick={() => { try { window.scrollTo({ top: 0 }); } catch {} ; router.push('/notifications') }} 
-            className={styles.navItem}
+          <button
+            onClick={() => onViewChange('activity')}
+            className={`${styles.navItem} ${activeView === 'activity' ? styles.active : ''}`}
           >
-            Notifications
+            Activity
           </button>
           <button
             onClick={() => onViewChange('contact')}
@@ -122,7 +122,7 @@ export default function DashboardHeader({ onViewChange, activeView }) {
             <button className={styles.mobileNavItem} onClick={() => handleNavSelect('portfolio')}>Dashboard</button>
             <button className={styles.mobileNavItem} onClick={() => handleNavSelect('profile')}>Profile</button>
             <button className={styles.mobileNavItem} onClick={() => handleNavSelect('documents')}>Documents</button>
-            <button className={styles.mobileNavItem} onClick={() => { setShowMobileNav(false); router.push('/notifications') }}>Notifications</button>
+            <button className={styles.mobileNavItem} onClick={() => handleNavSelect('activity')}>Activity</button>
             <button className={styles.mobileNavItem} onClick={() => handleNavSelect('contact')}>Contact</button>
             <button className={styles.mobileNavItem} onClick={() => { setShowMobileNav(false); router.push('/investment') }}>Make an Investment</button>
             <div className={styles.mobileDivider}></div>

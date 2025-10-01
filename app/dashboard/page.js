@@ -37,7 +37,7 @@ export default function DashboardPage() {
   // Initialize activeView from URL params and sync URL with activeView
   useEffect(() => {
     const section = searchParams.get('section')
-    if (section && ['portfolio', 'profile', 'documents', 'contact'].includes(section)) {
+    if (section && ['portfolio', 'profile', 'documents', 'contact', 'activity'].includes(section)) {
       setActiveView(section)
     }
   }, [searchParams])
@@ -46,7 +46,11 @@ export default function DashboardPage() {
     setActiveView(view)
     const newSearchParams = new URLSearchParams(searchParams.toString())
     newSearchParams.set('section', view)
-    router.replace(`/dashboard?${newSearchParams.toString()}`, { scroll: false })
+    if (view === 'activity') {
+      router.replace(`/notifications?${newSearchParams.toString()}`, { scroll: false })
+    } else {
+      router.replace(`/dashboard?${newSearchParams.toString()}`, { scroll: false })
+    }
   }
 
   const renderContent = () => {
