@@ -129,6 +129,11 @@ export default function InvestmentPage() {
         if (data.success && data.user?.isAdmin) {
           window.location.href = '/dashboard'
         }
+        // Check if user is verified before allowing investment
+        if (data.success && data.user && !data.user.isVerified) {
+          window.location.href = '/confirmation'
+          return
+        }
         // Load user's account type and set as locked
         if (data.success && data.user?.accountType) {
           setUserAccountType(data.user.accountType)

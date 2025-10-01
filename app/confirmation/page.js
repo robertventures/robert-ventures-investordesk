@@ -1,0 +1,221 @@
+'use client'
+
+import { useState, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
+import Header from '../components/Header'
+import styles from './page.module.css'
+
+export default function ConfirmationPage() {
+  const router = useRouter()
+  const [code, setCode] = useState(['', '', '', '', '', ''])
+  const [email, setEmail] = useState('')
+  const [error, setError] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [countdown, setCountdown] = useState(26)
+  const inputRefs = useRef([])
+
+  useEffect(() => {
+    // Get the email from localStorage
+    const signupEmail = localStorage.getItem('signupEmail')
+    if (!signupEmail) {
+      // If no email found, redirect to home
+      router.push('/')
+      return
+    }
+    setEmail(signupEmail)
+
+    // Start countdown timer
+    const timer = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(timer)
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+
+    // Focus first input
+    if (inputRefs.current[0]) {
+      inputRefs.current[0].focus()
+    }
+
+    return () => clearInterval(timer)
+  }, [router])
+
+  const handleInputChange = (index, value) => {
+    // Only allow numbers
+    if (value && !/^\d$/.test(value)) {
+      return
+    }
+
+    const newCode = [...code]
+    newCode[index] = value
+    setCode(newCode)
+    setError('')
+
+    // Auto-focus next input
+    if (value && index < 5) {
+      inputRefs.current[index + 1]?.focus()
+    }
+  }
+
+  const handleKeyDown = (index, e) => {
+    // Handle backspace
+    if (e.key === 'Backspace' && !code[index] && index > 0) {
+      inputRefs.current[index - 1]?.focus()
+    }
+  }
+
+  const handlePaste = (e) => {
+    e.preventDefault()
+    const pastedData = e.clipboardData.getData('text').trim()
+    
+    // Only process if it's 6 digits
+    if (/^\d{6}$/.test(pastedData)) {
+      const newCode = pastedData.split('')
+      setCode(newCode)
+      setError('')
+      // Focus last input
+      inputRefs.current[5]?.focus()
+    }
+  }
+
+  const handleResendCode = () => {
+    // Reset countdown
+    setCountdown(26)
+    setCode(['', '', '', '', '', ''])
+    setError('')
+    inputRefs.current[0]?.focus()
+    
+    // In a real implementation, this would trigger a new email
+    console.log('Resending verification code to:', email)
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    
+    const enteredCode = code.join('')
+    
+    if (enteredCode.length !== 6) {
+      setError('Please enter all 6 digits')
+      return
+    }
+
+    // Check if code is correct (000000)
+    if (enteredCode !== '000000') {
+      setError('Invalid verification code. Please try again.')
+      setCode(['', '', '', '', '', ''])
+      inputRefs.current[0]?.focus()
+      return
+    }
+
+    setIsLoading(true)
+    
+    try {
+      // Get user ID from localStorage
+      const userId = localStorage.getItem('currentUserId')
+      if (!userId) {
+        setError('Session expired. Please sign in again.')
+        setTimeout(() => router.push('/'), 2000)
+        return
+      }
+
+      // Call backend to verify the account
+      const res = await fetch(`/api/users/${userId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          _action: 'verifyAccount',
+          verificationCode: enteredCode
+        })
+      })
+
+      const data = await res.json()
+
+      if (!data.success) {
+        setError(data.error || 'Verification failed. Please try again.')
+        setCode(['', '', '', '', '', ''])
+        inputRefs.current[0]?.focus()
+        return
+      }
+
+      // Verification successful, redirect to investment page
+      router.push('/investment')
+    } catch (err) {
+      console.error('Verification error:', err)
+      setError('An error occurred. Please try again.')
+      setCode(['', '', '', '', '', ''])
+      inputRefs.current[0]?.focus()
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  return (
+    <main className={styles.main}>
+      <Header />
+      
+      <div className={styles.container}>
+        <div className={styles.verificationCard}>
+          <h1 className={styles.title}>Let's Verify It's You</h1>
+          
+          <p className={styles.description}>
+            A 6 digit verification code has been sent to
+          </p>
+          <p className={styles.email}>{email}</p>
+
+          <form onSubmit={handleSubmit}>
+            <div className={styles.codeInputContainer}>
+              <label className={styles.label}>Verification Code</label>
+              <div className={styles.codeInputs}>
+                {code.map((digit, index) => (
+                  <input
+                    key={index}
+                    ref={el => inputRefs.current[index] = el}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={1}
+                    value={digit}
+                    onChange={(e) => handleInputChange(index, e.target.value)}
+                    onKeyDown={(e) => handleKeyDown(index, e)}
+                    onPaste={index === 0 ? handlePaste : undefined}
+                    className={`${styles.codeInput} ${error ? styles.inputError : ''}`}
+                    disabled={isLoading}
+                  />
+                ))}
+              </div>
+              {error && <p className={styles.error}>{error}</p>}
+            </div>
+
+            <div className={styles.resendContainer}>
+              {countdown > 0 ? (
+                <p className={styles.countdown}>
+                  Request a new code in ({countdown}s)
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleResendCode}
+                  className={styles.resendButton}
+                >
+                  Request a new code
+                </button>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              className={styles.submitButton}
+              disabled={isLoading || code.join('').length !== 6}
+            >
+              {isLoading ? 'Verifying...' : 'Verify and Create Account'}
+            </button>
+          </form>
+        </div>
+      </div>
+    </main>
+  )
+}
+
+

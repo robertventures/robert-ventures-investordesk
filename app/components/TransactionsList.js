@@ -122,7 +122,7 @@ export default function TransactionsList({ limit = null, showViewAll = true, fil
       </div>
       {limit && events.length > limit && showViewAll && (
         <div className={styles.footer}>
-          <button className={styles.viewAllButton} onClick={() => router.push('/activity')}>View all activity →</button>
+          <button className={styles.viewAllButton} onClick={() => router.push('/dashboard?section=activity')}>View all activity →</button>
         </div>
       )}
     </div>

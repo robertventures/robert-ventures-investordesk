@@ -56,6 +56,11 @@ export async function PUT(request, { params }) {
         return NextResponse.json({ success: false, error: 'Admins cannot create investments' }, { status: 403 })
       }
 
+      // VALIDATION: User must be verified to create investments
+      if (!user.isVerified) {
+        return NextResponse.json({ success: false, error: 'Account must be verified before creating investments' }, { status: 403 })
+      }
+
       // VALIDATION: Investment amount must be positive
       if (typeof body.investment.amount === 'number' && body.investment.amount <= 0) {
         return NextResponse.json({ success: false, error: 'Investment amount must be greater than zero' }, { status: 400 })
@@ -121,6 +126,35 @@ export async function PUT(request, { params }) {
         return NextResponse.json({ success: false, error: 'Failed to save investment' }, { status: 500 })
       }
       return NextResponse.json({ success: true, user: updatedUser, investment: newInvestment })
+    }
+
+    // Custom action: verify user account
+    if (body._action === 'verifyAccount' && body.verificationCode) {
+      const usersData = await getUsers()
+      const userIndex = usersData.users.findIndex(u => u.id === id)
+      if (userIndex === -1) {
+        return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 })
+      }
+      const user = usersData.users[userIndex]
+
+      // For now, accept '000000' as valid code. Later can implement real email verification
+      if (body.verificationCode !== '000000') {
+        return NextResponse.json({ success: false, error: 'Invalid verification code' }, { status: 400 })
+      }
+
+      const updatedUser = {
+        ...user,
+        isVerified: true,
+        verifiedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+
+      usersData.users[userIndex] = updatedUser
+
+      if (!await saveUsers(usersData)) {
+        return NextResponse.json({ success: false, error: 'Failed to verify account' }, { status: 500 })
+      }
+      return NextResponse.json({ success: true, user: updatedUser })
     }
 
     // Custom action: update existing investment fields by id

@@ -73,7 +73,7 @@ export default function AccountCreationForm() {
       if (data.success && data.user) {
         localStorage.setItem('currentUserId', data.user.id)
         localStorage.setItem('signupEmail', form.email)
-        router.push('/investment')
+        router.push('/confirmation')
         return
       }
 
