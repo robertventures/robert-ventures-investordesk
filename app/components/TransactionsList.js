@@ -74,7 +74,7 @@ export default function TransactionsList({ limit = null, showViewAll = true, fil
         )}
         {visibleEvents.map(ev => {
           const meta = eventMeta(ev)
-          const date = ev.date ? new Date(ev.date).toLocaleDateString() : '-'
+          const date = ev.date ? new Date(ev.date).toLocaleDateString('en-US', { timeZone: 'UTC' }) : '-'
           const isDistribution = ev.type === 'monthly_distribution'
           const isWithdrawal = ev.type === 'withdrawal_requested'
           const amountClass = isWithdrawal ? styles.negative : styles.positive
@@ -108,8 +108,8 @@ export default function TransactionsList({ limit = null, showViewAll = true, fil
                     {typeof ev.monthIndex !== 'undefined' ? <div className={styles.detailRow}><span className={styles.detailKey}>Month Index</span><span className={styles.detailVal}>{ev.monthIndex}</span></div> : null}
                     {ev.payoutStatus ? <div className={styles.detailRow}><span className={styles.detailKey}>Payout Status</span><span className={styles.detailVal}>{ev.payoutStatus}</span></div> : null}
                     {ev.payoutBankNickname ? <div className={styles.detailRow}><span className={styles.detailKey}>Bank</span><span className={styles.detailVal}>{ev.payoutBankNickname}</span></div> : null}
-                    {ev.noticeEndAt ? <div className={styles.detailRow}><span className={styles.detailKey}>Notice Ends</span><span className={styles.detailVal}>{new Date(ev.noticeEndAt).toLocaleDateString()}</span></div> : null}
-                    {ev.payoutEligibleAt ? <div className={styles.detailRow}><span className={styles.detailKey}>Payout Eligible</span><span className={styles.detailVal}>{new Date(ev.payoutEligibleAt).toLocaleDateString()}</span></div> : null}
+                    {ev.noticeEndAt ? <div className={styles.detailRow}><span className={styles.detailKey}>Notice Ends</span><span className={styles.detailVal}>{new Date(ev.noticeEndAt).toLocaleDateString('en-US', { timeZone: 'UTC' })}</span></div> : null}
+                    {ev.payoutEligibleAt ? <div className={styles.detailRow}><span className={styles.detailKey}>Payout Eligible</span><span className={styles.detailVal}>{new Date(ev.payoutEligibleAt).toLocaleDateString('en-US', { timeZone: 'UTC' })}</span></div> : null}
                   </div>
                 )}
               </div>

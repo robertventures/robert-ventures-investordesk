@@ -409,6 +409,15 @@ function ClientContent() {
       </Section>
 
       <div className={styles.actions}>
+        <p style={{ 
+          fontSize: '14px', 
+          color: '#6b7280', 
+          textAlign: 'center', 
+          marginBottom: '16px',
+          lineHeight: '1.6'
+        }}>
+          By clicking Continue & Submit, <b><i>you are agreeing to all Investor Acknowledgements</i></b> and agree to be bound by the terms of the <a href="#" style={{ color: '#0891b2', textDecoration: 'underline' }}>Investor Bond Agreement.</a>
+        </p>
         <button
           className={styles.primaryButton}
           disabled={isSaving}
@@ -571,7 +580,7 @@ function ClientContent() {
             }
           }}
         >
-          {isSaving ? 'Saving...' : 'Continue'}
+          {isSaving ? 'Saving...' : 'Continue & Submit'}
         </button>
         {validationErrors.length > 0 && (
           <div className={styles.warning}>
