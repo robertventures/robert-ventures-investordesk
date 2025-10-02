@@ -18,7 +18,8 @@
 9. [Business Logic Implementation](#business-logic-implementation)
 10. [Validation Rules](#validation-rules)
 11. [Database Indexes](#database-indexes)
-12. [Testing](#testing)
+12. [UI/UX Requirements](#uiux-requirements)
+13. [Testing](#testing)
 
 ---
 
@@ -120,11 +121,12 @@ This is an investment platform where users invest in bonds with two payment opti
 - Can only transition to `withdrawal_notice`
 
 **`withdrawal_notice`**
-- 90-day notice period in effect
-- **Still earning interest** during notice
+- Withdrawal request submitted, processing in progress
+- **Still earning interest** during this period (if compounding)
 - Cannot cancel withdrawal (business rule)
-- Admin can only process after `withdrawalEligibleAt` date
-- `withdrawalEligibleAt` = max(notice_end, lockup_end)
+- Admin can process at any time within 90-day window
+- Robert Ventures has until `payoutDueBy` to complete payout
+- Investment remains visible to user during and after withdrawal
 
 **`withdrawn`**
 - Final state - cannot change
@@ -292,57 +294,77 @@ def create_monthly_payout(user, investment, amount, date):
 
 ## Withdrawal Rules
 
-### Notice Period
-- **90 days notice required** from withdrawal request
-- Countdown starts immediately when requested
-
 ### Lockup Period
 - Investment is **locked** during lockup period
-- Cannot withdraw until lockup expires
+- Cannot request withdrawal until lockup expires
+- User can only initiate withdrawal for **active** investments after lockup ends
 
-### Withdrawal Date
-Payout happens on the **later of:**
-- End of 90-day notice period
-- End of lockup period
+### Processing Timeline
+- **Robert Ventures has 90 days** from withdrawal request to process and complete payout
+- This is a **business deadline**, not a user waiting period
+- Admin can process withdrawal at any time within the 90-day window
+- Countdown starts immediately when user requests withdrawal
+
+### Withdrawal Business Logic
+When a user requests withdrawal:
+1. Investment status changes from `active` to `withdrawal_notice`
+2. A `payoutDueBy` date is set to `withdrawal_requested_at + 90 days`
+3. Investment continues to earn interest during this period (if compounding)
+4. Admin can process withdrawal anytime before `payoutDueBy`
+5. Once processed, investment status becomes `withdrawn` (final state)
 
 **Calculation:**
 ```python
-# When user requests withdrawal
-notice_end = withdrawal_requested_at + 90 days
-lockup_end = confirmed_at + lockup_period (1 or 3 years)
+# When user requests withdrawal (only allowed if lockup ended)
+payout_due_by = withdrawal_requested_at + 90 days
 
-# Payout eligible date is the LATER of these two
-withdrawal_eligible_at = max(notice_end, lockup_end)
+# Store in withdrawal record
+withdrawal = {
+    "requestedAt": withdrawal_requested_at,
+    "payoutDueBy": payout_due_by,
+    "status": "notice"
+}
+
+# Update investment
+investment.status = "withdrawal_notice"
+investment.payoutDueBy = payout_due_by
 ```
 
-**Example 1: Lockup already ended**
+**Example 1: Normal case**
 ```
-Confirmed: Jan 1, 2025
-Lockup: 1 year → ends Jan 1, 2026
-Withdrawal requested: Mar 1, 2026
-Notice period: 90 days → ends May 30, 2026
+Confirmed: Jan 1, 2024
+Lockup: 1 year → ends Jan 1, 2025
+Withdrawal requested: Mar 1, 2025 (lockup already ended ✓)
+Payout due by: May 30, 2025 (90 days later)
 
-Eligible date: May 30, 2026 ✓ (notice is later)
-```
-
-**Example 2: Lockup not yet ended**
-```
-Confirmed: Jan 1, 2025
-Lockup: 1 year → ends Jan 1, 2026
-Withdrawal requested: Nov 1, 2025
-Notice period: 90 days → ends Jan 30, 2026
-
-Eligible date: Jan 30, 2026 ✓ (notice is later)
+Timeline:
+- Mar 1, 2025: User requests withdrawal
+- Mar 1 - May 30: Robert Ventures processes payout
+- Admin can approve anytime in this window
+- Investment still visible to user throughout and after
 ```
 
-**Example 3: Lockup is later**
+**Example 2: Cannot withdraw before lockup**
 ```
-Confirmed: Jan 1, 2025
-Lockup: 3 years → ends Jan 1, 2028
-Withdrawal requested: Oct 1, 2027
-Notice period: 90 days → ends Dec 30, 2027
+Confirmed: Jan 1, 2024
+Lockup: 3 years → ends Jan 1, 2027
+Withdrawal requested: Oct 1, 2025
 
-Eligible date: Jan 1, 2028 ✓ (lockup is later)
+Result: ❌ REJECTED - Lockup period not yet ended
+User must wait until Jan 1, 2027 to request withdrawal
+```
+
+**Example 3: Compounding investment**
+```
+Confirmed: Jan 1, 2024
+Amount: $10,000
+Lockup: 1 year at 8% APY compounding
+Withdrawal requested: Feb 1, 2025 (13 months later)
+Current value: $10,869.60
+
+Payout due by: May 2, 2025
+Interest continues accruing Feb 1 - payout date
+Final payout includes all accrued interest up to payment date
 ```
 
 ### Amount Withdrawn
@@ -415,11 +437,11 @@ Eligible date: Jan 1, 2028 ✓ (lockup is later)
   "lockupEndDate": "ISO8601",       // When lockup period ends
   
   // Withdrawal tracking (only when status = withdrawal_notice or withdrawn)
-  "withdrawalRequestedAt": "ISO8601",
-  "withdrawalNoticeEndAt": "ISO8601",   // 90 days after request
-  "withdrawalEligibleAt": "ISO8601",    // max(notice_end, lockup_end)
-  "withdrawnAt": "ISO8601",             // When funds returned
+  "withdrawalNoticeStartAt": "ISO8601", // When withdrawal requested
+  "payoutDueBy": "ISO8601",             // Deadline for Robert Ventures (request + 90 days)
+  "withdrawnAt": "ISO8601",             // When funds actually paid out
   "finalValue": 10800.00,               // Final withdrawal amount
+  "totalEarnings": 800.00,              // Total interest earned
   
   // Rejection tracking (only when status = rejected)
   "rejectedAt": "ISO8601",
@@ -429,9 +451,11 @@ Eligible date: Jan 1, 2028 ✓ (lockup is later)
 
 **Key Fields Explained:**
 
-- **`confirmedAt`** - When admin approved and investment became `active`. This is when interest starts accruing.
+- **`confirmedAt`** - When admin approved and investment became `active`. This is when interest starts accruing (from day after).
 - **`lockupEndDate`** - Calculated as `confirmedAt + lockup_period`. User cannot withdraw before this date.
-- **`withdrawalEligibleAt`** - The later of: (90 days after request) or (lockup end date)
+- **`payoutDueBy`** - Deadline for Robert Ventures to complete payout. Set to `withdrawalNoticeStartAt + 90 days`.
+- **`finalValue`** - Total amount withdrawn (principal + all accrued interest). Only set when status = `withdrawn`.
+- **`withdrawnAt`** - When admin processed withdrawal and funds were paid out. Becomes final state.
 
 ### Transaction
 ```json
@@ -744,6 +768,106 @@ def get_current_time():
 
 ---
 
+## UI/UX Requirements
+
+### Investment Visibility Rules
+
+**Dashboard Investment List:**
+Investors should see ALL their investments with these statuses:
+- `active` - Currently earning interest
+- `withdrawal_notice` - Withdrawal in progress
+- `withdrawn` - Completed withdrawals (for historical record)
+
+**Excluded from dashboard:**
+- `draft` - Unsubmitted (shown only in creation flow)
+- `pending` - Awaiting admin approval (shown in separate pending section)
+- `rejected` - Admin rejected (can be shown in a separate section)
+
+### Investment Value Display Labels
+
+Context-aware labels based on investment status:
+
+| Status | Label to Display | Meaning |
+|--------|-----------------|---------|
+| `active` | "Current Value" | Live investment value with accrued interest |
+| `withdrawal_notice` | "Current Value" | Value including interest during processing |
+| `withdrawn` | "Final Withdrawal Value" | The total amount that was paid out |
+
+### Withdrawal Request Flow
+
+**Requirements:**
+1. **Only active investments** after lockup can request withdrawal
+2. **Confirmation modal** (not alert) must show:
+   - Principal amount
+   - Total earnings
+   - Total withdrawal amount
+   - Clear message: "Robert Ventures has 90 days to process your payout"
+   - Warning: "This action cannot be undone"
+3. **After confirmation:**
+   - Investment status → `withdrawal_notice`
+   - Investment remains visible
+   - Withdrawal tab is hidden (already requested)
+   - Show withdrawal status in Investment Info tab
+
+### Activity/Transaction Display
+
+**Transaction Types and Labels:**
+- `monthly_distribution` → "Monthly Payout"
+- `monthly_compounded` → "Monthly Compounded"
+- `withdrawal_notice_started` → "Withdrawal Notice Started"
+- `withdrawal_approved` → "Withdrawal Processed" (not "Approved")
+- `withdrawal_rejected` → "Withdrawal Rejected"
+
+**Activity Filtering:**
+- Investment details page: Show only activity for that specific investment
+- Dashboard activity page: Show all activity across all investments
+
+### Status Badges
+
+Investment status should display user-friendly labels:
+- `active` + lockup ended → "Available for Withdrawal"
+- `active` + locked → "Locked"
+- `withdrawal_notice` → "Withdrawal Processing"
+- `withdrawn` → "Withdrawn"
+- `pending` → "Pending Approval"
+- `rejected` → "Rejected"
+
+### Portfolio Totals Calculation
+
+**When calculating portfolio summary (total value, earnings, etc.):**
+
+Include in totals:
+- `active` investments - Full current value
+- `withdrawal_notice` investments - Full current value (still active until paid)
+
+Exclude from totals:
+- `withdrawn` investments - Money already returned to user
+- `pending` investments - Show separately as "pending"
+- `draft` investments - Not yet submitted
+- `rejected` investments - Never active
+
+**Example:**
+```python
+# Portfolio calculation
+total_current_value = 0
+total_earnings = 0
+
+for investment in user.investments:
+    if investment.status in ['active', 'withdrawal_notice']:
+        calculation = calculate_value(investment, app_time)
+        total_current_value += calculation.current_value
+        total_earnings += calculation.total_earnings
+    # withdrawn investments are visible but not in totals
+
+return {
+    "totalCurrentValue": total_current_value,
+    "totalEarnings": total_earnings,
+    "investments": all_visible_investments  # includes withdrawn
+}
+```
+
+---
+
 ## Testing
 
 Reference implementation has extensive tests in `/testing-docs/`:
@@ -769,15 +893,17 @@ draft → pending → active → withdrawal_notice → withdrawn
 1. Investment states: `draft`, `pending`, `active`, `withdrawal_notice`, `withdrawn`, `rejected`
 2. Interest calculations are **daily-prorated** for partial months
 3. Monthly payouts can **fail and queue** in pending state
-4. Withdrawals have **90-day notice + lockup period**
-5. Investments earn interest while in `withdrawal_notice` status
-6. Admin can **time travel** for testing
-7. All calculations must use **app time** (not real time)
+4. Withdrawals: **Robert Ventures has 90 days** to process (not user waiting period)
+5. Investments earn interest while in `withdrawal_notice` status (if compounding)
+6. **Withdrawn investments remain visible** to users in dashboard (for records)
+7. Admin can **time travel** for testing
+8. All calculations must use **app time** (not real time)
 
 **Critical Fields:**
 - `confirmedAt` - When investment became active (interest starts next day)
 - `lockupEndDate` - Earliest possible withdrawal date
-- `withdrawalEligibleAt` - Actual withdrawal date (max of notice end and lockup end)
+- `payoutDueBy` - Deadline for Robert Ventures to complete payout (request + 90 days)
+- `finalValue` - Total amount paid out (principal + interest) when withdrawn
 
 **Data to preserve:**
 - User accounts and profiles
