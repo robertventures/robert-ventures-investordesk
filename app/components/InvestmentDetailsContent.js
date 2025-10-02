@@ -359,8 +359,7 @@ export default function InvestmentDetailsContent({ investmentId }) {
                   <thead>
                     <tr>
                       <th>Horizon</th>
-                      {isMonthly ? <th>Projected Revenue</th> : <th>Projected Value</th>}
-                      {!isMonthly && <th>Additional Growth</th>}
+                      <th>{isMonthly ? 'Projected Revenue' : 'Additional Growth'}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -375,7 +374,6 @@ export default function InvestmentDetailsContent({ investmentId }) {
                       growthProjections.map(row => (
                         <tr key={row.label}>
                           <td>{row.label}</td>
-                          <td>{formatCurrency(row.projected)}</td>
                           <td>{formatCurrency(row.growth)}</td>
                         </tr>
                       ))
