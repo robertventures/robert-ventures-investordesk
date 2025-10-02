@@ -481,3 +481,137 @@
     font-size: 20px;
   }
 }
+
+/* Withdrawal Confirmation Modal */
+.modalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.modalContent {
+  background: white;
+  border-radius: 12px;
+  max-width: 500px;
+  width: 100%;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+}
+
+.modalHeader {
+  padding: 24px 24px 16px 24px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.modalTitle {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.modalBody {
+  padding: 24px;
+}
+
+.modalText {
+  margin: 0 0 16px 0;
+  color: #4b5563;
+  line-height: 1.6;
+}
+
+.modalList {
+  margin: 0 0 24px 0;
+  padding-left: 20px;
+  color: #4b5563;
+  line-height: 1.8;
+}
+
+.modalList li {
+  margin-bottom: 8px;
+}
+
+.modalAmount {
+  background: #f9fafb;
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.modalAmountRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+}
+
+.modalAmountRow span {
+  color: #6b7280;
+}
+
+.modalAmountRow strong {
+  color: #1a1a1a;
+  font-size: 16px;
+}
+
+.modalFooter {
+  padding: 16px 24px;
+  background: #f9fafb;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.modalButtonSecondary {
+  padding: 10px 20px;
+  border: 1px solid #d1d5db;
+  background: white;
+  color: #374151;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.modalButtonSecondary:hover:not(:disabled) {
+  background: #f9fafb;
+  border-color: #9ca3af;
+}
+
+.modalButtonSecondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.modalButtonPrimary {
+  padding: 10px 20px;
+  border: none;
+  background: #dc2626;
+  color: white;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.modalButtonPrimary:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+.modalButtonPrimary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

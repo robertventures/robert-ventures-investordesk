@@ -92,6 +92,12 @@ export default function AdminHeader({ onTabChange, activeTab }) {
           >
             Withdrawals
           </button>
+          <button
+            onClick={() => onTabChange('pending-payouts')}
+            className={`${styles.navItem} ${activeTab === 'pending-payouts' ? styles.active : ''}`}
+          >
+            Pending Payouts
+          </button>
         </nav>
 
         <div className={styles.userActions}>
@@ -113,6 +119,7 @@ export default function AdminHeader({ onTabChange, activeTab }) {
             <button className={styles.mobileNavItem} onClick={() => handleNavSelect('accounts')}>Accounts</button>
             <button className={styles.mobileNavItem} onClick={() => handleNavSelect('investments')}>Investments</button>
             <button className={styles.mobileNavItem} onClick={() => handleNavSelect('withdrawals')}>Withdrawals</button>
+            <button className={styles.mobileNavItem} onClick={() => handleNavSelect('pending-payouts')}>Pending Payouts</button>
             <div className={styles.mobileDivider}></div>
             <button className={styles.mobileNavItem} onClick={() => { setShowMobileNav(false); handleLogout() }}>Sign Out</button>
           </div>

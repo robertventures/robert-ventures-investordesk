@@ -55,9 +55,11 @@ export default function InvestmentPage() {
     if (identitySummary.accountType === 'entity' && identitySummary.entityName) {
       lines.push({ label: 'Entity Name', value: identitySummary.entityName })
     }
-    const primaryName = [identitySummary.firstName, identitySummary.lastName].filter(Boolean).join(' ')
-    if (primaryName) {
-      lines.push({ label: identitySummary.accountType === 'entity' ? 'Primary Contact' : 'Holder Name', value: primaryName })
+    if (identitySummary.accountType !== 'entity') {
+      const primaryName = [identitySummary.firstName, identitySummary.lastName].filter(Boolean).join(' ')
+      if (primaryName) {
+        lines.push({ label: 'Holder Name', value: primaryName })
+      }
     }
     if (identitySummary.accountType === 'joint') {
       lines.push({ label: 'Joint Holding Type', value: identitySummary.jointHoldingType || '—' })
@@ -72,6 +74,8 @@ export default function InvestmentPage() {
     }
     if (identitySummary.accountType === 'entity' && identitySummary.authorizedRep) {
       const rep = identitySummary.authorizedRep
+      const repName = [rep.firstName, rep.lastName].filter(Boolean).join(' ')
+      if (repName) lines.push({ label: 'Authorized Rep Name', value: repName })
       if (rep.dob) lines.push({ label: 'Authorized Rep DOB', value: rep.dob })
       if (rep.ssn) lines.push({ label: 'Authorized Rep SSN', value: rep.ssn })
       const repAddress = [rep.address?.street1, rep.address?.street2, rep.address?.city, rep.address?.state, rep.address?.zip].filter(Boolean)

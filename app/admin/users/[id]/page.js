@@ -64,7 +64,7 @@ export default function AdminUserDetailsPage({ params }) {
     router.push('/')
   }
 
-  const investedTotal = (user.investments || []).filter(inv => inv.status === 'confirmed').reduce((sum, inv) => sum + (inv.amount || 0), 0)
+  const investedTotal = (user.investments || []).filter(inv => inv.status === 'active').reduce((sum, inv) => sum + (inv.amount || 0), 0)
   const pendingTotal = (user.investments || []).filter(inv => inv.status === 'pending' || inv.status === 'draft').reduce((sum, inv) => sum + (inv.amount || 0), 0)
 
   return (

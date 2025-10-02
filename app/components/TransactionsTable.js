@@ -39,7 +39,7 @@ export default function TransactionsTable() {
             // Calculate actual earnings for this investment
             let actualEarnings = 0
             // Only accrue/display earnings for confirmed investments from confirmedAt
-            const isConfirmed = inv.status === 'confirmed'
+            const isConfirmed = inv.status === 'active'
             if (isConfirmed && inv.amount && inv.paymentFrequency && inv.lockupPeriod && inv.confirmedAt) {
               const startDate = new Date(inv.confirmedAt)
               // Accrue starting the day AFTER confirmation

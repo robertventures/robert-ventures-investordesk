@@ -85,7 +85,7 @@ export default function DocumentsView() {
 
   // Get finalized investments with documents
   const finalizedInvestments = (user?.investments || []).filter(investment =>
-    (investment.status === 'pending' || investment.status === 'confirmed') &&
+    (investment.status === 'pending' || investment.status === 'active') &&
     investment.documents?.agreement
   )
 

@@ -43,10 +43,8 @@ export async function POST(request) {
     const now = new Date(appTime || new Date().toISOString())
 
     if (action === 'approve') {
-      // Approve only if notice period elapsed
-      if (wd.payoutEligibleAt && new Date(now) < new Date(wd.payoutEligibleAt)) {
-        return NextResponse.json({ success: false, error: 'Withdrawal not yet eligible for payout' }, { status: 400 })
-      }
+      // Admin can approve anytime within the 90-day window
+      // No validation needed - Robert Ventures has flexibility to pay before the deadline
       wd.status = 'approved'
       wd.approvedAt = now.toISOString()
       wd.paidAt = now.toISOString()
@@ -64,7 +62,7 @@ export async function POST(request) {
       const invs = Array.isArray(user.investments) ? user.investments : []
       const invIdx = invs.findIndex(inv => inv.id === wd.investmentId)
       if (invIdx !== -1) {
-        invs[invIdx] = { ...invs[invIdx], status: 'confirmed', updatedAt: now.toISOString(), withdrawalId: undefined, withdrawalNoticeStartAt: undefined, withdrawalNoticeEndAt: undefined, payoutEligibleAt: undefined }
+        invs[invIdx] = { ...invs[invIdx], status: 'active', updatedAt: now.toISOString(), withdrawalId: undefined, withdrawalNoticeStartAt: undefined, payoutDueBy: undefined }
       }
       user.investments = invs
     } else {

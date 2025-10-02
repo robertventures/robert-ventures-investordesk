@@ -36,23 +36,23 @@ export async function POST(request) {
     const investment = investments[invIndex]
     
     // Check if investment is eligible for withdrawal
-    if (investment.status !== 'confirmed') {
+    if (investment.status !== 'active') {
       return NextResponse.json({ 
         success: false, 
-        error: 'Only confirmed investments can be withdrawn' 
+        error: 'Only active investments can be withdrawn' 
       }, { status: 400 })
     }
 
-    // Calculate current value (as of app time) and set up 90-day notice period
+    // Calculate current value (as of app time) and set up withdrawal timeline
+    // Robert Ventures has 90 days from the withdrawal request to provide funds + interest
     const appTime = await getCurrentAppTime()
     const now = new Date(appTime || new Date().toISOString())
     const currentValue = calculateInvestmentValue(investment, now.toISOString())
-    // Notice period starts now; withdrawal eligible at the later of lock up end or notice end
+    // Notice period starts now; payout must be completed within 90 days
     const noticeStartAt = now.toISOString()
-    const noticeEndDate = new Date(now)
-    noticeEndDate.setDate(noticeEndDate.getDate() + 90)
-    const lockupEnd = currentValue.lockupEndDate ? new Date(currentValue.lockupEndDate) : new Date(now)
-    const payoutEligibleAt = new Date(Math.max(lockupEnd.getTime(), noticeEndDate.getTime())).toISOString()
+    const payoutDueByDate = new Date(now)
+    payoutDueByDate.setDate(payoutDueByDate.getDate() + 90)
+    const payoutDueBy = payoutDueByDate.toISOString()
 
     // For monthly payout investments: withdraw principal only
     const isMonthly = investment.paymentFrequency === 'monthly'
@@ -73,8 +73,7 @@ export async function POST(request) {
       status: 'notice',
       requestedAt: now.toISOString(),
       noticeStartAt,
-      noticeEndAt: noticeEndDate.toISOString(),
-      payoutEligibleAt,
+      payoutDueBy,
       investment: {
         originalAmount: investment.amount,
         lockupPeriod: investment.lockupPeriod,
@@ -89,8 +88,7 @@ export async function POST(request) {
       ...investment,
       status: 'withdrawal_notice',
       withdrawalNoticeStartAt: noticeStartAt,
-      withdrawalNoticeEndAt: noticeEndDate.toISOString(),
-      payoutEligibleAt,
+      payoutDueBy,
       withdrawalId,
       finalValue: withdrawableAmount,
       totalEarnings: earningsAmount,

@@ -44,7 +44,13 @@ export default function PortfolioSummary() {
           
           // Calculate portfolio metrics from investments using the new calculation functions
           const investments = data.user.investments || []
-          const confirmedInvestments = investments.filter(inv => inv.status === 'confirmed')
+          // Include active, withdrawal_notice, and withdrawn investments in the dashboard
+          // Investors should see all their investment history
+          const confirmedInvestments = investments.filter(inv => 
+            inv.status === 'active' || 
+            inv.status === 'withdrawal_notice' || 
+            inv.status === 'withdrawn'
+          )
           const pendingInvestments = investments.filter(inv => inv.status === 'pending')
           const draftInvestments = investments.filter(inv => inv.status === 'draft')
           const transactions = Array.isArray(data.user.transactions) ? data.user.transactions : []
@@ -59,23 +65,27 @@ export default function PortfolioSummary() {
             const calculation = calculateInvestmentValue(inv, currentAppTime)
             const status = getInvestmentStatus(inv, currentAppTime)
             
-            totalInvested += inv.amount || 0
-            // For monthly payout investments, sum paid distributions from transactions instead of accrued calc
-            if (inv.paymentFrequency === 'monthly') {
-              const paid = transactions
-                .filter(ev => ev.type === 'monthly_distribution' && ev.investmentId === inv.id && new Date(ev.date) <= new Date(currentAppTime))
-                .reduce((sum, ev) => sum + (Number(ev.amount) || 0), 0)
-              totalEarnings += Math.round(paid * 100) / 100
-            } else {
-              totalEarnings += calculation.totalEarnings
-            }
-            // Portfolio current value only includes compounding growth
-            if (inv.paymentFrequency === 'monthly') {
-              // Monthly payout investments: keep principal only
-              totalCurrentValue += inv.amount || 0
-            } else {
-              // Compounding investments: include accrued value
-              totalCurrentValue += calculation.currentValue
+            // Only include active and withdrawal_notice investments in portfolio totals
+            // Withdrawn investments are displayed but don't count toward current value
+            if (inv.status === 'active' || inv.status === 'withdrawal_notice') {
+              totalInvested += inv.amount || 0
+              // For monthly payout investments, sum paid distributions from transactions instead of accrued calc
+              if (inv.paymentFrequency === 'monthly') {
+                const paid = transactions
+                  .filter(ev => ev.type === 'monthly_distribution' && ev.investmentId === inv.id && new Date(ev.date) <= new Date(currentAppTime))
+                  .reduce((sum, ev) => sum + (Number(ev.amount) || 0), 0)
+                totalEarnings += Math.round(paid * 100) / 100
+              } else {
+                totalEarnings += calculation.totalEarnings
+              }
+              // Portfolio current value only includes compounding growth
+              if (inv.paymentFrequency === 'monthly') {
+                // Monthly payout investments: keep principal only
+                totalCurrentValue += inv.amount || 0
+              } else {
+                // Compounding investments: include accrued value
+                totalCurrentValue += calculation.currentValue
+              }
             }
             
             investmentDetails.push({
@@ -148,7 +158,7 @@ export default function PortfolioSummary() {
           }
           setPortfolioData(nextPortfolio)
 
-          // Build valuation series for last 23 month-ends plus current app time as the final point
+          // Build earnings series for last 23 month-ends plus current app time as the final point
           const end = new Date(currentAppTime)
           const start = new Date(end)
           start.setMonth(start.getMonth() - 23)
@@ -161,27 +171,45 @@ export default function PortfolioSummary() {
             d.setMonth(start.getMonth() + i)
             const asOf = new Date(d.getFullYear(), d.getMonth() + 1, 0)
             const asOfIso = asOf.toISOString()
-            let total = 0
+            let totalEarnings = 0
             confirmed.forEach(inv => {
               if (inv.confirmedAt && new Date(inv.confirmedAt) <= asOf) {
-                const calc = calculateInvestmentValue(inv, asOfIso)
-                total += calc.currentValue
+                if (inv.paymentFrequency === 'monthly') {
+                  // For monthly payout investments, sum paid distributions from transactions
+                  const paidDistributions = transactions
+                    .filter(ev => ev.type === 'monthly_distribution' && ev.investmentId === inv.id && new Date(ev.date) <= asOf)
+                    .reduce((sum, ev) => sum + (Number(ev.amount) || 0), 0)
+                  totalEarnings += Math.round(paidDistributions * 100) / 100
+                } else {
+                  // For compounding investments, use calculated earnings
+                  const calc = calculateInvestmentValue(inv, asOfIso)
+                  totalEarnings += calc.totalEarnings
+                }
               }
             })
-            points.push({ date: asOf, value: Math.round(total * 100) / 100 })
+            points.push({ date: asOf, value: totalEarnings })
           }
           // Final point at current app time to match current investment info
           {
             const asOf = new Date(end)
             const asOfIso = asOf.toISOString()
-            let total = 0
+            let totalEarnings = 0
             confirmed.forEach(inv => {
               if (inv.confirmedAt && new Date(inv.confirmedAt) <= asOf) {
-                const calc = calculateInvestmentValue(inv, asOfIso)
-                total += calc.currentValue
+                if (inv.paymentFrequency === 'monthly') {
+                  // For monthly payout investments, sum paid distributions from transactions
+                  const paidDistributions = transactions
+                    .filter(ev => ev.type === 'monthly_distribution' && ev.investmentId === inv.id && new Date(ev.date) <= asOf)
+                    .reduce((sum, ev) => sum + (Number(ev.amount) || 0), 0)
+                  totalEarnings += Math.round(paidDistributions * 100) / 100
+                } else {
+                  // For compounding investments, use calculated earnings
+                  const calc = calculateInvestmentValue(inv, asOfIso)
+                  totalEarnings += calc.totalEarnings
+                }
               }
             })
-            points.push({ date: asOf, value: Math.round(total * 100) / 100 })
+            points.push({ date: asOf, value: totalEarnings })
           }
           setChartSeries(points)
         }
@@ -418,7 +446,7 @@ export default function PortfolioSummary() {
                             setUserData(data.user)
                             // Recompute portfolio from updated user
                             const nextInvestments = data.user.investments || []
-                            const confirmedInvestments = nextInvestments.filter(i => i.status === 'confirmed')
+                            const confirmedInvestments = nextInvestments.filter(i => i.status === 'active')
                             const pendingInvestments = nextInvestments.filter(i => i.status === 'pending')
                             const draftInvestments = nextInvestments.filter(i => i.status === 'draft')
                             const transactions = Array.isArray(data.user.transactions) ? data.user.transactions : []

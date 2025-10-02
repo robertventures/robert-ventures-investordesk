@@ -14,10 +14,14 @@ export default function ProfileView() {
     return now.toISOString().split('T')[0]
   }, [])
 
-  const formatName = (value = '') => value.replace(/[0-9]/g, '')
+  // Names: Allow only letters, spaces, hyphens, apostrophes, and periods
+  const formatName = (value = '') => value.replace(/[^a-zA-Z\s'\-\.]/g, '')
 
-  // City names should not contain digits
-  const formatCity = (value = '') => value.replace(/[0-9]/g, '')
+  // City names: Allow only letters, spaces, hyphens, apostrophes, and periods
+  const formatCity = (value = '') => value.replace(/[^a-zA-Z\s'\-\.]/g, '')
+
+  // Street addresses: Allow letters, numbers, spaces, hyphens, periods, commas, and hash symbols
+  const formatStreet = (value = '') => value.replace(/[^a-zA-Z0-9\s'\-\.,#]/g, '')
 
   // Format US phone numbers as (XXX) XXX-XXXX while typing (ignore leading country code 1)
   const formatPhone = (value = '') => {
@@ -166,6 +170,8 @@ export default function ProfileView() {
     let formattedValue = value
     if (name === 'city') {
       formattedValue = formatCity(value)
+    } else if (name === 'street1' || name === 'street2') {
+      formattedValue = formatStreet(value)
     }
     setFormData(prev => ({ ...prev, address: { ...prev.address, [name]: formattedValue } }))
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }))
@@ -174,7 +180,11 @@ export default function ProfileView() {
 
   const handleEntityChange = (e) => {
     const { name, value } = e.target
-    setFormData(prev => ({ ...prev, entity: { ...prev.entity, [name]: value } }))
+    let formattedValue = value
+    if (name === 'name') {
+      formattedValue = formatName(value)
+    }
+    setFormData(prev => ({ ...prev, entity: { ...prev.entity, [name]: formattedValue } }))
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }))
     setSaveSuccess(false)
   }
@@ -198,6 +208,8 @@ export default function ProfileView() {
     let formattedValue = value
     if (name === 'city') {
       formattedValue = formatCity(value)
+    } else if (name === 'street1' || name === 'street2') {
+      formattedValue = formatStreet(value)
     }
     setFormData(prev => ({ ...prev, jointHolder: { ...prev.jointHolder, address: { ...prev.jointHolder.address, [name]: formattedValue } } }))
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }))
@@ -209,6 +221,8 @@ export default function ProfileView() {
     let formattedValue = value
     if (name === 'city') {
       formattedValue = formatCity(value)
+    } else if (name === 'street1' || name === 'street2') {
+      formattedValue = formatStreet(value)
     }
     setFormData(prev => ({ ...prev, entity: { ...prev.entity, address: { ...prev.entity.address, [name]: formattedValue } } }))
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }))
@@ -268,7 +282,11 @@ export default function ProfileView() {
 
   const handleAuthorizedRepChange = (e) => {
     const { name, value } = e.target
-    setFormData(prev => ({ ...prev, authorizedRepresentative: { ...prev.authorizedRepresentative, [name]: value } }))
+    let formattedValue = value
+    if (name === 'firstName' || name === 'lastName') {
+      formattedValue = formatName(value)
+    }
+    setFormData(prev => ({ ...prev, authorizedRepresentative: { ...prev.authorizedRepresentative, [name]: formattedValue } }))
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }))
     setSaveSuccess(false)
   }
@@ -278,6 +296,8 @@ export default function ProfileView() {
     let formattedValue = value
     if (name === 'city') {
       formattedValue = formatCity(value)
+    } else if (name === 'street1' || name === 'street2') {
+      formattedValue = formatStreet(value)
     }
     setFormData(prev => ({ ...prev, authorizedRepresentative: { ...prev.authorizedRepresentative, address: { ...prev.authorizedRepresentative.address, [name]: formattedValue } } }))
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }))

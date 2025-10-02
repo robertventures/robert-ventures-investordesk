@@ -15,10 +15,14 @@ const formatSsn = (value = '') => {
 
 const isCompleteSsn = (value = '') => value.replace(/\D/g, '').length === 9
 
-const formatName = (value = '') => value.replace(/[0-9]/g, '')
+// Names: Allow only letters, spaces, hyphens, apostrophes, and periods
+const formatName = (value = '') => value.replace(/[^a-zA-Z\s'\-\.]/g, '')
 
-// City names should not contain digits
-const formatCity = (value = '') => value.replace(/[0-9]/g, '')
+// City names: Allow only letters, spaces, hyphens, apostrophes, and periods
+const formatCity = (value = '') => value.replace(/[^a-zA-Z\s'\-\.]/g, '')
+
+// Street addresses: Allow letters, numbers, spaces, hyphens, periods, commas, and hash symbols
+const formatStreet = (value = '') => value.replace(/[^a-zA-Z0-9\s'\-\.,#]/g, '')
 
 const parseDateString = (value = '') => {
   const [year, month, day] = value.split('-').map(Number)
@@ -70,6 +74,8 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
       phone: ''
     },
     authorizedRep: {
+      firstName: '',
+      lastName: '',
       street1: '',
       street2: '',
       city: '',
@@ -147,6 +153,8 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
               phone: u.jointHolder?.phone || ''
             },
             authorizedRep: {
+              firstName: u.authorizedRepresentative?.firstName || '',
+              lastName: u.authorizedRepresentative?.lastName || '',
               street1: u.authorizedRepresentative?.address?.street1 || '',
               street2: u.authorizedRepresentative?.address?.street2 || '',
               city: u.authorizedRepresentative?.address?.city || '',
@@ -216,8 +224,16 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
       setFieldValue(name, formatName(value))
       return
     }
+    if (name === 'entityName') {
+      setFieldValue(name, formatName(value))
+      return
+    }
     if (name.endsWith('.city') || name === 'city') {
       setFieldValue(name, formatCity(value))
+      return
+    }
+    if (name.endsWith('.street1') || name === 'street1' || name.endsWith('.street2') || name === 'street2') {
+      setFieldValue(name, formatStreet(value))
       return
     }
     if (name.endsWith('.zip') || name === 'zip') {
@@ -236,8 +252,10 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
     if (accountType === 'entity') {
       if (!form.entityName.trim()) newErrors.entityName = 'Required'
     }
-    if (!form.firstName.trim()) newErrors.firstName = 'Required'
-    if (!form.lastName.trim()) newErrors.lastName = 'Required'
+    if (accountType !== 'entity') {
+      if (!form.firstName.trim()) newErrors.firstName = 'Required'
+      if (!form.lastName.trim()) newErrors.lastName = 'Required'
+    }
     if (!form.street1.trim()) newErrors.street1 = 'Required'
     if (!form.city.trim()) newErrors.city = 'Required'
     else if (/[0-9]/.test(form.city)) newErrors.city = 'No numbers allowed'
@@ -275,6 +293,8 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
     }
     if (accountType === 'entity') {
       // Authorized representative must also be provided
+      if (!form.authorizedRep.firstName.trim()) newErrors['authorizedRep.firstName'] = 'Required'
+      if (!form.authorizedRep.lastName.trim()) newErrors['authorizedRep.lastName'] = 'Required'
       if (!form.authorizedRep.street1.trim()) newErrors['authorizedRep.street1'] = 'Required'
       if (!form.authorizedRep.city.trim()) newErrors['authorizedRep.city'] = 'Required'
       else if (/[0-9]/.test(form.authorizedRep.city)) newErrors['authorizedRep.city'] = 'No numbers allowed'
@@ -316,8 +336,10 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
       }
 
       const userData = {
-        firstName: form.firstName.trim(),
-        lastName: form.lastName.trim(),
+        ...(accountType !== 'entity' ? {
+          firstName: form.firstName.trim(),
+          lastName: form.lastName.trim()
+        } : {}),
         ...(accountType === 'entity' ? { entity: {
           name: form.entityName,
           registrationDate: form.dob,
@@ -344,6 +366,8 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
           }
         } : {}),
         ...(accountType === 'entity' ? { authorizedRepresentative: {
+          firstName: form.authorizedRep.firstName.trim(),
+          lastName: form.authorizedRep.lastName.trim(),
           dob: form.authorizedRep.dob,
           ssn: form.authorizedRep.ssn,
           address: {
@@ -380,42 +404,46 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
 
       // Also reflect into the current investment if available
       if (investmentId) {
-        const investmentFields = accountType === 'entity' ? {
-          entity: {
-            name: form.entityName,
-            registrationDate: form.dob,
-            taxId: form.ssn,
-            address: {
-              street1: form.street1,
-              street2: form.street2,
-              city: form.city,
-              state: form.state,
-              zip: form.zip,
-              country: form.country
-            }
-          },
-          authorizedRepresentative: {
-            dob: form.authorizedRep.dob,
-            ssn: form.authorizedRep.ssn,
-            address: {
-              street1: form.authorizedRep.street1,
-              street2: form.authorizedRep.street2,
-              city: form.authorizedRep.city,
-              state: form.authorizedRep.state,
-              zip: form.authorizedRep.zip,
-              country: form.authorizedRep.country
+        let investmentFields = {}
+        
+        if (accountType === 'entity') {
+          investmentFields = {
+            entity: {
+              name: form.entityName,
+              registrationDate: form.dob,
+              taxId: form.ssn,
+              address: {
+                street1: form.street1,
+                street2: form.street2,
+                city: form.city,
+                state: form.state,
+                zip: form.zip,
+                country: form.country
+              }
+            },
+            authorizedRepresentative: {
+              firstName: form.authorizedRep.firstName.trim(),
+              lastName: form.authorizedRep.lastName.trim(),
+              dob: form.authorizedRep.dob,
+              ssn: form.authorizedRep.ssn,
+              address: {
+                street1: form.authorizedRep.street1,
+                street2: form.authorizedRep.street2,
+                city: form.authorizedRep.city,
+                state: form.authorizedRep.state,
+                zip: form.authorizedRep.zip,
+                country: form.authorizedRep.country
+              }
             }
           }
-        } : {
-          personalInfo: { firstName: form.firstName.trim(), lastName: form.lastName.trim(), dob: form.dob, ssn: form.ssn },
-          address: {
-            street1: form.street1,
-            street2: form.street2,
-            city: form.city,
-            state: form.state,
-            zip: form.zip,
-            country: form.country
-          }
+        } else if (accountType === 'joint') {
+          // For joint accounts, only save joint-specific data
+          // Personal info is at user level, no need to duplicate
+          investmentFields = {}
+        } else {
+          // For individual/IRA accounts, don't duplicate personalInfo and address
+          // This data is already stored at the user level
+          investmentFields = {}
         }
 
         // Add joint holder data to investment if account type is joint
@@ -444,8 +472,10 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
       }
 
       const summary = {
-        firstName: form.firstName.trim(),
-        lastName: form.lastName.trim(),
+        ...(accountType !== 'entity' ? {
+          firstName: form.firstName.trim(),
+          lastName: form.lastName.trim()
+        } : {}),
         street1: form.street1,
         street2: form.street2,
         city: form.city,
@@ -467,6 +497,8 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
         } : undefined,
         entityName: accountType === 'entity' ? form.entityName : undefined,
         authorizedRep: accountType === 'entity' ? {
+          firstName: form.authorizedRep.firstName,
+          lastName: form.authorizedRep.lastName,
           dob: form.authorizedRep.dob,
           ssn: form.authorizedRep.ssn,
           address: {
@@ -520,6 +552,16 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
             <h3>Authorized Representative Information</h3>
           </div>
           <div className={styles.grid}>
+            <div className={styles.field}> 
+              <label className={styles.label}>First Name</label>
+              <input className={`${styles.input} ${errors['authorizedRep.firstName'] ? styles.inputError : ''}`} name="authorizedRep.firstName" value={form.authorizedRep.firstName} onChange={handleChange} placeholder="Enter first name" />
+              {errors['authorizedRep.firstName'] && <span className={styles.error}>{errors['authorizedRep.firstName']}</span>}
+            </div>
+            <div className={styles.field}> 
+              <label className={styles.label}>Last Name</label>
+              <input className={`${styles.input} ${errors['authorizedRep.lastName'] ? styles.inputError : ''}`} name="authorizedRep.lastName" value={form.authorizedRep.lastName} onChange={handleChange} placeholder="Enter last name" />
+              {errors['authorizedRep.lastName'] && <span className={styles.error}>{errors['authorizedRep.lastName']}</span>}
+            </div>
             <div className={styles.field}> 
               <label className={styles.label}>Street Address</label>
               <input className={`${styles.input} ${errors['authorizedRep.street1'] ? styles.inputError : ''}`} name="authorizedRep.street1" value={form.authorizedRep.street1} onChange={handleChange} placeholder="No PO Boxes" />
@@ -592,16 +634,20 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
             {errors.entityName && <span className={styles.error}>{errors.entityName}</span>}
           </div>
         )}
-        <div className={styles.field}> 
-          <label className={styles.label}>First Name</label>
-          <input className={`${styles.input} ${errors.firstName ? styles.inputError : ''}`} name="firstName" value={form.firstName} onChange={handleChange} placeholder="Enter first name" />
-          {errors.firstName && <span className={styles.error}>{errors.firstName}</span>}
-        </div>
-        <div className={styles.field}> 
-          <label className={styles.label}>Last Name</label>
-          <input className={`${styles.input} ${errors.lastName ? styles.inputError : ''}`} name="lastName" value={form.lastName} onChange={handleChange} placeholder="Enter last name" />
-          {errors.lastName && <span className={styles.error}>{errors.lastName}</span>}
-        </div>
+        {accountType !== 'entity' && (
+          <>
+            <div className={styles.field}> 
+              <label className={styles.label}>First Name</label>
+              <input className={`${styles.input} ${errors.firstName ? styles.inputError : ''}`} name="firstName" value={form.firstName} onChange={handleChange} placeholder="Enter first name" />
+              {errors.firstName && <span className={styles.error}>{errors.firstName}</span>}
+            </div>
+            <div className={styles.field}> 
+              <label className={styles.label}>Last Name</label>
+              <input className={`${styles.input} ${errors.lastName ? styles.inputError : ''}`} name="lastName" value={form.lastName} onChange={handleChange} placeholder="Enter last name" />
+              {errors.lastName && <span className={styles.error}>{errors.lastName}</span>}
+            </div>
+          </>
+        )}
         <div className={styles.field}> 
           <label className={styles.label}>Street Address</label>
           <input className={`${styles.input} ${errors.street1 ? styles.inputError : ''}`} name="street1" value={form.street1} onChange={handleChange} placeholder="No PO Boxes" />

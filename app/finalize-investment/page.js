@@ -476,6 +476,16 @@ function ClientContent() {
                   _action: 'updateInvestment',
                   investmentId,
                   fields: {
+                    // For individual/IRA accounts, snapshot personalInfo and address at submission time
+                    ...(investment.accountType === 'individual' || investment.accountType === 'ira' ? {
+                      personalInfo: {
+                        firstName: user.firstName,
+                        lastName: user.lastName,
+                        dob: user.dob,
+                        ssn: user.ssn
+                      },
+                      address: user.address
+                    } : {}),
                     compliance: {
                       accredited,
                       accreditedType: accredited === 'accredited' ? accreditedType : null,

@@ -4,6 +4,9 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import styles from './PersonalDetailsForm.module.css'
 
+// Names: Allow only letters, spaces, hyphens, apostrophes, and periods
+const formatName = (value = '') => value.replace(/[^a-zA-Z\s'\-\.]/g, '')
+
 export default function PersonalDetailsForm() {
   const router = useRouter()
   const [formData, setFormData] = useState({
@@ -15,9 +18,15 @@ export default function PersonalDetailsForm() {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
+    let formattedValue = value
+    
+    if (name === 'firstName' || name === 'lastName') {
+      formattedValue = formatName(value)
+    }
+    
     setFormData(prev => ({
       ...prev,
-      [name]: value
+      [name]: formattedValue
     }))
     
     // Clear error when user starts typing

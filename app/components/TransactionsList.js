@@ -24,7 +24,7 @@ function eventMeta(ev) {
     case 'withdrawal_notice_started':
       return { icon: '⏳', iconClass: styles.withdrawal, title: 'Withdrawal Notice Started' }
     case 'withdrawal_approved':
-      return { icon: '✅', iconClass: styles.confirmed, title: 'Withdrawal Approved' }
+      return { icon: '✅', iconClass: styles.confirmed, title: 'Withdrawal Processed' }
     case 'withdrawal_rejected':
       return { icon: '❌', iconClass: styles.withdrawal, title: 'Withdrawal Rejected' }
     default:
@@ -109,7 +109,7 @@ export default function TransactionsList({ limit = null, showViewAll = true, fil
                     {ev.payoutStatus ? <div className={styles.detailRow}><span className={styles.detailKey}>Payout Status</span><span className={styles.detailVal}>{ev.payoutStatus}</span></div> : null}
                     {ev.payoutBankNickname ? <div className={styles.detailRow}><span className={styles.detailKey}>Bank</span><span className={styles.detailVal}>{ev.payoutBankNickname}</span></div> : null}
                     {ev.noticeEndAt ? <div className={styles.detailRow}><span className={styles.detailKey}>Notice Ends</span><span className={styles.detailVal}>{new Date(ev.noticeEndAt).toLocaleDateString('en-US', { timeZone: 'UTC' })}</span></div> : null}
-                    {ev.payoutEligibleAt ? <div className={styles.detailRow}><span className={styles.detailKey}>Payout Eligible</span><span className={styles.detailVal}>{new Date(ev.payoutEligibleAt).toLocaleDateString('en-US', { timeZone: 'UTC' })}</span></div> : null}
+                    {ev.payoutDueBy ? <div className={styles.detailRow}><span className={styles.detailKey}>Payout Due By</span><span className={styles.detailVal}>{new Date(ev.payoutDueBy).toLocaleDateString('en-US', { timeZone: 'UTC' })}</span></div> : null}
                   </div>
                 )}
               </div>

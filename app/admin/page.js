@@ -10,9 +10,11 @@ export default function AdminPage() {
   const [users, setUsers] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [savingId, setSavingId] = useState(null)
-  const [activeTab, setActiveTab] = useState('dashboard') // 'dashboard' | 'investments' | 'accounts' | 'withdrawals'
+  const [activeTab, setActiveTab] = useState('dashboard') // 'dashboard' | 'investments' | 'accounts' | 'withdrawals' | 'pending-payouts'
   const [withdrawals, setWithdrawals] = useState([])
   const [isLoadingWithdrawals, setIsLoadingWithdrawals] = useState(false)
+  const [pendingPayouts, setPendingPayouts] = useState([])
+  const [isLoadingPayouts, setIsLoadingPayouts] = useState(false)
   const [investmentsSearch, setInvestmentsSearch] = useState('')
   const [accountsSearch, setAccountsSearch] = useState('')
   const [timeMachineData, setTimeMachineData] = useState({ appTime: null, isActive: false })
@@ -62,6 +64,9 @@ export default function AdminPage() {
 
         // Load withdrawals
         await loadWithdrawals()
+        
+        // Load pending payouts
+        await loadPendingPayouts()
       } catch (e) {
         console.error('Failed to load admin data', e)
       } finally {
@@ -81,6 +86,40 @@ export default function AdminPage() {
       console.error('Failed to load withdrawals', e)
     } finally {
       setIsLoadingWithdrawals(false)
+    }
+  }
+
+  const loadPendingPayouts = async () => {
+    try {
+      setIsLoadingPayouts(true)
+      const res = await fetch('/api/admin/pending-payouts')
+      const data = await res.json()
+      if (data.success) setPendingPayouts(data.pendingPayouts || [])
+    } catch (e) {
+      console.error('Failed to load pending payouts', e)
+    } finally {
+      setIsLoadingPayouts(false)
+    }
+  }
+
+  const handlePayoutAction = async (action, userId, transactionId, failureReason = null) => {
+    try {
+      const res = await fetch('/api/admin/pending-payouts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, userId, transactionId, failureReason })
+      })
+      const data = await res.json()
+      if (!data.success) {
+        alert(data.error || 'Failed to process payout action')
+        return
+      }
+      alert(data.message || 'Payout updated successfully')
+      await loadPendingPayouts()
+      await refreshUsers()
+    } catch (e) {
+      console.error('Failed to process payout action', e)
+      alert('An error occurred')
     }
   }
 
@@ -127,7 +166,7 @@ export default function AdminPage() {
           _action: 'updateInvestment',
           investmentId,
           adminUserId: currentUser?.id,
-          fields: { status: 'confirmed' }
+          fields: { status: 'active' }
         })
       })
       const data = await res.json()
@@ -260,11 +299,11 @@ export default function AdminPage() {
 
   const nonAdminUsers = (users || []).filter(u => !u.isAdmin)
   const activeAccountsCount = nonAdminUsers.length
-  const investorsCount = nonAdminUsers.filter(u => (u.investments || []).some(inv => inv.status === 'confirmed')).length
+  const investorsCount = nonAdminUsers.filter(u => (u.investments || []).some(inv => inv.status === 'active')).length
   const { pendingTotal, raisedTotal } = nonAdminUsers.reduce((acc, u) => {
     (u.investments || []).forEach(inv => {
       const amount = inv.amount || 0
-      if (inv.status === 'confirmed') {
+      if (inv.status === 'active') {
         acc.raisedTotal += amount
       } else if (inv.status !== 'withdrawn' && inv.status !== 'rejected') {
         acc.pendingTotal += amount
@@ -423,23 +462,23 @@ export default function AdminPage() {
                                 <div className={styles.invCol}><b>Created:</b> {inv.createdAt ? new Date(inv.createdAt).toLocaleDateString() : '-'}</div>
                                 <div className={styles.invActions}>
                                   <div className={styles.actionGroup}>
-                                    <button
-                                      className={styles.approveButton}
-                                      disabled={savingId === inv.id || inv.status === 'confirmed' || inv.status === 'withdrawn' || inv.status === 'rejected'}
-                                      onClick={() => approveInvestment(user.id, inv.id)}
-                                    >
-                                      {inv.status === 'confirmed' ? 'Confirmed' : 
-                                       inv.status === 'withdrawn' ? 'Withdrawn' : 
-                                       inv.status === 'rejected' ? 'Rejected' :
-                                       (savingId === inv.id ? 'Confirming...' : 'Confirm')}
-                                    </button>
-                                    <button
-                                      className={styles.dangerButton}
-                                      disabled={savingId === inv.id || inv.status === 'rejected' || inv.status === 'confirmed' || inv.status === 'withdrawn'}
-                                      onClick={() => rejectInvestment(user.id, inv.id)}
-                                    >
-                                      {inv.status === 'rejected' ? 'Rejected' : (savingId === inv.id ? 'Rejecting...' : 'Reject')}
-                                    </button>
+                            <button
+                              className={styles.approveButton}
+                              disabled={savingId === inv.id || inv.status === 'active' || inv.status === 'withdrawn' || inv.status === 'rejected'}
+                              onClick={() => approveInvestment(user.id, inv.id)}
+                            >
+                              {inv.status === 'active' ? 'Active' : 
+                               inv.status === 'withdrawn' ? 'Withdrawn' : 
+                               inv.status === 'rejected' ? 'Rejected' :
+                               (savingId === inv.id ? 'Approving...' : 'Approve')}
+                            </button>
+                            <button
+                              className={styles.dangerButton}
+                              disabled={savingId === inv.id || inv.status === 'rejected' || inv.status === 'active' || inv.status === 'withdrawn'}
+                              onClick={() => rejectInvestment(user.id, inv.id)}
+                            >
+                              {inv.status === 'rejected' ? 'Rejected' : (savingId === inv.id ? 'Rejecting...' : 'Reject')}
+                            </button>
                                   </div>
                                 </div>
                               </div>
@@ -499,7 +538,7 @@ export default function AdminPage() {
                       <td>{user.isVerified ? 'Yes' : 'No'}</td>
                       <td>{(user.investments || []).length}</td>
                       <td>
-                        ${((user.investments || []).filter(inv => inv.status === 'confirmed' || inv.status === 'approved' || inv.status === 'invested').reduce((sum, inv) => sum + (inv.amount || 0), 0)).toLocaleString()}
+                        ${((user.investments || []).filter(inv => inv.status === 'active' || inv.status === 'approved' || inv.status === 'invested').reduce((sum, inv) => sum + (inv.amount || 0), 0)).toLocaleString()}
                       </td>
                       <td>
                         <div className={styles.actionGroup}>
@@ -573,11 +612,118 @@ export default function AdminPage() {
                           <td>${(w.amount || 0).toLocaleString()}</td>
                           <td>{w.status}</td>
                           <td>{w.requestedAt ? new Date(w.requestedAt).toLocaleString() : '-'}</td>
-                          <td>{w.payoutEligibleAt ? new Date(w.payoutEligibleAt).toLocaleString() : '-'}</td>
+                          <td>{w.payoutDueBy ? new Date(w.payoutDueBy).toLocaleString() : '-'}</td>
                           <td>
                             <div className={styles.actionGroup}>
                               <button className={styles.approveButton} onClick={() => actOnWithdrawal('approve', w.userId, w.id)} disabled={w.status === 'approved'}>Approve</button>
                               <button className={styles.dangerButton} onClick={() => actOnWithdrawal('reject', w.userId, w.id)} disabled={w.status === 'rejected'}>Reject</button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'pending-payouts' && (
+            <div>
+              <div className={styles.headerRow}>
+                <h2 className={styles.sectionTitle}>Pending Payouts</h2>
+                <button className={styles.secondaryButton} onClick={loadPendingPayouts} disabled={isLoadingPayouts}>
+                  {isLoadingPayouts ? 'Refreshing...' : 'Refresh'}
+                </button>
+              </div>
+              
+              {pendingPayouts.length > 0 && (
+                <div className={styles.alertBox} style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '8px' }}>
+                  <strong>⚠️ {pendingPayouts.length} Payout{pendingPayouts.length !== 1 ? 's' : ''} Pending</strong>
+                  <p style={{ marginTop: '0.5rem', fontSize: '0.9rem' }}>
+                    These monthly interest payments could not be sent due to bank connection issues. 
+                    You can retry the payouts or manually mark them as completed once the bank connection is restored.
+                  </p>
+                </div>
+              )}
+
+              <div className={styles.tableContainer}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>User</th>
+                      <th>Email</th>
+                      <th>Investment ID</th>
+                      <th>Payout Amount</th>
+                      <th>Scheduled Date</th>
+                      <th>Bank Account</th>
+                      <th>Status</th>
+                      <th>Failure Reason</th>
+                      <th>Retry Count</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pendingPayouts.length === 0 ? (
+                      <tr><td colSpan="10" className={styles.muted}>
+                        ✅ No pending payouts - all monthly payments have been successfully processed!
+                      </td></tr>
+                    ) : (
+                      pendingPayouts.map(payout => (
+                        <tr key={payout.id} style={{ backgroundColor: payout.payoutStatus === 'failed' ? '#fee' : '#fffbeb' }}>
+                          <td>{payout.userName || payout.userId}</td>
+                          <td>{payout.userEmail}</td>
+                          <td style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>{payout.investmentId}</td>
+                          <td><strong>${(payout.amount || 0).toFixed(2)}</strong></td>
+                          <td>{new Date(payout.date).toLocaleDateString()}</td>
+                          <td>{payout.payoutBankNickname || 'Not configured'}</td>
+                          <td>
+                            <span style={{ 
+                              padding: '0.25rem 0.5rem', 
+                              borderRadius: '4px',
+                              fontSize: '0.85rem',
+                              backgroundColor: payout.payoutStatus === 'failed' ? '#fecaca' : '#fef3c7',
+                              color: payout.payoutStatus === 'failed' ? '#991b1b' : '#92400e'
+                            }}>
+                              {payout.payoutStatus.toUpperCase()}
+                            </span>
+                          </td>
+                          <td style={{ fontSize: '0.85rem', maxWidth: '200px' }}>
+                            {payout.failureReason || '-'}
+                          </td>
+                          <td>{payout.retryCount || 0}</td>
+                          <td>
+                            <div className={styles.actionGroup} style={{ flexDirection: 'column', gap: '0.25rem' }}>
+                              <button 
+                                className={styles.approveButton}
+                                onClick={() => handlePayoutAction('retry', payout.userId, payout.id)}
+                                style={{ fontSize: '0.85rem', padding: '0.4rem 0.6rem' }}
+                              >
+                                🔄 Retry
+                              </button>
+                              <button 
+                                className={styles.secondaryButton}
+                                onClick={() => {
+                                  if (confirm('Mark this payout as completed? This will bypass the bank transfer.')) {
+                                    handlePayoutAction('complete', payout.userId, payout.id)
+                                  }
+                                }}
+                                style={{ fontSize: '0.85rem', padding: '0.4rem 0.6rem' }}
+                              >
+                                ✓ Mark Complete
+                              </button>
+                              <button 
+                                className={styles.dangerButton}
+                                onClick={() => {
+                                  const reason = prompt('Enter failure reason:')
+                                  if (reason) {
+                                    handlePayoutAction('fail', payout.userId, payout.id, reason)
+                                  }
+                                }}
+                                style={{ fontSize: '0.85rem', padding: '0.4rem 0.6rem' }}
+                              >
+                                ✗ Mark Failed
+                              </button>
                             </div>
                           </td>
                         </tr>

@@ -221,7 +221,7 @@ export async function PUT(request, { params }) {
       }
       
       // On confirmation, set server-driven confirmation date and lock up end date
-      if (body.fields.status === 'confirmed') {
+      if (body.fields.status === 'active') {
         // Always derive confirmation date from server app time (supports time machine)
         const appTime = await getCurrentAppTime()
         const confirmedDate = new Date(appTime)
@@ -261,7 +261,7 @@ export async function PUT(request, { params }) {
       investments[invIndex] = updatedInvestment
 
       // If investment transitions out of draft (pending/confirmed), remove ALL remaining drafts
-      const transitionedOutOfDraft = investments[invIndex].status === 'pending' || investments[invIndex].status === 'confirmed'
+      const transitionedOutOfDraft = investments[invIndex].status === 'pending' || investments[invIndex].status === 'active'
       if (transitionedOutOfDraft) {
         for (let i = investments.length - 1; i >= 0; i--) {
           const inv = investments[i]
@@ -276,7 +276,7 @@ export async function PUT(request, { params }) {
       }
 
       // Lock user account type only when investment transitions to pending or confirmed
-      const isLockingStatus = updatedInvestment.status === 'pending' || updatedInvestment.status === 'confirmed'
+      const isLockingStatus = updatedInvestment.status === 'pending' || updatedInvestment.status === 'active'
       const shouldSetAccountType = isLockingStatus && updatedInvestment.accountType && !user.accountType
       const updatedUser = { ...user, investments, ...(shouldSetAccountType ? { accountType: updatedInvestment.accountType } : {}), updatedAt: new Date().toISOString() }
       usersData.users[userIndex] = updatedUser

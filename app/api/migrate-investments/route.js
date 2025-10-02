@@ -19,7 +19,7 @@ export async function POST(request) {
           // Check if this investment has lock up dates (meaning it was already "confirmed" in old system)
           if (investment.lockupEndDate || investment.confirmedAt) {
             // This was already confirmed, change status to 'confirmed'
-            investment.status = 'confirmed'
+            investment.status = 'active'
             investment.updatedAt = new Date().toISOString()
             userUpdated = true
             migratedCount++

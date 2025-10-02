@@ -13,6 +13,7 @@ export default function InvestmentDetailsContent({ investmentId }) {
   const [appTime, setAppTime] = useState(null)
   const [isWithdrawing, setIsWithdrawing] = useState(false)
   const [withdrawalInfo, setWithdrawalInfo] = useState(null)
+  const [showWithdrawConfirm, setShowWithdrawConfirm] = useState(false)
 
   useEffect(() => {
     const loadData = async () => {
@@ -50,10 +51,15 @@ export default function InvestmentDetailsContent({ investmentId }) {
     loadData()
   }, [investmentId, router])
 
-  const handleWithdrawal = async () => {
+  const handleWithdrawalClick = () => {
+    setShowWithdrawConfirm(true)
+  }
+
+  const confirmWithdrawal = async () => {
     if (!investmentData || !userData) return
 
     setIsWithdrawing(true)
+    setShowWithdrawConfirm(false)
     
     try {
       const res = await fetch('/api/withdrawals', {
@@ -65,7 +71,6 @@ export default function InvestmentDetailsContent({ investmentId }) {
       const data = await res.json()
       
       if (data.success) {
-        alert('Withdrawal notice started. You will be eligible for payout after the notice period.')
         const wd = data.withdrawal
         setWithdrawalInfo(wd)
         setInvestmentData(prev => ({
@@ -73,10 +78,9 @@ export default function InvestmentDetailsContent({ investmentId }) {
           status: 'withdrawal_notice',
           withdrawalId: wd.id,
           withdrawalNoticeStartAt: wd.noticeStartAt,
-          withdrawalNoticeEndAt: wd.noticeEndAt,
-          payoutEligibleAt: wd.payoutEligibleAt
+          payoutDueBy: wd.payoutDueBy
         }))
-        setActiveTab('withdrawal')
+        setActiveTab('investment-info')
       } else {
         alert(data.error || 'Failed to process withdrawal')
       }
@@ -194,7 +198,7 @@ export default function InvestmentDetailsContent({ investmentId }) {
         >
           🧾 ACTIVITY
         </button>
-        {calculation.isWithdrawable && (
+        {calculation.isWithdrawable && investmentData.status === 'active' && (
           <button 
             className={`${styles.tab} ${activeTab === 'withdrawal' ? styles.active : ''}`}
             onClick={() => setActiveTab('withdrawal')}
@@ -205,7 +209,7 @@ export default function InvestmentDetailsContent({ investmentId }) {
       </div>
 
       {/* Tab Content */}
-      {(activeTab === 'investment-info' || !calculation.isWithdrawable) && (
+      {activeTab === 'investment-info' && (
         <div className={styles.tabContent}>
           {/* Value Summary - Prominent display */}
           <div className={styles.valueCard}>
@@ -222,7 +226,9 @@ export default function InvestmentDetailsContent({ investmentId }) {
               </div>
               <div className={styles.valueItem}>
                 <span className={styles.valueAmount}>{formatCurrency(calculation.currentValue)}</span>
-                <span className={styles.valueLabel}>Current Value</span>
+                <span className={styles.valueLabel}>
+                  {investmentData.status === 'withdrawn' ? 'Final Withdrawal Value' : 'Current Value'}
+                </span>
               </div>
               <div className={styles.valueItem}>
                 <span className={styles.valueAmount}>{formatCurrency(calculation.totalEarnings)}</span>
@@ -267,7 +273,7 @@ export default function InvestmentDetailsContent({ investmentId }) {
                   <span className={styles.detailLabel}>BOND APPROVED</span>
                 <span className={styles.detailValue}>{investmentData.confirmedAt ? formatDate(investmentData.confirmedAt) : 'Pending'}</span>
                 </div>
-                {investmentData.status === 'confirmed' && calculation.lockupEndDate && (
+                {investmentData.status === 'active' && calculation.lockupEndDate && (
                   <div className={styles.detailItem}>
                     <span className={styles.detailLabel}>LOCK UP END DATE</span>
                     <span className={styles.detailValue}>{formatDate(calculation.lockupEndDate)}</span>
@@ -276,6 +282,77 @@ export default function InvestmentDetailsContent({ investmentId }) {
               </div>
             </div>
           </div>
+
+          {/* Show Withdrawal Status for investments in withdrawal process or completed */}
+          {(investmentData.status === 'withdrawal_notice' || investmentData.status === 'withdrawn') && (
+            <div className={styles.withdrawalCard}>
+              <h3 className={styles.withdrawalTitle}>
+                {investmentData.status === 'withdrawn' ? 'Withdrawal Completed' : 'Withdrawal In Progress'}
+              </h3>
+              <div className={styles.withdrawalInfo}>
+                <p className={styles.withdrawalText}>
+                  {investmentData.status === 'withdrawn' 
+                    ? 'This investment has been withdrawn and paid out.' 
+                    : 'Your withdrawal request has been submitted. Robert Ventures has 90 days to process your payout.'}
+                </p>
+                <div className={styles.withdrawalBreakdown}>
+                  <div className={styles.breakdownItem}>
+                    <span className={styles.detailLabel}>PRINCIPAL AMOUNT</span>
+                    <span className={styles.detailValue}>{formatCurrency(investmentData.amount)}</span>
+                  </div>
+                  <div className={styles.breakdownItem}>
+                    <span className={styles.detailLabel}>TOTAL EARNINGS</span>
+                    <span className={styles.detailValue}>{formatCurrency(calculation.totalEarnings)}</span>
+                  </div>
+                  <div className={styles.breakdownItem}>
+                    <span className={styles.detailLabel}>TOTAL WITHDRAWAL</span>
+                    <span className={styles.detailValue}><strong>{formatCurrency(calculation.currentValue)}</strong></span>
+                  </div>
+                </div>
+                {investmentData.status === 'withdrawal_notice' && (
+                  <div className={styles.withdrawalProjection}>
+                    <div className={styles.projectionHeader}>
+                      <h4 className={styles.projectionTitle}>Withdrawal Timeline</h4>
+                      <span className={styles.projectionSub}>Robert Ventures has 90 days to process payout</span>
+                    </div>
+                    <table className={styles.projectionTable}>
+                      <thead>
+                        <tr>
+                          <th>Stage</th>
+                          <th>Date</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td>Withdrawal Requested</td>
+                          <td>{investmentData.withdrawalNoticeStartAt ? new Date(investmentData.withdrawalNoticeStartAt).toLocaleString() : '-'}</td>
+                        </tr>
+                        <tr>
+                          <td>Payout Due By</td>
+                          <td>{investmentData.payoutDueBy ? new Date(investmentData.payoutDueBy).toLocaleString() : '-'}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                {investmentData.status === 'withdrawn' && investmentData.withdrawnAt && (
+                  <div className={styles.withdrawalProjection}>
+                    <div className={styles.projectionHeader}>
+                      <h4 className={styles.projectionTitle}>Withdrawal Details</h4>
+                    </div>
+                    <table className={styles.projectionTable}>
+                      <tbody>
+                        <tr>
+                          <td>Withdrawal Date</td>
+                          <td>{new Date(investmentData.withdrawnAt).toLocaleString()}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -320,7 +397,7 @@ export default function InvestmentDetailsContent({ investmentId }) {
                 <div className={styles.withdrawalProjection}>
                   <div className={styles.projectionHeader}>
                     <h4 className={styles.projectionTitle}>Withdrawal Notice</h4>
-                    <span className={styles.projectionSub}>Payout after notice and admin approval</span>
+                    <span className={styles.projectionSub}>Robert Ventures has 90 days to process payout</span>
                   </div>
                   <table className={styles.projectionTable}>
                     <thead>
@@ -331,16 +408,12 @@ export default function InvestmentDetailsContent({ investmentId }) {
                     </thead>
                     <tbody>
                       <tr>
-                        <td>Notice Started</td>
+                        <td>Withdrawal Requested</td>
                         <td>{investmentData.withdrawalNoticeStartAt ? new Date(investmentData.withdrawalNoticeStartAt).toLocaleString() : '-'}</td>
                       </tr>
                       <tr>
-                        <td>Notice Ends</td>
-                        <td>{investmentData.withdrawalNoticeEndAt ? new Date(investmentData.withdrawalNoticeEndAt).toLocaleString() : '-'}</td>
-                      </tr>
-                      <tr>
-                        <td>Payout Eligible At</td>
-                        <td>{investmentData.payoutEligibleAt ? new Date(investmentData.payoutEligibleAt).toLocaleString() : '-'}</td>
+                        <td>Payout Due By</td>
+                        <td>{investmentData.payoutDueBy ? new Date(investmentData.payoutDueBy).toLocaleString() : '-'}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -382,15 +455,66 @@ export default function InvestmentDetailsContent({ investmentId }) {
                 </table>
                 <div className={styles.projectionNote}>For illustration only. Actual returns may vary.</div>
               </div>
-              {investmentData.status !== 'withdrawal_notice' && (
+              {investmentData.status === 'active' && (
                 <button
-                  onClick={handleWithdrawal}
+                  onClick={handleWithdrawalClick}
                   disabled={isWithdrawing}
                   className={styles.withdrawButton}
                 >
                   {isWithdrawing ? 'Processing Withdrawal...' : `Withdraw ${formatCurrency(calculation.currentValue)}`}
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Withdrawal Confirmation Modal */}
+      {showWithdrawConfirm && (
+        <div className={styles.modalOverlay} onClick={() => setShowWithdrawConfirm(false)}>
+          <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h3 className={styles.modalTitle}>Confirm Withdrawal</h3>
+            </div>
+            <div className={styles.modalBody}>
+              <p className={styles.modalText}>
+                You are about to withdraw your investment. Once confirmed:
+              </p>
+              <ul className={styles.modalList}>
+                <li>Robert Ventures will have 90 days to process your payout</li>
+                <li>You will receive your principal plus any compounded interest</li>
+                <li>This action cannot be undone</li>
+              </ul>
+              <div className={styles.modalAmount}>
+                <div className={styles.modalAmountRow}>
+                  <span>Principal Amount:</span>
+                  <strong>{formatCurrency(investmentData.amount)}</strong>
+                </div>
+                <div className={styles.modalAmountRow}>
+                  <span>Total Earnings:</span>
+                  <strong>{formatCurrency(calculation.totalEarnings)}</strong>
+                </div>
+                <div className={styles.modalAmountRow} style={{ borderTop: '2px solid #e5e7eb', paddingTop: '8px', marginTop: '8px' }}>
+                  <span>Total Withdrawal:</span>
+                  <strong style={{ fontSize: '1.25rem', color: '#059669' }}>{formatCurrency(calculation.currentValue)}</strong>
+                </div>
+              </div>
+            </div>
+            <div className={styles.modalFooter}>
+              <button 
+                className={styles.modalButtonSecondary} 
+                onClick={() => setShowWithdrawConfirm(false)}
+                disabled={isWithdrawing}
+              >
+                Cancel
+              </button>
+              <button 
+                className={styles.modalButtonPrimary} 
+                onClick={confirmWithdrawal}
+                disabled={isWithdrawing}
+              >
+                {isWithdrawing ? 'Processing...' : 'Confirm Withdrawal'}
+              </button>
             </div>
           </div>
         </div>

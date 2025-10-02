@@ -151,8 +151,8 @@ export async function POST() {
           })
         }
 
-        // Confirmed event
-        if (inv.status === 'confirmed' && inv.confirmedAt) {
+        // Confirmed event (status = active)
+        if (inv.status === 'active' && inv.confirmedAt) {
           ensureEvent({
             id: `tx-${invId}-confirmed`,
             type: 'investment_confirmed',
@@ -165,7 +165,7 @@ export async function POST() {
         }
 
         // Monthly distributions for monthly payout investments (prorated first month)
-        if (inv.status === 'confirmed' && inv.paymentFrequency === 'monthly' && inv.confirmedAt) {
+        if (inv.status === 'active' && inv.paymentFrequency === 'monthly' && inv.confirmedAt) {
           const confirmedDate = new Date(inv.confirmedAt)
           // Interest starts accruing from the day AFTER confirmation
           const accrualStartDate = addDaysUtc(toUtcStartOfDay(confirmedDate), 1)
@@ -173,17 +173,26 @@ export async function POST() {
           const annualRate = inv.lockupPeriod === '1-year' ? 0.08 : 0.10
           const monthlyRate = annualRate / 12
           
-          // Resolve payout destination (mocked as connected)
+          // Resolve payout destination and check bank connection status
           const payoutMethod = user?.banking?.payoutMethod || 'bank-account'
           const investmentBank = inv?.banking?.bank
           let payoutBankId = investmentBank?.id || null
           let payoutBankNickname = investmentBank?.nickname || null
+          let bankConnectionActive = true
+          
           if (!payoutBankId && Array.isArray(user?.bankAccounts) && user?.banking?.defaultBankAccountId) {
             const acct = user.bankAccounts.find(b => b.id === user.banking.defaultBankAccountId)
             if (acct) {
               payoutBankId = acct.id
               payoutBankNickname = acct.nickname || 'Primary Account'
+              // Check if bank account has connection issues
+              bankConnectionActive = acct.connectionStatus !== 'disconnected' && acct.connectionStatus !== 'error'
             }
+          }
+          
+          // If investment has specific bank info, check its connection status
+          if (investmentBank) {
+            bankConnectionActive = investmentBank.connectionStatus !== 'disconnected' && investmentBank.connectionStatus !== 'error'
           }
           
           // Find all completed month-end boundaries
@@ -221,6 +230,19 @@ export async function POST() {
             const distributionDate = addDaysUtc(segment.end, 1)
             
             const eventId = `tx-${invId}-md-${distributionDate.getUTCFullYear()}-${String(distributionDate.getUTCMonth() + 1).padStart(2, '0')}`
+            
+            // Determine payout status based on bank connection
+            let payoutStatus = 'completed'
+            let failureReason = null
+            
+            if (!bankConnectionActive) {
+              payoutStatus = 'pending'
+              failureReason = 'Bank account connection lost or misconfigured'
+            } else if (!payoutBankId) {
+              payoutStatus = 'pending'
+              failureReason = 'No payout bank account configured'
+            }
+            
             ensureEvent({
               id: eventId,
               type: 'monthly_distribution',
@@ -233,7 +255,9 @@ export async function POST() {
               payoutMethod,
               payoutBankId,
               payoutBankNickname,
-              payoutStatus: 'completed'
+              payoutStatus,
+              failureReason,
+              retryCount: 0
             })
             
             monthIndex += 1
@@ -241,7 +265,7 @@ export async function POST() {
         }
 
         // Monthly compounding events (prorated first month, compounding principal)
-        if (inv.status === 'confirmed' && inv.paymentFrequency === 'compounding' && inv.confirmedAt) {
+        if (inv.status === 'active' && inv.paymentFrequency === 'compounding' && inv.confirmedAt) {
           const confirmedDate = new Date(inv.confirmedAt)
           // Interest starts accruing from the day AFTER confirmation
           const accrualStartDate = addDaysUtc(toUtcStartOfDay(confirmedDate), 1)
@@ -317,8 +341,7 @@ export async function POST() {
             type: 'withdrawal_notice_started',
             ...base,
             date: wd.noticeStartAt || wd.requestedAt || new Date().toISOString(),
-            noticeEndAt: wd.noticeEndAt || null,
-            payoutEligibleAt: wd.payoutEligibleAt || null
+            payoutDueBy: wd.payoutDueBy || null
           })
         } else if (wd.status === 'approved') {
           ensureEvent({
