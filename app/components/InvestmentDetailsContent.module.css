@@ -307,6 +307,11 @@
   color: #92400e;
 }
 
+.statusBadge.withdrawn {
+  background: #e0f2fe;
+  color: #0c4a6e;
+}
+
 .valueGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));

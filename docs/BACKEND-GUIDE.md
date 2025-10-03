@@ -8,18 +8,19 @@
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [Investment States](#investment-states)
-3. [Investment Rules](#investment-rules)
-4. [Interest Calculations](#interest-calculations)
-5. [Pending Payouts System](#pending-payouts-system)
-6. [Withdrawal Rules](#withdrawal-rules)
-7. [Data Models](#data-models)
-8. [API Endpoints](#api-endpoints)
-9. [Business Logic Implementation](#business-logic-implementation)
-10. [Validation Rules](#validation-rules)
-11. [Database Indexes](#database-indexes)
-12. [UI/UX Requirements](#uiux-requirements)
-13. [Testing](#testing)
+2. [ID Architecture](#id-architecture)
+3. [Investment States](#investment-states)
+4. [Investment Rules](#investment-rules)
+5. [Interest Calculations](#interest-calculations)
+6. [Pending Payouts System](#pending-payouts-system)
+7. [Withdrawal Rules](#withdrawal-rules)
+8. [Data Models](#data-models)
+9. [API Endpoints](#api-endpoints)
+10. [Business Logic Implementation](#business-logic-implementation)
+11. [Validation Rules](#validation-rules)
+12. [Database Indexes](#database-indexes)
+13. [UI/UX Requirements](#uiux-requirements)
+14. [Testing](#testing)
 
 ---
 
@@ -30,6 +31,347 @@ This is an investment platform where users invest in bonds with two payment opti
 - **Compounding** - Interest compounds monthly, paid at maturity
 
 **Your job:** Implement a Python backend that mirrors these business rules exactly.
+
+---
+
+## ID Architecture
+
+### Overview
+
+The platform uses a **sequential, human-readable ID system** for all entities. This provides:
+- **Easy tracking** - IDs are meaningful and sequential
+- **Debugging** - Simple to identify entity types and relationships
+- **Audit trails** - Clear history of when entities were created
+- **No collisions** - Sequential generation prevents duplicate IDs
+
+### ID Format Standards
+
+All IDs follow the pattern: `{PREFIX}-{NUMBER}[-{SUFFIX}]`
+
+| Entity Type | Format | Starting ID | Example | Notes |
+|------------|--------|-------------|---------|-------|
+| **User** | `USR-{sequential}` | `USR-1000` | `USR-1001`, `USR-1002` | Admin is always `USR-1000` |
+| **Investment** | `INV-{sequential}` | `INV-10000` | `INV-10001`, `INV-10002` | Global across all users |
+| **Withdrawal** | `WDL-{sequential}` | `WDL-10000` | `WDL-10001`, `WDL-10002` | Global across all users |
+| **Bank Account** | `BANK-{userId}-{seq}` | `BANK-USR-1000-1` | `BANK-USR-1001-2` | Per-user sequential |
+| **Transaction** | `TX-{type}-{entityId}-{suffix}` | Various | See below | Composite format |
+
+### Transaction ID Patterns
+
+Transaction IDs follow the pattern: `TX-{entityType}-{entityId}-{type}[-{suffix}]`
+
+| Transaction Type | ID Pattern | Example |
+|-----------------|------------|---------|
+| Account Created | `TX-USR-{userId}-account-created` | `TX-USR-USR-1001-account-created` |
+| Investment Created | `TX-INV-{invId}-created` | `TX-INV-INV-10000-created` |
+| Investment Confirmed | `TX-INV-{invId}-confirmed` | `TX-INV-INV-10000-confirmed` |
+| Monthly Distribution | `TX-INV-{invId}-md-{YYYY-MM}` | `TX-INV-INV-10000-md-2025-11` |
+| Monthly Compounded | `TX-INV-{invId}-mc-{YYYY-MM}` | `TX-INV-INV-10000-mc-2025-11` |
+| Withdrawal Notice | `TX-WDL-{wdlId}-notice` | `TX-WDL-WDL-10000-notice` |
+| Withdrawal Approved | `TX-WDL-{wdlId}-approved` | `TX-WDL-WDL-10000-approved` |
+| Withdrawal Rejected | `TX-WDL-{wdlId}-rejected` | `TX-WDL-WDL-10000-rejected` |
+
+### ID Generation Rules
+
+#### User IDs
+```python
+def generate_user_id(existing_users):
+    """
+    Generate next sequential user ID.
+    Admin always gets USR-1000.
+    """
+    if not existing_users:
+        return "USR-1000"
+    
+    max_id = max([extract_numeric_id(user.id) for user in existing_users])
+    next_id = max_id + 1
+    return f"USR-{next_id}"
+
+# Example progression:
+# USR-1000 (admin)
+# USR-1001 (first regular user)
+# USR-1002 (second regular user)
+```
+
+#### Investment IDs
+```python
+def generate_investment_id(all_users):
+    """
+    Generate next sequential investment ID.
+    Investment IDs are global across ALL users.
+    """
+    all_investments = []
+    for user in all_users:
+        all_investments.extend(user.investments)
+    
+    if not all_investments:
+        return "INV-10000"
+    
+    max_id = max([extract_numeric_id(inv.id) for inv in all_investments])
+    next_id = max_id + 1
+    return f"INV-{next_id}"
+
+# Example progression:
+# INV-10000 (first investment by any user)
+# INV-10001 (second investment by any user)
+# INV-10002 (third investment by any user)
+```
+
+#### Withdrawal IDs
+```python
+def generate_withdrawal_id(all_users):
+    """
+    Generate next sequential withdrawal ID.
+    Withdrawal IDs are global across ALL users.
+    """
+    all_withdrawals = []
+    for user in all_users:
+        all_withdrawals.extend(user.withdrawals)
+    
+    if not all_withdrawals:
+        return "WDL-10000"
+    
+    max_id = max([extract_numeric_id(wdl.id) for wdl in all_withdrawals])
+    next_id = max_id + 1
+    return f"WDL-{next_id}"
+
+# Example progression:
+# WDL-10000 (first withdrawal by any user)
+# WDL-10001 (second withdrawal by any user)
+```
+
+#### Bank Account IDs
+```python
+def generate_bank_account_id(user_id, user_bank_accounts):
+    """
+    Generate next sequential bank account ID for a specific user.
+    Bank account IDs are per-user sequential.
+    """
+    if not user_bank_accounts:
+        return f"BANK-{user_id}-1"
+    
+    user_banks = [b for b in user_bank_accounts if b.id.startswith(f"BANK-{user_id}")]
+    max_seq = max([extract_sequence_number(bank.id) for bank in user_banks])
+    next_seq = max_seq + 1
+    return f"BANK-{user_id}-{next_seq}"
+
+# Example progression for user USR-1001:
+# BANK-USR-1001-1 (first bank account)
+# BANK-USR-1001-2 (second bank account)
+# BANK-USR-1001-3 (third bank account)
+```
+
+#### Transaction IDs
+```python
+def generate_transaction_id(entity_type, entity_id, transaction_type, options=None):
+    """
+    Generate transaction ID based on type and context.
+    """
+    prefix = f"TX-{entity_type}-{entity_id}"
+    
+    if transaction_type == "account_created":
+        return f"{prefix}-account-created"
+    
+    elif transaction_type == "investment_created":
+        return f"{prefix}-created"
+    
+    elif transaction_type == "investment_confirmed":
+        return f"{prefix}-confirmed"
+    
+    elif transaction_type == "monthly_distribution":
+        # Format: TX-INV-{invId}-md-YYYY-MM
+        date = options.get('date')
+        year = date.year
+        month = str(date.month).zfill(2)
+        return f"{prefix}-md-{year}-{month}"
+    
+    elif transaction_type == "monthly_compounded":
+        # Format: TX-INV-{invId}-mc-YYYY-MM
+        date = options.get('date')
+        year = date.year
+        month = str(date.month).zfill(2)
+        return f"{prefix}-mc-{year}-{month}"
+    
+    elif transaction_type == "withdrawal_notice_started":
+        return f"{prefix}-notice"
+    
+    elif transaction_type == "withdrawal_approved":
+        return f"{prefix}-approved"
+    
+    elif transaction_type == "withdrawal_rejected":
+        return f"{prefix}-rejected"
+    
+    return f"{prefix}-{transaction_type}"
+
+# Examples:
+# TX-USR-USR-1001-account-created
+# TX-INV-INV-10000-created
+# TX-INV-INV-10000-confirmed
+# TX-INV-INV-10000-md-2025-11
+# TX-INV-INV-10000-mc-2025-11
+# TX-WDL-WDL-10000-notice
+# TX-WDL-WDL-10000-approved
+```
+
+### Extracting Numeric IDs
+
+```python
+def extract_numeric_id(id_string):
+    """
+    Extract numeric portion from an ID.
+    
+    Examples:
+    - "USR-1000" → 1000
+    - "INV-10000" → 10000
+    - "BANK-USR-1001-2" → 2 (last number)
+    """
+    import re
+    match = re.search(r'-(\d+)(?:-|$)', id_string)
+    return int(match.group(1)) if match else 0
+
+def extract_sequence_number(bank_id):
+    """
+    Extract sequence number from bank account ID.
+    
+    Example:
+    - "BANK-USR-1001-2" → 2
+    """
+    parts = bank_id.split('-')
+    return int(parts[-1])
+```
+
+### ID Validation
+
+```python
+def validate_user_id(id_string):
+    """Validate user ID format"""
+    import re
+    return bool(re.match(r'^USR-\d+$', id_string))
+
+def validate_investment_id(id_string):
+    """Validate investment ID format"""
+    import re
+    return bool(re.match(r'^INV-\d+$', id_string))
+
+def validate_withdrawal_id(id_string):
+    """Validate withdrawal ID format"""
+    import re
+    return bool(re.match(r'^WDL-\d+$', id_string))
+
+def validate_bank_id(id_string):
+    """Validate bank account ID format"""
+    import re
+    return bool(re.match(r'^BANK-USR-\d+-\d+$', id_string))
+
+def validate_transaction_id(id_string):
+    """Validate transaction ID format"""
+    import re
+    return bool(re.match(r'^TX-[A-Z]+-[A-Z]+-\d+-.+$', id_string))
+```
+
+### Special IDs
+
+#### Admin User
+The admin user **always** has ID `USR-1000`. This is the first user in the system.
+
+```python
+ADMIN_USER_ID = "USR-1000"
+
+def is_admin(user_id):
+    return user_id == ADMIN_USER_ID
+```
+
+### Database Considerations
+
+**Indexes:**
+```sql
+-- User lookups
+CREATE INDEX idx_user_id ON users(id);
+CREATE INDEX idx_user_email ON users(email);
+
+-- Investment queries
+CREATE INDEX idx_investment_id ON investments(id);
+CREATE INDEX idx_investment_user_id ON investments(user_id);
+
+-- Withdrawal queries
+CREATE INDEX idx_withdrawal_id ON withdrawals(id);
+CREATE INDEX idx_withdrawal_user_id ON withdrawals(user_id);
+CREATE INDEX idx_withdrawal_investment_id ON withdrawals(investment_id);
+
+-- Transaction queries
+CREATE INDEX idx_transaction_id ON transactions(id);
+CREATE INDEX idx_transaction_user_id ON transactions(user_id);
+CREATE INDEX idx_transaction_investment_id ON transactions(investment_id);
+```
+
+**ID Storage:**
+- Store IDs as `VARCHAR(50)` or `TEXT` (not as integers)
+- Always include the prefix in the database
+- Never strip prefixes for storage efficiency
+
+### Migration from Old IDs
+
+If migrating from timestamp-based IDs (e.g., `1758644000000`):
+
+```python
+def migrate_user_ids(old_users):
+    """
+    Migrate from timestamp IDs to new format.
+    Preserves admin as USR-1000.
+    """
+    new_users = []
+    id_mapping = {}
+    
+    # Admin first
+    admin = next((u for u in old_users if u.isAdmin), None)
+    if admin:
+        id_mapping[admin.id] = "USR-1000"
+        admin.id = "USR-1000"
+        new_users.append(admin)
+    
+    # Regular users
+    counter = 1001
+    for user in old_users:
+        if not user.isAdmin:
+            old_id = user.id
+            new_id = f"USR-{counter}"
+            id_mapping[old_id] = new_id
+            user.id = new_id
+            new_users.append(user)
+            counter += 1
+    
+    # Update all references
+    for user in new_users:
+        # Update investment confirmedByAdminId
+        for inv in user.investments:
+            if inv.confirmedByAdminId in id_mapping:
+                inv.confirmedByAdminId = id_mapping[inv.confirmedByAdminId]
+        
+        # Update transaction references
+        for tx in user.transactions:
+            # Update transaction IDs if needed
+            pass
+    
+    return new_users, id_mapping
+```
+
+### Best Practices
+
+1. **Never reuse IDs** - Even if a user/investment is deleted, never reuse their ID
+2. **Always validate** - Validate ID format before processing requests
+3. **Log ID generation** - Log when new IDs are generated for audit trails
+4. **Use constants** - Define ID prefixes as constants, not hardcoded strings
+5. **Atomic generation** - Ensure ID generation is atomic to prevent duplicates
+6. **Global sequences** - Investment and withdrawal IDs are global (not per-user)
+7. **Human-readable** - IDs should be easy to read in logs and debugging
+
+### Reference Implementation
+
+See `/lib/idGenerator.js` for the complete implementation with:
+- Sequential ID generation for all entity types
+- Validation functions
+- Helper utilities for extracting numeric portions
+- Transaction ID generation for all types
 
 ---
 
@@ -375,6 +717,66 @@ Final payout includes all accrued interest up to payment date
 
 **Compounding investments:**
 - Withdraw **full current value** (principal + accrued interest)
+
+### Total Earnings After Withdrawal
+
+**IMPORTANT:** When calculating portfolio metrics (dashboard summary), **Total Earnings** represents **lifetime earnings** across all investments, including withdrawn ones.
+
+**Calculation Rules:**
+- **Withdrawn investments:** Include their stored `totalEarnings` value (captured at withdrawal time)
+- **Active/withdrawal_notice investments:** Calculate current earnings dynamically
+- **Total Invested:** Only includes active and withdrawal_notice investments (NOT withdrawn)
+- **Current Value:** Only includes active and withdrawal_notice investments (NOT withdrawn)
+
+**Example:**
+```
+User has 3 investments:
+1. Active compounding: $10,000 → current value $10,800 (earnings: $800)
+2. Withdrawn compounding: was $5,000 → withdrawn at $5,330 (earnings: $330)
+3. Active monthly: $8,000 → paid $480 in distributions so far (earnings: $480)
+
+Dashboard metrics:
+- Total Invested: $18,000 (only investments 1 and 3)
+- Current Value: $18,800 (only investments 1 and 3)
+- Total Earnings: $1,610 (ALL investments: $800 + $330 + $480)
+```
+
+**Why this matters:**
+- Users want to see their lifetime performance, not just current holdings
+- If a user earned $5,000 and withdrew it, that's still $5,000 earned
+- Total Earnings should never decrease when a withdrawal completes
+- The chart of earnings over time should continue to show historical earnings from withdrawn investments
+
+**Implementation:**
+```python
+def calculate_total_earnings(investments, transactions, app_time):
+    """
+    Calculate lifetime earnings including withdrawn investments.
+    """
+    total = 0.0
+    
+    for inv in investments:
+        if inv.status == 'withdrawn':
+            # Use stored final earnings from withdrawal
+            total += inv.totalEarnings or 0
+        elif inv.status in ['active', 'withdrawal_notice']:
+            # Calculate current earnings dynamically
+            if inv.paymentFrequency == 'monthly':
+                # Sum paid distributions
+                paid = sum(
+                    tx.amount for tx in transactions
+                    if tx.type == 'monthly_distribution' 
+                    and tx.investmentId == inv.id
+                    and tx.date <= app_time
+                )
+                total += paid
+            else:  # compounding
+                # Calculate accrued earnings
+                calc = calculate_investment_value(inv, app_time)
+                total += calc.totalEarnings
+    
+    return round(total, 2)
+```
 
 ---
 

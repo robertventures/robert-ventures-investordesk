@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getUsers, saveUsers } from '../../../lib/database'
 import { calculateInvestmentValue, calculateWithdrawalAmount } from '../../../lib/investmentCalculations'
 import { getCurrentAppTime } from '../../../lib/appTime'
+import { generateWithdrawalId, generateTransactionId } from '../../../lib/idGenerator'
 
 // POST - Create withdrawal request
 export async function POST(request) {
@@ -61,8 +62,8 @@ export async function POST(request) {
     const withdrawableAmount = isMonthly ? principalAmount : compAmount
     const earningsAmount = isMonthly ? 0 : (currentValue.totalEarnings || 0)
 
-    // Create withdrawal record
-    const withdrawalId = Date.now().toString()
+    // Create withdrawal record with sequential ID
+    const withdrawalId = generateWithdrawalId(usersData.users)
     const withdrawal = {
       id: withdrawalId,
       investmentId,

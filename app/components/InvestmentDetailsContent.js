@@ -215,7 +215,10 @@ export default function InvestmentDetailsContent({ investmentId }) {
           <div className={styles.valueCard}>
             <div className={styles.valueHeader}>
               <h3 className={styles.valueTitle}>Investment Value</h3>
-              <span className={`${styles.statusBadge} ${status.isLocked ? styles.pending : styles.completed}`}>
+              <span className={`${styles.statusBadge} ${
+                status.status === 'withdrawn' ? styles.withdrawn :
+                status.isLocked ? styles.pending : styles.completed
+              }`}>
                 {status.statusLabel}
               </span>
             </div>

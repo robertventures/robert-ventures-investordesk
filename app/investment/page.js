@@ -61,6 +61,7 @@ export default function InvestmentPage() {
         lines.push({ label: 'Holder Name', value: primaryName })
       }
     }
+    if (identitySummary.phone) lines.push({ label: identitySummary.accountType === 'joint' ? 'Primary Phone' : 'Phone', value: identitySummary.phone })
     if (identitySummary.accountType === 'joint') {
       lines.push({ label: 'Joint Holding Type', value: identitySummary.jointHoldingType || '—' })
     }

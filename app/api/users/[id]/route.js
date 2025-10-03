@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { updateUser, getUsers, saveUsers } from '../../../../lib/database'
 import { getCurrentAppTime } from '../../../../lib/appTime'
+import { generateGlobalInvestmentId, generateTransactionId } from '../../../../lib/idGenerator'
 
 // PUT - Update user data
 export async function PUT(request, { params }) {
@@ -102,13 +103,16 @@ export async function PUT(request, { params }) {
         body.investment.accountType = userAccountType
       }
 
-      const investmentId = Date.now().toString()
+      // Generate next sequential investment ID (global across all users)
+      const investmentId = generateGlobalInvestmentId(usersData.users)
+      const timestamp = new Date().toISOString()
+      
       const newInvestment = {
         id: investmentId,
         status: 'draft',
         ...body.investment,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        createdAt: timestamp,
+        updatedAt: timestamp
       }
 
       const existing = Array.isArray(user.investments) ? user.investments : []

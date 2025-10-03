@@ -6,6 +6,15 @@ const MIN_DOB = '1900-01-01'
 
 const formatZip = (value = '') => value.replace(/\D/g, '').slice(0, 5)
 
+const formatPhone = (value = '') => {
+  const digits = value.replace(/\D/g, '').slice(0, 10)
+  if (digits.length <= 3) return digits
+  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`
+}
+
+const isCompletePhone = (value = '') => value.replace(/\D/g, '').length === 10
+
 const formatSsn = (value = '') => {
   const digits = value.replace(/\D/g, '').slice(0, 9)
   if (digits.length <= 3) return digits
@@ -50,6 +59,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
     firstName: '',
     lastName: '',
     entityName: '',
+    phone: '',
     street1: '',
     street2: '',
     city: '',
@@ -129,6 +139,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
             entityName: u.entityName || '',
             firstName: u.firstName || '',
             lastName: u.lastName || '',
+            phone: u.phone || '',
             street1: u.address?.street1 || '',
             street2: u.address?.street2 || '',
             city: u.address?.city || '',
@@ -240,6 +251,10 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
       setFieldValue(name, formatZip(value))
       return
     }
+    if (name.endsWith('.phone') || name === 'phone') {
+      setFieldValue(name, formatPhone(value))
+      return
+    }
     if (name.endsWith('.ssn') || name === 'ssn') {
       setFieldValue(name, formatSsn(value))
       return
@@ -256,6 +271,8 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
       if (!form.firstName.trim()) newErrors.firstName = 'Required'
       if (!form.lastName.trim()) newErrors.lastName = 'Required'
     }
+    if (!form.phone.trim()) newErrors.phone = 'Required'
+    else if (!isCompletePhone(form.phone)) newErrors.phone = 'Enter full 10-digit phone number'
     if (!form.street1.trim()) newErrors.street1 = 'Required'
     if (!form.city.trim()) newErrors.city = 'Required'
     else if (/[0-9]/.test(form.city)) newErrors.city = 'No numbers allowed'
@@ -290,6 +307,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
       else if (!isCompleteSsn(form.jointHolder.ssn)) newErrors['jointHolder.ssn'] = 'Enter full SSN'
       if (!/\S+@\S+\.\S+/.test(form.jointHolder.email)) newErrors['jointHolder.email'] = 'Invalid email'
       if (!form.jointHolder.phone.trim()) newErrors['jointHolder.phone'] = 'Required'
+      else if (!isCompletePhone(form.jointHolder.phone)) newErrors['jointHolder.phone'] = 'Enter full 10-digit phone number'
     }
     if (accountType === 'entity') {
       // Authorized representative must also be provided
@@ -340,6 +358,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
           firstName: form.firstName.trim(),
           lastName: form.lastName.trim()
         } : {}),
+        phone: form.phone.trim(),
         ...(accountType === 'entity' ? { entity: {
           name: form.entityName,
           registrationDate: form.dob,
@@ -476,6 +495,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
           firstName: form.firstName.trim(),
           lastName: form.lastName.trim()
         } : {}),
+        phone: form.phone.trim(),
         street1: form.street1,
         street2: form.street2,
         city: form.city,
@@ -628,11 +648,18 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
       </div>
       <div className={styles.grid}>
         {accountType === 'entity' && (
-          <div className={styles.field}> 
-            <label className={styles.label}>Entity Name</label>
-            <input className={`${styles.input} ${errors.entityName ? styles.inputError : ''}`} name="entityName" value={form.entityName} onChange={handleChange} placeholder="Enter entity name" />
-            {errors.entityName && <span className={styles.error}>{errors.entityName}</span>}
-          </div>
+          <>
+            <div className={styles.field}> 
+              <label className={styles.label}>Entity Name</label>
+              <input className={`${styles.input} ${errors.entityName ? styles.inputError : ''}`} name="entityName" value={form.entityName} onChange={handleChange} placeholder="Enter entity name" />
+              {errors.entityName && <span className={styles.error}>{errors.entityName}</span>}
+            </div>
+            <div className={styles.field}> 
+              <label className={styles.label}>Phone Number</label>
+              <input className={`${styles.input} ${errors.phone ? styles.inputError : ''}`} name="phone" value={form.phone} onChange={handleChange} placeholder="(555) 555-5555" inputMode="tel" />
+              {errors.phone && <span className={styles.error}>{errors.phone}</span>}
+            </div>
+          </>
         )}
         {accountType !== 'entity' && (
           <>
@@ -645,6 +672,11 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
               <label className={styles.label}>Last Name</label>
               <input className={`${styles.input} ${errors.lastName ? styles.inputError : ''}`} name="lastName" value={form.lastName} onChange={handleChange} placeholder="Enter last name" />
               {errors.lastName && <span className={styles.error}>{errors.lastName}</span>}
+            </div>
+            <div className={styles.field}> 
+              <label className={styles.label}>Phone Number</label>
+              <input className={`${styles.input} ${errors.phone ? styles.inputError : ''}`} name="phone" value={form.phone} onChange={handleChange} placeholder="(555) 555-5555" inputMode="tel" />
+              {errors.phone && <span className={styles.error}>{errors.phone}</span>}
             </div>
           </>
         )}

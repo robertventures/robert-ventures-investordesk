@@ -240,6 +240,12 @@
   color: #065f46;
 }
 
+/* Withdrawn status badge (blue) */
+.statusBadge.withdrawn {
+  background: #e0f2fe;
+  color: #0c4a6e;
+}
+
 /* Draft status badge (yellow like locked) */
 .statusBadge.draft {
   background: #fef3c7;
