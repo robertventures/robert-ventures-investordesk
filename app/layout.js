@@ -2,7 +2,7 @@ import './globals.css'
 import AuthWrapper from './components/AuthWrapper'
 
 export const metadata = {
-  title: 'Robert Ventures - Wealth Manager',
+  title: 'Robert Ventures Investor Desk',
   description: 'Investment platform for Robert Ventures investors',
 }
 

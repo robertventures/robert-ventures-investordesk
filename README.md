@@ -1,4 +1,4 @@
-# Robert Ventures - Wealth Manager
+# Robert Ventures Investor Desk
 
 A minimalist investment platform for Robert Ventures investors.
 
