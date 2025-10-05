@@ -41,7 +41,11 @@ export default function AdminHeader({ onTabChange, activeTab }) {
   }
 
   const handleNavSelect = (tab) => {
-    onTabChange(tab)
+    // Sync tab selection to URL for deep-linkable sections
+    try {
+      router.push(`/admin?tab=${tab}`)
+    } catch {}
+    if (typeof onTabChange === 'function') onTabChange(tab)
     setShowMobileNav(false)
   }
 
@@ -69,34 +73,28 @@ export default function AdminHeader({ onTabChange, activeTab }) {
 
         <nav className={styles.nav}>
           <button
-            onClick={() => onTabChange('dashboard')}
+            onClick={() => handleNavSelect('dashboard')}
             className={`${styles.navItem} ${activeTab === 'dashboard' ? styles.active : ''}`}
           >
             Dashboard
           </button>
           <button
-            onClick={() => onTabChange('accounts')}
+            onClick={() => handleNavSelect('accounts')}
             className={`${styles.navItem} ${activeTab === 'accounts' ? styles.active : ''}`}
           >
             Accounts
           </button>
           <button
-            onClick={() => onTabChange('investments')}
-            className={`${styles.navItem} ${activeTab === 'investments' ? styles.active : ''}`}
+            onClick={() => handleNavSelect('transactions')}
+            className={`${styles.navItem} ${activeTab === 'transactions' ? styles.active : ''}`}
           >
-            Investments
+            Transactions
           </button>
           <button
-            onClick={() => onTabChange('withdrawals')}
-            className={`${styles.navItem} ${activeTab === 'withdrawals' ? styles.active : ''}`}
+            onClick={() => handleNavSelect('operations')}
+            className={`${styles.navItem} ${activeTab === 'operations' ? styles.active : ''}`}
           >
-            Withdrawals
-          </button>
-          <button
-            onClick={() => onTabChange('pending-payouts')}
-            className={`${styles.navItem} ${activeTab === 'pending-payouts' ? styles.active : ''}`}
-          >
-            Pending Payouts
+            Operations
           </button>
         </nav>
 
@@ -117,9 +115,8 @@ export default function AdminHeader({ onTabChange, activeTab }) {
             </div>
             <button className={styles.mobileNavItem} onClick={() => handleNavSelect('dashboard')}>Dashboard</button>
             <button className={styles.mobileNavItem} onClick={() => handleNavSelect('accounts')}>Accounts</button>
-            <button className={styles.mobileNavItem} onClick={() => handleNavSelect('investments')}>Investments</button>
-            <button className={styles.mobileNavItem} onClick={() => handleNavSelect('withdrawals')}>Withdrawals</button>
-            <button className={styles.mobileNavItem} onClick={() => handleNavSelect('pending-payouts')}>Pending Payouts</button>
+            <button className={styles.mobileNavItem} onClick={() => handleNavSelect('transactions')}>Transactions</button>
+            <button className={styles.mobileNavItem} onClick={() => handleNavSelect('operations')}>Operations</button>
             <div className={styles.mobileDivider}></div>
             <button className={styles.mobileNavItem} onClick={() => { setShowMobileNav(false); handleLogout() }}>Sign Out</button>
           </div>

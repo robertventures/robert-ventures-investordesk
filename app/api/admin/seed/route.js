@@ -17,8 +17,7 @@ export async function POST() {
       isVerified: true,
       verifiedAt: '2025-01-23T00:00:00.000Z',
       isAdmin: true,
-      address: null,
-      acknowledgements: null
+      address: null
     }
 
     const existing = await getUserByEmail(email)
@@ -38,8 +37,7 @@ export async function POST() {
         phoneNumber: adminFields.phoneNumber,
         dob: adminFields.dob,
         ssn: adminFields.ssn,
-        address: adminFields.address,
-        acknowledgements: adminFields.acknowledgements
+        address: adminFields.address
       })
       if (!updated.success) {
         return NextResponse.json({ success: true, user: created.user, created: true, note: 'Created but follow-up update failed' })

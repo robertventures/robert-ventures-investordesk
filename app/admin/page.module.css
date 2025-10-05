@@ -1,13 +1,30 @@
+/* ============================================
+   ADMIN PAGE - MAIN STYLES
+   Refactored for better organization
+   ============================================ */
+
+/* Main Layout */
 .main {
   min-height: 100vh;
   background: var(--color-app-bg);
   padding-bottom: 64px;
+  overflow-x: hidden;
+  width: 100%;
+  max-width: 100vw;
+  box-sizing: border-box;
+}
+
+.main * {
+  box-sizing: border-box;
 }
 
 .container {
   max-width: 1400px;
   margin: 0 auto;
   padding: var(--space-6) var(--space-5);
+  width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 .content {
@@ -17,123 +34,83 @@
   padding: var(--space-5);
 }
 
+/* Header */
+.headerRow {
+  margin-bottom: var(--space-5);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
 .title {
   font-size: var(--text-3xl);
   margin: 0 0 var(--space-1) 0;
+  font-weight: 700;
+  color: var(--color-accent);
 }
 
 .subtitle {
   color: var(--color-muted);
-  margin: 0 0 var(--space-3) 0;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
-.headerRow {
-  margin-bottom: var(--space-5);
-}
-
-.metrics {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: var(--space-3);
-  margin: var(--space-3) 0 var(--space-5);
-}
-
-.metric {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: var(--space-3);
-}
-
-.metricLabel {
-  font-size: var(--text-xs);
-  color: var(--color-muted);
-  letter-spacing: 0.08em;
-}
-
-.metricValue {
-  font-size: var(--text-3xl);
+.sectionTitle {
+  font-size: 18px;
   font-weight: 600;
+  margin: 0;
+  color: var(--color-accent);
 }
 
-
-.tableContainer {
-  overflow-x: auto;
+/* Loading State */
+.loadingState {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--color-muted);
+  font-size: 16px;
 }
 
-.linkButton {
-  background: none;
-  border: none;
-  padding: 0;
-  color: var(--color-info);
-  cursor: pointer;
-  text-decoration: underline;
-}
+/* ============================================
+   BUTTONS
+   ============================================ */
 
 .secondaryButton {
   border: 1px solid var(--color-border);
   background: var(--color-bg);
-  padding: 6px 10px;
+  padding: 8px 14px;
   border-radius: var(--radius-sm);
   cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s ease;
 }
 
-.dangerButton {
-  border: 1px solid var(--color-danger);
-  background: var(--color-danger);
-  color: #fff;
-  padding: 6px 10px;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
+.secondaryButton:hover:not(:disabled) {
+  border-color: var(--color-accent);
+  background: white;
 }
 
-.actionGroup {
-  display: flex;
-  gap: var(--space-1);
-}
-
-.table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.table th, .table td {
-  border: 1px solid var(--color-border);
-  padding: 12px;
-  text-align: left;
-}
-
-.investments {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.invRow {
-  display: flex;
-  gap: var(--space-3);
-  align-items: center;
-  justify-content: space-between;
-  border: 1px dashed var(--color-border);
-  padding: 8px 12px;
-  border-radius: var(--radius-sm);
-}
-
-.invCol {
-  min-width: 140px;
-}
-
-.invActions {
-  margin-left: auto;
+.secondaryButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .approveButton {
   border: 1px solid var(--color-success);
   color: #fff;
   background: var(--color-success);
-  padding: 8px 12px;
+  padding: 8px 14px;
   border-radius: var(--radius-sm);
   cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.approveButton:hover:not(:disabled) {
+  background: #059669;
+  border-color: #059669;
 }
 
 .approveButton:disabled {
@@ -142,184 +119,51 @@
   cursor: not-allowed;
 }
 
-.muted {
-  color: var(--color-disabled);
-}
-
-/* Time Machine Styles */
-.timeMachineSection {
-  background: var(--color-surface);
-  border: 2px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: 20px;
-  margin: var(--space-5) 0;
-}
-
-.timeMachineTitle {
-  margin: 0 0 var(--space-3) 0;
-  font-size: var(--text-lg);
-  font-weight: 600;
-  color: var(--color-accent);
-}
-
-.activeIndicator {
-  color: var(--color-danger-dark);
-  font-weight: 700;
-  font-size: var(--text-sm);
-}
-
-.timeMachineControls {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-5);
-  align-items: start;
-}
-
-.timeDisplay {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.timeRow {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 12px;
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-}
-
-.timeLabel {
-  font-weight: 600;
-  color: #374151;
-}
-
-.timeValue {
-  font-family: 'Courier New', monospace;
-  font-weight: 600;
-}
-
-.timeControls {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.timeInput {
-  padding: 8px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: var(--radius-sm);
-  font-size: var(--text-sm);
-}
-
-.timeMachineButton {
-  background: #3b82f6;
-  color: white;
-  border: none;
-  padding: 10px 16px;
-  border-radius: var(--radius-sm);
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.timeMachineButton:hover {
-  background: var(--color-info);
-}
-
-.timeMachineButton:disabled {
-  background: #9ca3af;
-  cursor: not-allowed;
-}
-
-.resetTimeButton {
+.dangerButton {
+  border: 1px solid var(--color-danger);
   background: var(--color-danger);
-  color: white;
-  border: none;
-  padding: 10px 16px;
+  color: #fff;
+  padding: 8px 14px;
   border-radius: var(--radius-sm);
-  font-weight: 600;
   cursor: pointer;
-  transition: background-color 0.2s;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s ease;
 }
 
-.resetTimeButton:hover {
+.dangerButton:hover:not(:disabled) {
   background: var(--color-danger-dark);
+  border-color: var(--color-danger-dark);
 }
 
-.resetTimeButton:disabled {
-  background: #9ca3af;
+.dangerButton:disabled {
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
-@media (max-width: 768px) {
-  .timeMachineControls {
-    grid-template-columns: 1fr;
-    gap: var(--space-3);
-  }
-}
-
-
-.emptyState {
-  text-align: center;
-  color: var(--color-disabled);
-  font-style: italic;
-  padding: 40px;
-}
-
-.dashboardContent {
+.actionGroup {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-6);
-}
-
-.dashboardSection {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: var(--space-5);
-}
-
-.sectionTitle {
-  font-size: 20px;
-  font-weight: 600;
-  margin: 0 0 var(--space-3) 0;
-  color: var(--color-accent);
-}
-
-.activitySummary {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.activityItem {
-  margin: 0;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--color-border);
-  display: flex;
-  justify-content: space-between;
+  gap: var(--space-2);
   align-items: center;
 }
 
-.activityItem:last-child {
-  border-bottom: none;
-}
+/* ============================================
+   SEARCH
+   ============================================ */
 
 .searchContainer {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .searchInput {
   width: 100%;
-  max-width: 400px;
+  max-width: 500px;
   padding: 12px 16px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  font-size: var(--text-sm);
+  font-size: 14px;
   background: var(--color-bg);
+  transition: all 0.2s ease;
 }
 
 .searchInput:focus {
@@ -328,19 +172,440 @@
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
 
+/* ============================================
+   ACCOUNT CARDS (for Transactions & Accounts tabs)
+   ============================================ */
+
+.accountsGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.accountCard {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: grid;
+  grid-template-columns: 200px 1fr auto auto;
+  gap: 24px;
+  align-items: center;
+  position: relative;
+}
+
+.accountCard::after {
+  content: 'Click to view details';
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 11px;
+  color: #94a3b8;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+
+.accountCard:hover {
+  border-color: var(--color-info);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  transform: translateY(-2px);
+}
+
+.accountCard:hover::after {
+  opacity: 1;
+}
+
+.accountCardHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.accountId {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--color-info);
+}
+
+.investmentId {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--color-info);
+}
+
+.accountBadges {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.verifiedBadge {
+  background: #dcfce7;
+  color: #166534;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  text-align: center;
+}
+
+.jointBadge {
+  background: #dbeafe;
+  color: #1e40af;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  text-align: center;
+}
+
+.investmentStatus {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: capitalize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.investmentStatus[data-status="pending"] {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.investmentStatus[data-status="active"] {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.investmentStatus[data-status="approved"] {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.investmentStatus[data-status="rejected"] {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.investmentStatus[data-status="withdrawn"] {
+  background: #f3f4f6;
+  color: #4b5563;
+}
+
+.accountCardBody {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.accountName {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-accent);
+}
+
+.accountEmail {
+  font-size: 14px;
+  color: #64748b;
+}
+
+.accountJointEmail {
+  font-size: 13px;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.accountPhone {
+  font-size: 14px;
+  color: #64748b;
+}
+
+.accountCardFooter {
+  display: flex;
+  gap: 32px;
+  align-items: center;
+}
+
+.accountStat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: center;
+}
+
+.statLabel {
+  font-size: 11px;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.statValue {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-accent);
+}
+
+.accountCardActions {
+  display: flex;
+  gap: 8px;
+}
+
+/* ============================================
+   TABLE (for Withdrawals & Payouts tabs)
+   ============================================ */
+
+.tableContainer {
+  overflow-x: auto;
+  margin-top: 20px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+}
+
+.table th {
+  background: #f9fafb;
+  border: 1px solid var(--color-border);
+  padding: 12px;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.table td {
+  border: 1px solid var(--color-border);
+  padding: 12px;
+  text-align: left;
+  font-size: 14px;
+}
+
+.table tbody tr:hover {
+  background: #f9fafb;
+}
+
+.muted {
+  color: var(--color-disabled);
+  font-style: italic;
+  text-align: center;
+}
+
+.alertBox {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background-color: #fef3c7;
+  border: 1px solid #f59e0b;
+  border-radius: 8px;
+}
+
+/* ============================================
+   RESPONSIVE DESIGN
+   ============================================ */
+
+@media (max-width: 1024px) {
+  .accountCard {
+    grid-template-columns: 150px 1fr auto;
+  }
+
+  .accountCardFooter {
+    gap: 20px;
+  }
+}
+
 @media (max-width: 768px) {
   .container {
-    padding: var(--space-2);
+    padding: 16px;
+    width: 100%;
   }
 
   .main {
     padding-bottom: 84px;
   }
 
+  .content {
+    border-radius: 8px;
+    padding: 16px;
+    width: 100%;
+  }
 
-  .dashboardSection {
-    padding: var(--space-3);
+  .headerRow {
+    margin-bottom: var(--space-4);
+  }
+
+  .title {
+    font-size: 24px;
+  }
+
+  .subtitle {
+    font-size: 13px;
+  }
+
+  .accountCard {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    padding: 16px;
+  }
+
+  .accountCardHeader {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .accountBadges {
+    flex-direction: row;
+    gap: 4px;
+  }
+
+  .accountCardBody {
+    gap: 8px;
+  }
+
+  .accountName {
+    font-size: 16px;
+  }
+
+  .accountEmail {
+    font-size: 13px;
+  }
+
+  .accountJointEmail {
+    font-size: 12px;
+  }
+
+  .accountPhone {
+    font-size: 13px;
+  }
+
+  .accountCardFooter {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .accountStat {
+    min-width: 80px;
+  }
+
+  .statLabel {
+    font-size: 10px;
+  }
+
+  .statValue {
+    font-size: 13px;
+  }
+
+  .searchInput {
+    max-width: 100%;
   }
 }
 
+@media (max-width: 480px) {
+  .container {
+    padding: 8px;
+    margin: 0;
+  }
 
+  .content {
+    padding: 12px;
+    border: none;
+    border-radius: 0;
+  }
+
+  .title {
+    font-size: 20px;
+  }
+
+  .subtitle {
+    font-size: 12px;
+  }
+
+  .accountCard {
+    padding: 12px;
+    width: 100%;
+  }
+
+  .accountId,
+  .investmentId {
+    font-size: 11px;
+  }
+
+  .accountName {
+    font-size: 15px;
+  }
+
+  .accountEmail,
+  .accountJointEmail,
+  .accountPhone {
+    font-size: 12px;
+    word-break: break-word;
+  }
+
+  .verifiedBadge,
+  .jointBadge {
+    font-size: 10px;
+    padding: 3px 6px;
+  }
+
+  .accountCardActions {
+    flex-direction: column;
+    width: 100%;
+    gap: 8px;
+  }
+
+  .accountCardActions button {
+    width: 100%;
+    font-size: 13px;
+    padding: 8px;
+  }
+
+  .accountCardFooter {
+    gap: 8px;
+  }
+
+  .accountStat {
+    min-width: auto;
+    flex: 1;
+  }
+
+  .searchInput {
+    font-size: 13px;
+    padding: 10px;
+    width: 100%;
+  }
+
+  .searchContainer {
+    padding: 0;
+    width: 100%;
+  }
+
+  .table {
+    font-size: 12px;
+  }
+
+  .table th,
+  .table td {
+    padding: 8px;
+  }
+
+  .secondaryButton,
+  .approveButton,
+  .dangerButton {
+    font-size: 13px;
+    padding: 6px 10px;
+  }
+}

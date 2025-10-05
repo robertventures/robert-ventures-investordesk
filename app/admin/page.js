@@ -1,161 +1,132 @@
 'use client'
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useMemo, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import AdminHeader from '../components/AdminHeader'
+import { useAdminData } from './hooks/useAdminData'
+import { useAdminMetrics } from './hooks/useAdminMetrics'
+import DashboardTab from './tabs/DashboardTab'
+import OperationsTab from './tabs/OperationsTab'
 import styles from './page.module.css'
 
+/**
+ * Main Admin Dashboard - Refactored for better organization
+ */
 export default function AdminPage() {
   const router = useRouter()
-  const [currentUser, setCurrentUser] = useState(null)
-  const [users, setUsers] = useState([])
-  const [isLoading, setIsLoading] = useState(true)
+  const searchParams = useSearchParams()
+  
+  // Tab management
+  const initialTab = useMemo(() => {
+    const t = searchParams?.get('tab') || 'dashboard'
+    const allowed = ['dashboard', 'transactions', 'accounts', 'operations']
+    return allowed.includes(t) ? t : 'dashboard'
+  }, [searchParams])
+  const [activeTab, setActiveTab] = useState(initialTab)
+
+  // Data management with custom hook
+  const {
+    currentUser,
+    users,
+    isLoading,
+    withdrawals,
+    isLoadingWithdrawals,
+    pendingPayouts,
+    isLoadingPayouts,
+    timeMachineData,
+    setTimeMachineData,
+    refreshUsers,
+    refreshWithdrawals,
+    refreshPayouts
+  } = useAdminData()
+
+  // Metrics calculation with custom hook
+  const metrics = useAdminMetrics(users, withdrawals, pendingPayouts)
+
+  // State for specific tab operations
   const [savingId, setSavingId] = useState(null)
-  const [activeTab, setActiveTab] = useState('dashboard') // 'dashboard' | 'investments' | 'accounts' | 'withdrawals' | 'pending-payouts'
-  const [withdrawals, setWithdrawals] = useState([])
-  const [isLoadingWithdrawals, setIsLoadingWithdrawals] = useState(false)
-  const [pendingPayouts, setPendingPayouts] = useState([])
-  const [isLoadingPayouts, setIsLoadingPayouts] = useState(false)
   const [investmentsSearch, setInvestmentsSearch] = useState('')
   const [accountsSearch, setAccountsSearch] = useState('')
-  const [timeMachineData, setTimeMachineData] = useState({ appTime: null, isActive: false })
-  const [newAppTime, setNewAppTime] = useState('')
-  const [isUpdatingTime, setIsUpdatingTime] = useState(false)
 
+  // Keep tab in sync with URL
   useEffect(() => {
-    const init = async () => {
-      try {
-        const userId = localStorage.getItem('currentUserId')
-        if (!userId) {
-          router.push('/')
-          return
-        }
-        // Load current user for gate
-        const meRes = await fetch(`/api/users/${userId}`)
-        const meData = await meRes.json()
-        if (!meData.success || !meData.user) {
-          router.push('/')
-          return
-        }
-        setCurrentUser(meData.user)
-        if (!meData.user.isAdmin) {
-          router.push('/dashboard')
-          return
-        }
+    setActiveTab(initialTab)
+  }, [initialTab])
 
-        // Load all users
-        const res = await fetch('/api/users')
-        const data = await res.json()
-        if (data.success) {
-          setUsers(data.users || [])
-        }
+  // Filter functions
+  const nonAdminUsers = useMemo(() => 
+    (users || []).filter(u => !u.isAdmin), 
+    [users]
+  )
 
-        // Load time machine data
-        const timeRes = await fetch('/api/admin/time-machine')
-        const timeData = await timeRes.json()
-        if (timeData.success) {
-          setTimeMachineData({
-            appTime: timeData.appTime,
-            isActive: timeData.isTimeMachineActive,
-            realTime: timeData.realTime
+  // Get all investments with user info
+  const allInvestments = useMemo(() => {
+    const investments = []
+    nonAdminUsers.forEach(user => {
+      if (user.investments && user.investments.length > 0) {
+        user.investments.forEach(inv => {
+          investments.push({
+            ...inv,
+            user: {
+              id: user.id,
+              firstName: user.firstName,
+              lastName: user.lastName,
+              email: user.email,
+              phone: user.phone || user.phoneNumber,
+              accountType: user.accountType,
+              isVerified: user.isVerified,
+              jointHolder: user.jointHolder
+            }
           })
-          // Set input to current app time for easy editing
-          setNewAppTime(new Date(timeData.appTime).toISOString().slice(0, 16))
-        }
-
-        // Load withdrawals
-        await loadWithdrawals()
-        
-        // Load pending payouts
-        await loadPendingPayouts()
-      } catch (e) {
-        console.error('Failed to load admin data', e)
-      } finally {
-        setIsLoading(false)
+        })
       }
-    }
-    init()
-  }, [router])
+    })
+    investments.sort((a, b) => {
+      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0
+      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0
+      return dateB - dateA
+    })
+    return investments
+  }, [nonAdminUsers])
 
-  const loadWithdrawals = async () => {
-    try {
-      setIsLoadingWithdrawals(true)
-      const res = await fetch('/api/admin/withdrawals')
-      const data = await res.json()
-      if (data.success) setWithdrawals(data.withdrawals || [])
-    } catch (e) {
-      console.error('Failed to load withdrawals', e)
-    } finally {
-      setIsLoadingWithdrawals(false)
-    }
-  }
+  const filteredInvestments = useMemo(() => {
+    if (!investmentsSearch.trim()) return allInvestments
+    const term = investmentsSearch.toLowerCase()
+    return allInvestments.filter(inv => {
+      const fullName = `${inv.user.firstName || ''} ${inv.user.lastName || ''}`.toLowerCase()
+      const email = (inv.user.email || '').toLowerCase()
+      const investmentId = (inv.id || '').toString().toLowerCase()
+      const accountId = (inv.user.id || '').toString().toLowerCase()
+      const status = (inv.status || '').toLowerCase()
+      return fullName.includes(term) || email.includes(term) || 
+             investmentId.includes(term) || accountId.includes(term) || 
+             status.includes(term)
+    })
+  }, [allInvestments, investmentsSearch])
 
-  const loadPendingPayouts = async () => {
-    try {
-      setIsLoadingPayouts(true)
-      const res = await fetch('/api/admin/pending-payouts')
-      const data = await res.json()
-      if (data.success) setPendingPayouts(data.pendingPayouts || [])
-    } catch (e) {
-      console.error('Failed to load pending payouts', e)
-    } finally {
-      setIsLoadingPayouts(false)
-    }
-  }
+  const sortedAccountUsers = useMemo(() => {
+    return [...nonAdminUsers].sort((a, b) => {
+      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0
+      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0
+      return dateB - dateA
+    })
+  }, [nonAdminUsers])
 
-  const handlePayoutAction = async (action, userId, transactionId, failureReason = null) => {
-    try {
-      const res = await fetch('/api/admin/pending-payouts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, userId, transactionId, failureReason })
-      })
-      const data = await res.json()
-      if (!data.success) {
-        alert(data.error || 'Failed to process payout action')
-        return
-      }
-      alert(data.message || 'Payout updated successfully')
-      await loadPendingPayouts()
-      await refreshUsers()
-    } catch (e) {
-      console.error('Failed to process payout action', e)
-      alert('An error occurred')
-    }
-  }
+  const filteredAccountUsers = useMemo(() => {
+    if (!accountsSearch.trim()) return sortedAccountUsers
+    const term = accountsSearch.toLowerCase()
+    return sortedAccountUsers.filter(user => {
+      const accountId = (user.id || '').toString().toLowerCase()
+      const fullName = `${user.firstName || ''} ${user.lastName || ''}`.toLowerCase()
+      const email = (user.email || '').toLowerCase()
+      const jointEmail = (user.jointHolder?.email || '').toLowerCase()
+      const jointName = `${user.jointHolder?.firstName || ''} ${user.jointHolder?.lastName || ''}`.toLowerCase()
+      return accountId.includes(term) || fullName.includes(term) || 
+             email.includes(term) || jointEmail.includes(term) || 
+             jointName.includes(term)
+    })
+  }, [sortedAccountUsers, accountsSearch])
 
-  const actOnWithdrawal = async (action, userId, withdrawalId) => {
-    try {
-      const res = await fetch('/api/admin/withdrawals', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, userId, withdrawalId })
-      })
-      const data = await res.json()
-      if (!data.success) {
-        alert(data.error || 'Failed to update withdrawal')
-        return
-      }
-      await loadWithdrawals()
-      await refreshUsers()
-      alert('Withdrawal updated successfully')
-    } catch (e) {
-      console.error('Failed to update withdrawal', e)
-      alert('An error occurred')
-    }
-  }
-
-  const refreshUsers = async () => {
-    try {
-      const res = await fetch('/api/users')
-      const data = await res.json()
-      if (data.success) setUsers(data.users || [])
-    } catch (e) {
-      console.error('Failed to refresh users', e)
-    }
-  }
-
-  // Notifications removed
-
+  // Investment operations
   const approveInvestment = async (userId, investmentId) => {
     try {
       setSavingId(investmentId)
@@ -210,13 +181,52 @@ export default function AdminPage() {
     }
   }
 
-  const updateAppTime = async () => {
-    if (!newAppTime) {
-      alert('Please enter a valid date and time')
-      return
+  // Withdrawal operations
+  const actOnWithdrawal = async (action, userId, withdrawalId) => {
+    try {
+      const res = await fetch('/api/admin/withdrawals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, userId, withdrawalId })
+      })
+      const data = await res.json()
+      if (!data.success) {
+        alert(data.error || 'Failed to update withdrawal')
+        return
+      }
+      await refreshWithdrawals()
+      await refreshUsers()
+      alert('Withdrawal updated successfully')
+    } catch (e) {
+      console.error('Failed to update withdrawal', e)
+      alert('An error occurred')
     }
-    
-    setIsUpdatingTime(true)
+  }
+
+  // Payout operations
+  const handlePayoutAction = async (action, userId, transactionId, failureReason = null) => {
+    try {
+      const res = await fetch('/api/admin/pending-payouts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, userId, transactionId, failureReason })
+      })
+      const data = await res.json()
+      if (!data.success) {
+        alert(data.error || 'Failed to process payout action')
+        return
+      }
+      alert(data.message || 'Payout updated successfully')
+      await refreshPayouts()
+      await refreshUsers()
+    } catch (e) {
+      console.error('Failed to process payout action', e)
+      alert('An error occurred')
+    }
+  }
+
+  // Time machine operations
+  const updateAppTime = async (newAppTime) => {
     try {
       const res = await fetch('/api/admin/time-machine', {
         method: 'POST',
@@ -235,7 +245,6 @@ export default function AdminPage() {
           realTime: new Date().toISOString()
         })
         alert('Time machine updated successfully!')
-        // Refresh users to see updated calculations
         await refreshUsers()
       } else {
         alert(data.error || 'Failed to update app time')
@@ -243,13 +252,10 @@ export default function AdminPage() {
     } catch (e) {
       console.error('Failed to update app time', e)
       alert('An error occurred while updating app time')
-    } finally {
-      setIsUpdatingTime(false)
     }
   }
 
   const resetAppTime = async () => {
-    setIsUpdatingTime(true)
     try {
       const res = await fetch(`/api/admin/time-machine?adminUserId=${currentUser.id}`, {
         method: 'DELETE'
@@ -263,239 +269,171 @@ export default function AdminPage() {
           isActive: false,
           realTime
         })
-        setNewAppTime(new Date(realTime).toISOString().slice(0, 16))
         alert('Time machine reset to real time!')
-        // Refresh users to see updated calculations
         await refreshUsers()
+        return { appTime: realTime }
       } else {
         alert(data.error || 'Failed to reset app time')
       }
     } catch (e) {
       console.error('Failed to reset app time', e)
       alert('An error occurred while resetting app time')
-    } finally {
-      setIsUpdatingTime(false)
     }
+    return null
   }
 
-
-  const handleLogout = () => {
-    localStorage.removeItem('currentUserId')
-    localStorage.removeItem('signupEmail')
-    localStorage.removeItem('currentInvestmentId')
-    router.push('/')
-  }
-
+  // Loading state
   if (isLoading) {
     return (
       <div className={styles.main}>
         <AdminHeader onTabChange={setActiveTab} activeTab={activeTab} />
         <div className={styles.container}>
-          <div className={styles.content}>Loading admin dashboard...</div>
+          <div className={styles.content}>
+            <div className={styles.loadingState}>Loading admin dashboard...</div>
+          </div>
         </div>
       </div>
     )
   }
-
-  const nonAdminUsers = (users || []).filter(u => !u.isAdmin)
-  const activeAccountsCount = nonAdminUsers.length
-  const investorsCount = nonAdminUsers.filter(u => (u.investments || []).some(inv => inv.status === 'active')).length
-  const { pendingTotal, raisedTotal } = nonAdminUsers.reduce((acc, u) => {
-    (u.investments || []).forEach(inv => {
-      const amount = inv.amount || 0
-      if (inv.status === 'active') {
-        acc.raisedTotal += amount
-      } else if (inv.status !== 'withdrawn' && inv.status !== 'rejected') {
-        acc.pendingTotal += amount
-      }
-    })
-    return acc
-  }, { pendingTotal: 0, raisedTotal: 0 })
-
-  // Filter functions for search
-  const filterUsersBySearch = (users, searchTerm) => {
-    if (!searchTerm.trim()) return users
-    const term = searchTerm.toLowerCase()
-    return users.filter(user => {
-      const fullName = `${user.firstName || ''} ${user.lastName || ''}`.toLowerCase()
-      const email = (user.email || '').toLowerCase()
-      return fullName.includes(term) || email.includes(term)
-    })
-  }
-
-  const filteredInvestmentUsers = filterUsersBySearch(nonAdminUsers, investmentsSearch).filter(user => (user.investments || []).length > 0)
-  const filteredAccountUsers = filterUsersBySearch(nonAdminUsers, accountsSearch)
 
   return (
     <div className={styles.main}>
       <AdminHeader onTabChange={setActiveTab} activeTab={activeTab} />
       <div className={styles.container}>
         <div className={styles.content}>
+          {/* Header */}
           <div className={styles.headerRow}>
             <div>
               <h1 className={styles.title}>Admin Dashboard</h1>
-              <p className={styles.subtitle}>Manage users and approve investments.</p>
+              <p className={styles.subtitle}>
+                {activeTab === 'dashboard' && 'Overview of platform metrics and recent activity'}
+                {activeTab === 'transactions' && 'Manage and approve investment transactions'}
+                {activeTab === 'accounts' && 'View and manage user accounts'}
+                {activeTab === 'operations' && 'Manage withdrawals, payouts, and system operations'}
+              </p>
             </div>
           </div>
 
-          <div className={styles.metrics}>
-            <div className={styles.metric}>
-              <div className={styles.metricLabel}>ACTIVE ACCOUNTS</div>
-              <div className={styles.metricValue}>{activeAccountsCount}</div>
-            </div>
-            <div className={styles.metric}>
-              <div className={styles.metricLabel}>NUMBER OF INVESTORS</div>
-              <div className={styles.metricValue}>{investorsCount}</div>
-            </div>
-            <div className={styles.metric}>
-              <div className={styles.metricLabel}>TOTAL PENDING</div>
-              <div className={styles.metricValue}>${pendingTotal.toLocaleString()}</div>
-            </div>
-            <div className={styles.metric}>
-              <div className={styles.metricLabel}>TOTAL AMOUNT RAISED</div>
-              <div className={styles.metricValue}>${raisedTotal.toLocaleString()}</div>
-            </div>
-          </div>
+          {/* Tab Content */}
+          {activeTab === 'dashboard' && <DashboardTab metrics={metrics} />}
 
-          {/* Time Machine Controls */}
-          <div className={styles.timeMachineSection}>
-            <h3 className={styles.timeMachineTitle}>
-              🕐 Time Machine {timeMachineData.isActive && <span className={styles.activeIndicator}>(ACTIVE)</span>}
-            </h3>
-            <div className={styles.timeMachineControls}>
-              <div className={styles.timeDisplay}>
-                <div className={styles.timeRow}>
-                  <span className={styles.timeLabel}>App Time:</span>
-                  <span className={styles.timeValue} style={{ color: timeMachineData.isActive ? '#dc2626' : '#059669' }}>
-                    {timeMachineData.appTime ? new Date(timeMachineData.appTime).toLocaleString() : 'Loading...'}
-                  </span>
-                </div>
-                {timeMachineData.isActive && (
-                  <div className={styles.timeRow}>
-                    <span className={styles.timeLabel}>Real Time:</span>
-                    <span className={styles.timeValue}>
-                      {timeMachineData.realTime ? new Date(timeMachineData.realTime).toLocaleString() : 'Loading...'}
-                    </span>
-                  </div>
-                )}
-              </div>
-              <div className={styles.timeControls}>
-                <input
-                  type="datetime-local"
-                  value={newAppTime}
-                  onChange={(e) => setNewAppTime(e.target.value)}
-                  className={styles.timeInput}
-                  disabled={isUpdatingTime}
-                />
-                <button
-                  onClick={updateAppTime}
-                  disabled={isUpdatingTime}
-                  className={styles.timeMachineButton}
-                >
-                  {isUpdatingTime ? 'Updating...' : 'Set Time'}
-                </button>
-                {timeMachineData.isActive && (
-                  <button
-                    onClick={resetAppTime}
-                    disabled={isUpdatingTime}
-                    className={styles.resetTimeButton}
-                  >
-                    Reset to Real Time
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {activeTab === 'dashboard' && (
-            <div className={styles.dashboardContent}>
-              <div className={styles.dashboardSection}>
-                <h2 className={styles.sectionTitle}>Recent Activity</h2>
-                <div className={styles.activitySummary}>
-                  <p className={styles.activityItem}>
-                    Total registered users: <strong>{nonAdminUsers.length}</strong>
-                  </p>
-                  <p className={styles.activityItem}>
-                    Active investors: <strong>{investorsCount}</strong>
-                  </p>
-                  <p className={styles.activityItem}>
-                    Pending investment approvals: <strong>{nonAdminUsers.reduce((count, u) => count + (u.investments || []).filter(inv => inv.status === 'pending').length, 0)}</strong>
-                  </p>
-                </div>
-              </div>
-            </div>
+          {activeTab === 'operations' && (
+            <OperationsTab
+              withdrawals={withdrawals}
+              isLoadingWithdrawals={isLoadingWithdrawals}
+              pendingPayouts={pendingPayouts}
+              isLoadingPayouts={isLoadingPayouts}
+              timeMachineData={timeMachineData}
+              currentUser={currentUser}
+              onWithdrawalAction={actOnWithdrawal}
+              onPayoutAction={handlePayoutAction}
+              onTimeMachineUpdate={updateAppTime}
+              onTimeMachineReset={resetAppTime}
+              onRefreshWithdrawals={refreshWithdrawals}
+              onRefreshPayouts={refreshPayouts}
+            />
           )}
 
-          {activeTab === 'investments' && (
+          {/* Transactions Tab */}
+          {activeTab === 'transactions' && (
             <div>
               <div className={styles.searchContainer}>
                 <input
                   type="text"
-                  placeholder="Search by name or email..."
+                  placeholder="Search by investment ID, account ID, name, email, or status..."
                   value={investmentsSearch}
                   onChange={(e) => setInvestmentsSearch(e.target.value)}
                   className={styles.searchInput}
                 />
               </div>
-              <div className={styles.tableContainer}>
-                <table className={styles.table}>
-                  <thead>
-                    <tr>
-                      <th>User</th>
-                      <th>Email</th>
-                      <th>Investments</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredInvestmentUsers.map(user => (
-                    <tr key={user.id}>
-                      <td>{user.firstName || '-'} {user.lastName || ''}</td>
-                      <td>{user.email}</td>
-                      <td>
-                        {(user.investments && user.investments.length > 0) ? (
-                          <div className={styles.investments}>
-                            {user.investments.map(inv => (
-                              <div key={inv.id} className={styles.invRow}>
-                                <div className={styles.invCol}><b>ID:</b> {inv.id}</div>
-                                <div className={styles.invCol}><b>Amount:</b> ${inv.amount?.toLocaleString() || 0}</div>
-                                <div className={styles.invCol}><b>Status:</b> {inv.status}</div>
-                                <div className={styles.invCol}><b>Created:</b> {inv.createdAt ? new Date(inv.createdAt).toLocaleDateString() : '-'}</div>
-                                <div className={styles.invActions}>
-                                  <div className={styles.actionGroup}>
-                            <button
-                              className={styles.approveButton}
-                              disabled={savingId === inv.id || inv.status === 'active' || inv.status === 'withdrawn' || inv.status === 'rejected'}
-                              onClick={() => approveInvestment(user.id, inv.id)}
-                            >
-                              {inv.status === 'active' ? 'Active' : 
-                               inv.status === 'withdrawn' ? 'Withdrawn' : 
-                               inv.status === 'rejected' ? 'Rejected' :
-                               (savingId === inv.id ? 'Approving...' : 'Approve')}
-                            </button>
-                            <button
-                              className={styles.dangerButton}
-                              disabled={savingId === inv.id || inv.status === 'rejected' || inv.status === 'active' || inv.status === 'withdrawn'}
-                              onClick={() => rejectInvestment(user.id, inv.id)}
-                            >
-                              {inv.status === 'rejected' ? 'Rejected' : (savingId === inv.id ? 'Rejecting...' : 'Reject')}
-                            </button>
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <span className={styles.muted}>No investments</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className={styles.accountsGrid}>
+                {filteredInvestments.map(inv => (
+                  <div
+                    key={`${inv.user.id}-${inv.id}`}
+                    className={styles.accountCard}
+                    onClick={() => router.push(`/admin/investments/${inv.id}`)}
+                  >
+                    <div className={styles.accountCardHeader}>
+                      <div>
+                        <div className={styles.investmentId}>Investment #{inv.id}</div>
+                        <div className={styles.accountId} style={{ fontSize: '12px', marginTop: '4px' }}>
+                          Account #{inv.user.id}
+                        </div>
+                      </div>
+                      <div className={styles.accountBadges}>
+                        <div className={styles.investmentStatus} data-status={inv.status}>
+                          {inv.status}
+                        </div>
+                        {inv.user.accountType === 'joint' && <span className={styles.jointBadge}>Joint</span>}
+                      </div>
+                    </div>
+
+                    <div className={styles.accountCardBody}>
+                      <div className={styles.accountName}>
+                        {inv.user.firstName || '-'} {inv.user.lastName || ''}
+                      </div>
+                      <div className={styles.accountEmail}>{inv.user.email || '-'}</div>
+                      {inv.user.accountType === 'joint' && inv.user.jointHolder?.email && (
+                        <div className={styles.accountJointEmail}>Joint: {inv.user.jointHolder.email}</div>
+                      )}
+                      <div className={styles.accountPhone}>{inv.user.phone || '-'}</div>
+                    </div>
+
+                    <div className={styles.accountCardFooter}>
+                      <div className={styles.accountStat}>
+                        <div className={styles.statLabel}>Amount</div>
+                        <div className={styles.statValue}>${(inv.amount || 0).toLocaleString()}</div>
+                      </div>
+                      <div className={styles.accountStat}>
+                        <div className={styles.statLabel}>Lockup</div>
+                        <div className={styles.statValue}>{inv.lockupPeriod || '-'}</div>
+                      </div>
+                      <div className={styles.accountStat}>
+                        <div className={styles.statLabel}>Frequency</div>
+                        <div className={styles.statValue}>{inv.paymentFrequency || '-'}</div>
+                      </div>
+                      <div className={styles.accountStat}>
+                        <div className={styles.statLabel}>Created</div>
+                        <div className={styles.statValue}>
+                          {inv.createdAt ? new Date(inv.createdAt).toLocaleDateString() : '-'}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className={styles.accountCardActions} onClick={(e) => e.stopPropagation()}>
+                      <button
+                        className={styles.approveButton}
+                        disabled={savingId === inv.id || inv.status === 'active' || inv.status === 'withdrawn' || inv.status === 'rejected'}
+                        onClick={(e) => { e.stopPropagation(); approveInvestment(inv.user.id, inv.id); }}
+                      >
+                        {inv.status === 'active' ? 'Active' :
+                          inv.status === 'withdrawn' ? 'Withdrawn' :
+                          inv.status === 'rejected' ? 'Rejected' :
+                          (savingId === inv.id ? 'Approving...' : 'Approve')}
+                      </button>
+                      {inv.status !== 'active' && inv.status !== 'withdrawn' && (
+                        <button
+                          className={styles.dangerButton}
+                          disabled={savingId === inv.id || inv.status === 'rejected'}
+                          onClick={(e) => { e.stopPropagation(); rejectInvestment(inv.user.id, inv.id); }}
+                        >
+                          {inv.status === 'rejected' ? 'Rejected' : (savingId === inv.id ? 'Rejecting...' : 'Reject')}
+                        </button>
+                      )}
+                      <button
+                        className={styles.secondaryButton}
+                        onClick={(e) => { e.stopPropagation(); router.push(`/admin/users/${inv.user.id}`); }}
+                      >
+                        View Account
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
 
+          {/* Accounts Tab */}
           {activeTab === 'accounts' && (
             <div>
               <div className={styles.searchContainer}>
@@ -507,240 +445,78 @@ export default function AdminPage() {
                   className={styles.searchInput}
                 />
               </div>
-              <div className={styles.tableContainer}>
-                <table className={styles.table}>
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th>Email</th>
-                      <th>Phone</th>
-                      <th>Created</th>
-                      <th>Verified</th>
-                      <th>Investments</th>
-                      <th>Invested</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredAccountUsers.map(user => (
-                    <tr key={user.id}>
-                      <td>
-                        <button 
-                          className={styles.linkButton}
-                          onClick={() => router.push(`/admin/users/${user.id}`)}
-                        >
-                          {user.firstName || '-'} {user.lastName || ''}
-                        </button>
-                      </td>
-                      <td>{user.email}</td>
-                      <td>{user.phoneNumber || '-'}</td>
-                      <td>{user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '-'}</td>
-                      <td>{user.isVerified ? 'Yes' : 'No'}</td>
-                      <td>{(user.investments || []).length}</td>
-                      <td>
-                        ${((user.investments || []).filter(inv => inv.status === 'active' || inv.status === 'approved' || inv.status === 'invested').reduce((sum, inv) => sum + (inv.amount || 0), 0)).toLocaleString()}
-                      </td>
-                      <td>
-                        <div className={styles.actionGroup}>
-                          <button 
-                            className={styles.secondaryButton}
-                            onClick={() => router.push(`/admin/users/${user.id}`)}
-                          >
-                            View
-                          </button>
-                          <button 
-                            className={styles.dangerButton}
-                            onClick={async () => {
-                              if (!confirm('Are you sure you want to delete this account? This cannot be undone.')) return
-                              try {
-                                const res = await fetch(`/api/users/${user.id}`, { method: 'DELETE' })
-                                const data = await res.json()
-                                if (!data.success) {
-                                  alert(data.error || 'Failed to delete user')
-                                  return
-                                }
-                                await refreshUsers()
-                              } catch (e) {
-                                console.error('Delete failed', e)
-                                alert('An error occurred. Please try again.')
-                              }
-                            }}
-                          >
-                            Delete
-                          </button>
+              <div className={styles.accountsGrid}>
+                {filteredAccountUsers.map(user => {
+                  const investedAmount = (user.investments || [])
+                    .filter(inv => inv.status === 'active' || inv.status === 'approved' || inv.status === 'invested')
+                    .reduce((sum, inv) => sum + (inv.amount || 0), 0)
+                  return (
+                    <div
+                      key={user.id}
+                      className={styles.accountCard}
+                      onClick={() => router.push(`/admin/users/${user.id}`)}
+                    >
+                      <div className={styles.accountCardHeader}>
+                        <div className={styles.accountId}>Account #{user.id}</div>
+                        <div className={styles.accountBadges}>
+                          {user.isVerified && <span className={styles.verifiedBadge}>✓ Verified</span>}
+                          {user.accountType === 'joint' && <span className={styles.jointBadge}>Joint</span>}
                         </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      </div>
+                      <div className={styles.accountCardBody}>
+                        <div className={styles.accountName}>{user.firstName || '-'} {user.lastName || ''}</div>
+                        <div className={styles.accountEmail}>{user.email || '-'}</div>
+                        {user.accountType === 'joint' && user.jointHolder?.email && (
+                          <div className={styles.accountJointEmail}>Joint: {user.jointHolder.email}</div>
+                        )}
+                        <div className={styles.accountPhone}>{user.phone || user.phoneNumber || '-'}</div>
+                      </div>
+                      <div className={styles.accountCardFooter}>
+                        <div className={styles.accountStat}>
+                          <div className={styles.statLabel}>Investments</div>
+                          <div className={styles.statValue}>{(user.investments || []).length}</div>
+                        </div>
+                        <div className={styles.accountStat}>
+                          <div className={styles.statLabel}>Invested</div>
+                          <div className={styles.statValue}>${investedAmount.toLocaleString()}</div>
+                        </div>
+                        <div className={styles.accountStat}>
+                          <div className={styles.statLabel}>Created</div>
+                          <div className={styles.statValue}>{user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '-'}</div>
+                        </div>
+                      </div>
+                      <div className={styles.accountCardActions} onClick={(e) => e.stopPropagation()}>
+                        <button
+                          className={styles.dangerButton}
+                          onClick={async (e) => {
+                            e.stopPropagation()
+                            if (!confirm('Are you sure you want to delete this account? This cannot be undone.')) return
+                            try {
+                              const res = await fetch(`/api/users/${user.id}`, { method: 'DELETE' })
+                              const data = await res.json()
+                              if (!data.success) {
+                                alert(data.error || 'Failed to delete user')
+                                return
+                              }
+                              await refreshUsers()
+                            } catch (e) {
+                              console.error('Delete failed', e)
+                              alert('An error occurred. Please try again.')
+                            }
+                          }}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}
-
-          {activeTab === 'withdrawals' && (
-            <div>
-              <div className={styles.headerRow}>
-                <h2 className={styles.sectionTitle}>Withdrawals</h2>
-                <button className={styles.secondaryButton} onClick={loadWithdrawals} disabled={isLoadingWithdrawals}>
-                  {isLoadingWithdrawals ? 'Refreshing...' : 'Refresh'}
-                </button>
-              </div>
-              <div className={styles.tableContainer}>
-                <table className={styles.table}>
-                  <thead>
-                    <tr>
-                      <th>User</th>
-                      <th>Email</th>
-                      <th>Investment</th>
-                      <th>Amount</th>
-                      <th>Status</th>
-                      <th>Requested</th>
-                      <th>Eligible At</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {withdrawals.length === 0 ? (
-                      <tr><td colSpan="8" className={styles.muted}>No withdrawals</td></tr>
-                    ) : (
-                      withdrawals.map(w => (
-                        <tr key={w.id}>
-                          <td>{w.userId}</td>
-                          <td>{w.userEmail}</td>
-                          <td>{w.investmentId}</td>
-                          <td>${(w.amount || 0).toLocaleString()}</td>
-                          <td>{w.status}</td>
-                          <td>{w.requestedAt ? new Date(w.requestedAt).toLocaleString() : '-'}</td>
-                          <td>{w.payoutDueBy ? new Date(w.payoutDueBy).toLocaleString() : '-'}</td>
-                          <td>
-                            <div className={styles.actionGroup}>
-                              <button className={styles.approveButton} onClick={() => actOnWithdrawal('approve', w.userId, w.id)} disabled={w.status === 'approved'}>Approve</button>
-                              <button className={styles.dangerButton} onClick={() => actOnWithdrawal('reject', w.userId, w.id)} disabled={w.status === 'rejected'}>Reject</button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'pending-payouts' && (
-            <div>
-              <div className={styles.headerRow}>
-                <h2 className={styles.sectionTitle}>Pending Payouts</h2>
-                <button className={styles.secondaryButton} onClick={loadPendingPayouts} disabled={isLoadingPayouts}>
-                  {isLoadingPayouts ? 'Refreshing...' : 'Refresh'}
-                </button>
-              </div>
-              
-              {pendingPayouts.length > 0 && (
-                <div className={styles.alertBox} style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '8px' }}>
-                  <strong>⚠️ {pendingPayouts.length} Payout{pendingPayouts.length !== 1 ? 's' : ''} Pending</strong>
-                  <p style={{ marginTop: '0.5rem', fontSize: '0.9rem' }}>
-                    These monthly interest payments could not be sent due to bank connection issues. 
-                    You can retry the payouts or manually mark them as completed once the bank connection is restored.
-                  </p>
-                </div>
-              )}
-
-              <div className={styles.tableContainer}>
-                <table className={styles.table}>
-                  <thead>
-                    <tr>
-                      <th>User</th>
-                      <th>Email</th>
-                      <th>Investment ID</th>
-                      <th>Payout Amount</th>
-                      <th>Scheduled Date</th>
-                      <th>Bank Account</th>
-                      <th>Status</th>
-                      <th>Failure Reason</th>
-                      <th>Retry Count</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pendingPayouts.length === 0 ? (
-                      <tr><td colSpan="10" className={styles.muted}>
-                        ✅ No pending payouts - all monthly payments have been successfully processed!
-                      </td></tr>
-                    ) : (
-                      pendingPayouts.map(payout => (
-                        <tr key={payout.id} style={{ backgroundColor: payout.payoutStatus === 'failed' ? '#fee' : '#fffbeb' }}>
-                          <td>{payout.userName || payout.userId}</td>
-                          <td>{payout.userEmail}</td>
-                          <td style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>{payout.investmentId}</td>
-                          <td><strong>${(payout.amount || 0).toFixed(2)}</strong></td>
-                          <td>{new Date(payout.date).toLocaleDateString()}</td>
-                          <td>{payout.payoutBankNickname || 'Not configured'}</td>
-                          <td>
-                            <span style={{ 
-                              padding: '0.25rem 0.5rem', 
-                              borderRadius: '4px',
-                              fontSize: '0.85rem',
-                              backgroundColor: payout.payoutStatus === 'failed' ? '#fecaca' : '#fef3c7',
-                              color: payout.payoutStatus === 'failed' ? '#991b1b' : '#92400e'
-                            }}>
-                              {payout.payoutStatus.toUpperCase()}
-                            </span>
-                          </td>
-                          <td style={{ fontSize: '0.85rem', maxWidth: '200px' }}>
-                            {payout.failureReason || '-'}
-                          </td>
-                          <td>{payout.retryCount || 0}</td>
-                          <td>
-                            <div className={styles.actionGroup} style={{ flexDirection: 'column', gap: '0.25rem' }}>
-                              <button 
-                                className={styles.approveButton}
-                                onClick={() => handlePayoutAction('retry', payout.userId, payout.id)}
-                                style={{ fontSize: '0.85rem', padding: '0.4rem 0.6rem' }}
-                              >
-                                🔄 Retry
-                              </button>
-                              <button 
-                                className={styles.secondaryButton}
-                                onClick={() => {
-                                  if (confirm('Mark this payout as completed? This will bypass the bank transfer.')) {
-                                    handlePayoutAction('complete', payout.userId, payout.id)
-                                  }
-                                }}
-                                style={{ fontSize: '0.85rem', padding: '0.4rem 0.6rem' }}
-                              >
-                                ✓ Mark Complete
-                              </button>
-                              <button 
-                                className={styles.dangerButton}
-                                onClick={() => {
-                                  const reason = prompt('Enter failure reason:')
-                                  if (reason) {
-                                    handlePayoutAction('fail', payout.userId, payout.id, reason)
-                                  }
-                                }}
-                                style={{ fontSize: '0.85rem', padding: '0.4rem 0.6rem' }}
-                              >
-                                ✗ Mark Failed
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-
-          {/* Notifications UI removed */}
         </div>
       </div>
     </div>
   )
 }
-
 

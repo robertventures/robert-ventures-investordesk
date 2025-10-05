@@ -54,22 +54,36 @@ All IDs follow the pattern: `{PREFIX}-{NUMBER}[-{SUFFIX}]`
 | **Investment** | `INV-{sequential}` | `INV-10000` | `INV-10001`, `INV-10002` | Global across all users |
 | **Withdrawal** | `WDL-{sequential}` | `WDL-10000` | `WDL-10001`, `WDL-10002` | Global across all users |
 | **Bank Account** | `BANK-{userId}-{seq}` | `BANK-USR-1000-1` | `BANK-USR-1001-2` | Per-user sequential |
-| **Transaction** | `TX-{type}-{entityId}-{suffix}` | Various | See below | Composite format |
+| **Activity Event** | `TX-{type}-{numericId}-{TYPE}` | Various | See below | **All uppercase** composite format |
 
-### Transaction ID Patterns
+### Activity Event ID Patterns
 
-Transaction IDs follow the pattern: `TX-{entityType}-{entityId}-{type}[-{suffix}]`
+Activity event IDs (previously called "transactions") follow the pattern: `TX-{entityType}-{numericId}-{TYPE}[-{SUFFIX}]`
 
-| Transaction Type | ID Pattern | Example |
+**Format Rules:**
+- All event IDs use **ALL UPPERCASE** format
+- Entity type prefix (USR, INV, WDL) is **NOT duplicated** in the numeric ID portion
+- Event types and suffixes are **UPPERCASE**
+
+| Event Type | ID Pattern | Example |
 |-----------------|------------|---------|
-| Account Created | `TX-USR-{userId}-account-created` | `TX-USR-USR-1001-account-created` |
-| Investment Created | `TX-INV-{invId}-created` | `TX-INV-INV-10000-created` |
-| Investment Confirmed | `TX-INV-{invId}-confirmed` | `TX-INV-INV-10000-confirmed` |
-| Monthly Distribution | `TX-INV-{invId}-md-{YYYY-MM}` | `TX-INV-INV-10000-md-2025-11` |
-| Monthly Compounded | `TX-INV-{invId}-mc-{YYYY-MM}` | `TX-INV-INV-10000-mc-2025-11` |
-| Withdrawal Notice | `TX-WDL-{wdlId}-notice` | `TX-WDL-WDL-10000-notice` |
-| Withdrawal Approved | `TX-WDL-{wdlId}-approved` | `TX-WDL-WDL-10000-approved` |
-| Withdrawal Rejected | `TX-WDL-{wdlId}-rejected` | `TX-WDL-WDL-10000-rejected` |
+| Account Created | `TX-USR-{numericId}-ACCOUNT-CREATED` | `TX-USR-1001-ACCOUNT-CREATED` |
+| Investment Created | `TX-INV-{numericId}-CREATED` | `TX-INV-10000-CREATED` |
+| Investment Confirmed | `TX-INV-{numericId}-CONFIRMED` | `TX-INV-10000-CONFIRMED` |
+| Monthly Distribution | `TX-INV-{numericId}-MD-{YYYY-MM}` | `TX-INV-10000-MD-2025-11` |
+| Monthly Compounded | `TX-INV-{numericId}-MC-{YYYY-MM}` | `TX-INV-10000-MC-2025-11` |
+| Withdrawal Notice | `TX-WDL-{numericId}-NOTICE` | `TX-WDL-10000-NOTICE` |
+| Withdrawal Approved | `TX-WDL-{numericId}-APPROVED` | `TX-WDL-10000-APPROVED` |
+| Withdrawal Rejected | `TX-WDL-{numericId}-REJECTED` | `TX-WDL-10000-REJECTED` |
+
+**IMPORTANT - Activity Event ID Rules:**
+- ✅ **Use ALL UPPERCASE** for entire ID (e.g., `TX-INV-10000-CREATED`)
+- ✅ **Strip entity prefix** from numeric portion (e.g., `TX-USR-1001`, NOT `TX-USR-USR-1001`)
+- ✅ **Create exactly ONE event per occurrence** (no duplicates)
+- ✅ **Include only the numeric ID** without the prefix (e.g., use `1001` from `USR-1001`)
+- ❌ **Never use lowercase** letters in event IDs
+- ❌ **Never duplicate the entity prefix** (e.g., avoid `TX-INV-INV-10000`)
+- ❌ **Never create duplicate events** for the same occurrence
 
 ### ID Generation Rules
 
@@ -161,56 +175,73 @@ def generate_bank_account_id(user_id, user_bank_accounts):
 # BANK-USR-1001-3 (third bank account)
 ```
 
-#### Transaction IDs
+#### Activity Event IDs
 ```python
-def generate_transaction_id(entity_type, entity_id, transaction_type, options=None):
+def generate_activity_event_id(entity_type, entity_id, event_type, options=None):
     """
-    Generate transaction ID based on type and context.
+    Generate activity event ID based on type and context.
+    
+    Args:
+        entity_type: 'USR', 'INV', or 'WDL'
+        entity_id: Full entity ID (e.g., 'USR-1001') or just numeric portion (e.g., '1001')
+        event_type: Type of event
+        options: Optional dict with additional data (e.g., date for monthly events)
+    
+    Returns:
+        Event ID in format: TX-{entityType}-{numericId}-{TYPE}
     """
-    prefix = f"TX-{entity_type}-{entity_id}"
+    # Strip entity prefix from entity_id if present to avoid duplication
+    # e.g., "USR-1001" -> "1001", "INV-10000" -> "10000"
+    clean_entity_id = entity_id
+    if isinstance(entity_id, str) and '-' in entity_id:
+        parts = entity_id.split('-')
+        if parts[0] == entity_type:
+            clean_entity_id = '-'.join(parts[1:])
     
-    if transaction_type == "account_created":
-        return f"{prefix}-account-created"
+    prefix = f"TX-{entity_type}-{clean_entity_id}"
     
-    elif transaction_type == "investment_created":
-        return f"{prefix}-created"
+    if event_type == "account_created":
+        return f"{prefix}-ACCOUNT-CREATED"
     
-    elif transaction_type == "investment_confirmed":
-        return f"{prefix}-confirmed"
+    elif event_type == "investment_created":
+        return f"{prefix}-CREATED"
     
-    elif transaction_type == "monthly_distribution":
-        # Format: TX-INV-{invId}-md-YYYY-MM
+    elif event_type == "investment_confirmed":
+        return f"{prefix}-CONFIRMED"
+    
+    elif event_type == "monthly_distribution":
+        # Format: TX-INV-{numericId}-MD-YYYY-MM
         date = options.get('date')
         year = date.year
         month = str(date.month).zfill(2)
-        return f"{prefix}-md-{year}-{month}"
+        return f"{prefix}-MD-{year}-{month}"
     
-    elif transaction_type == "monthly_compounded":
-        # Format: TX-INV-{invId}-mc-YYYY-MM
+    elif event_type == "monthly_compounded":
+        # Format: TX-INV-{numericId}-MC-YYYY-MM
         date = options.get('date')
         year = date.year
         month = str(date.month).zfill(2)
-        return f"{prefix}-mc-{year}-{month}"
+        return f"{prefix}-MC-{year}-{month}"
     
-    elif transaction_type == "withdrawal_notice_started":
-        return f"{prefix}-notice"
+    elif event_type == "withdrawal_notice_started":
+        return f"{prefix}-NOTICE"
     
-    elif transaction_type == "withdrawal_approved":
-        return f"{prefix}-approved"
+    elif event_type == "withdrawal_approved":
+        return f"{prefix}-APPROVED"
     
-    elif transaction_type == "withdrawal_rejected":
-        return f"{prefix}-rejected"
+    elif event_type == "withdrawal_rejected":
+        return f"{prefix}-REJECTED"
     
-    return f"{prefix}-{transaction_type}"
+    return f"{prefix}-{event_type.upper()}"
 
 # Examples:
-# TX-USR-USR-1001-account-created
-# TX-INV-INV-10000-created
-# TX-INV-INV-10000-confirmed
-# TX-INV-INV-10000-md-2025-11
-# TX-INV-INV-10000-mc-2025-11
-# TX-WDL-WDL-10000-notice
-# TX-WDL-WDL-10000-approved
+# TX-USR-1001-ACCOUNT-CREATED
+# TX-INV-10000-CREATED
+# TX-INV-10000-CONFIRMED
+# TX-INV-10000-MD-2025-11
+# TX-INV-10000-MC-2025-11
+# TX-WDL-10000-NOTICE
+# TX-WDL-10000-APPROVED
 ```
 
 ### Extracting Numeric IDs
@@ -511,13 +542,10 @@ See `/lib/idGenerator.js` for the complete implementation with:
 - **Compounding:** Interest added to principal monthly
 
 ### 4. Account Types
-- Individual
-- Joint (with joint holder info)
-- Entity (company/trust)
-- IRA
-- Roth IRA
-- Traditional IRA
-- Custodial
+- **Individual** - Single person investment account
+- **Joint** - Shared account with joint holder information
+- **Entity** - Business entity (LLC, Corporation, Trust, etc.)
+- **IRA** - Individual Retirement Account (Traditional or Roth)
 
 ---
 
@@ -782,6 +810,35 @@ def calculate_total_earnings(investments, transactions, app_time):
 
 ## Data Models
 
+### Important Schema Changes
+
+**Recent updates to the data model (October 2025):**
+
+1. **`activity` replaces `transactions`**
+   - User object now has `activity` array instead of `transactions`
+   - This better reflects that the array contains all account activity, not just financial transactions
+   - All API responses and database queries should use `activity` field
+   - Frontend components updated to reference `user.activity` instead of `user.transactions`
+
+2. **`acknowledgements` field removed from User**
+   - The `acknowledgements` field at the user level has been removed
+   - Acknowledgements are tracked per-investment in the `documents.consent` section
+   - This is captured during the investment finalization step, not at the user level
+
+3. **`anticipatedEarnings` NOT stored in Investment**
+   - The `anticipatedEarnings` field is **calculated dynamically**, not stored
+   - Frontend calculates this value on-the-fly based on:
+     - Investment amount
+     - Lockup period (1-year = 8% APY, 3-year = 10% APY)
+     - Payment frequency (monthly vs compounding)
+   - Backend should **never** store this value in the database
+   - Example calculation in `InvestmentReviewForm.js` shows proper implementation
+
+4. **Account Types reduced to 4**
+   - Only four valid account types: `individual`, `joint`, `entity`, `ira`
+   - Removed: `custodial`, `roth-ira`, `traditional-ira`
+   - IRA subtype (traditional/roth) is stored in the investment's `iraType` field
+
 ### User
 ```json
 {
@@ -802,6 +859,13 @@ def calculate_total_earnings(investments, transactions, app_time):
   },
   "isVerified": boolean,
   "isAdmin": boolean,
+  "trustedContact": {
+    "firstName": "string",
+    "lastName": "string",
+    "email": "string",
+    "phone": "string",
+    "relationship": "spouse|parent|sibling|child|friend|attorney|financial_advisor|other"
+  },
   "bankAccounts": [
     {
       "id": "string",
@@ -812,7 +876,7 @@ def calculate_total_earnings(investments, transactions, app_time):
     }
   ],
   "investments": [...],
-  "transactions": [...],
+  "activity": [...],
   "withdrawals": [...],
   "createdAt": "ISO8601",
   "updatedAt": "ISO8601"
@@ -829,8 +893,7 @@ def calculate_total_earnings(investments, transactions, app_time):
   "bonds": 1000,
   "paymentFrequency": "monthly|compounding",
   "lockupPeriod": "1-year|3-year",
-  "accountType": "individual|joint|entity|ira|roth-ira|traditional-ira|custodial",
-  "anticipatedEarnings": 800.00,
+  "accountType": "individual|joint|entity|ira",
   
   // Timestamps
   "createdAt": "ISO8601",           // When user created draft
@@ -859,23 +922,38 @@ def calculate_total_earnings(investments, transactions, app_time):
 - **`finalValue`** - Total amount withdrawn (principal + all accrued interest). Only set when status = `withdrawn`.
 - **`withdrawnAt`** - When admin processed withdrawal and funds were paid out. Becomes final state.
 
-### Transaction
+**Important Notes:**
+- **`anticipatedEarnings` is NOT stored** - This value is calculated dynamically based on amount, lockup period, and payment frequency. Do not include this field in the database schema.
+- **`accountType` values** - Only four types are valid: `individual`, `joint`, `entity`, `ira`. The `ira` type can have subtypes (traditional/roth) stored in `iraType` field.
+
+### Activity Entry (formerly Transaction)
+
+**Note:** Activity entries are stored in the user's `activity` array (not `transactions`). Each entry represents a significant event in the user's investment journey.
+
 ```json
 {
-  "id": "string",
-  "userId": "string",
-  "investmentId": "string",
-  "type": "monthly_distribution|monthly_compounded|withdrawal_requested",
-  "amount": 66.67,
-  "date": "ISO8601",
-  
+  "id": "TX-INV-10000-MD-2025-11",  // Format: TX-{entityType}-{numericId}-{TYPE} (all uppercase)
+  "userId": "USR-1001",  // Optional - usually inferred from context
+  "investmentId": "INV-10000",  // Present for investment/withdrawal events, absent for account_created
+  "type": "account_created|investment_created|investment_confirmed|monthly_distribution|monthly_compounded|withdrawal_requested|withdrawal_approved",
+  "amount": 66.67,  // Present for monetary events, ABSENT for account_created
+  "date": "2025-10-05T00:00:00.000Z",  // ISO8601 format
+
   // For monthly distributions only:
   "payoutStatus": "completed|pending|failed",
   "failureReason": "string or null",
   "retryCount": 0,
-  "payoutBankId": "string"
+  "payoutBankId": "BANK-USR-1001-1",
+  "payoutBankNickname": "Primary Account",
+  "monthIndex": 1
 }
 ```
+
+**Important Activity Event Field Rules:**
+- `id`: Always uppercase format (e.g., `TX-INV-10000-CREATED`)
+- `amount`: Only present for monetary events (investment_created, investment_confirmed, monthly_distribution, monthly_compounded, withdrawals). **NOT present for account_created**.
+- `investmentId`: Present for investment and withdrawal events, absent for account_created
+- `payoutStatus`, `failureReason`, etc.: Only present for monthly_distribution events
 
 ### Withdrawal
 ```json
@@ -931,6 +1009,67 @@ def calculate_total_earnings(investments, transactions, app_time):
 ---
 
 ## Business Logic Implementation
+
+### 0. User Account Creation
+
+When a new user signs up, the system must create exactly **one** account creation transaction:
+
+```python
+def create_user(email, password):
+    """
+    Create new user account with initial activity event.
+    CRITICAL: Only create ONE account_created event.
+    """
+    timestamp = get_current_time()
+    user_id = generate_user_id()  # e.g., "USR-1001"
+    
+    # Generate activity event ID using the standard function
+    # This will produce: TX-USR-1001-ACCOUNT-CREATED
+    event_id = generate_activity_event_id('USR', user_id, 'account_created')
+    
+    user = {
+        'id': user_id,
+        'email': email.lower().strip(),
+        'password': hash_password(password),
+        'created_at': timestamp,
+        'updated_at': timestamp,
+        'is_verified': False,
+        'investments': [],
+        'activity': [
+            {
+                'id': event_id,
+                'type': 'account_created',
+                'date': timestamp
+                # NOTE: No 'amount' field - account creation events don't have monetary value
+            }
+        ]
+    }
+    
+    return user
+```
+
+**CRITICAL RULES:**
+- ✅ **ONE event per occurrence** - Never create duplicate events
+- ✅ **ALL UPPERCASE format** - Event IDs must be entirely uppercase (e.g., `TX-USR-1001-ACCOUNT-CREATED`)
+- ✅ **Standard format** - Follow pattern: `TX-{entityType}-{numericId}-{TYPE}`
+- ✅ **No amount field** - Account creation events don't have monetary values
+- ✅ **Idempotency** - If user creation is retried, check for existing user first
+- ❌ **NO lowercase** - Never use `tx-` (lowercase) for transaction IDs
+- ❌ **NO duplicates** - Each event should create exactly one transaction
+
+**Common Mistake to Avoid:**
+```python
+# ❌ WRONG - Creates duplicate activity entries
+user.activity = [
+    {'id': 'TX-USR-USR-1001-account-created', ...},  # Correct format
+    {'id': 'tx-USR-1001-account-created', ...}       # Duplicate with wrong format
+]
+
+# ✅ CORRECT - Single activity entry with proper format
+user.activity = [
+    {'id': 'TX-USR-USR-1001-account-created', ...}   # One entry
+]
+```
 
 ### 1. User Creates Draft
 ```python
@@ -1084,6 +1223,18 @@ def create_withdrawal(user_id, investment_id):
 ### Date of Birth
 - Must be 18+ years old
 
+### Investment Status Transitions
+- **CRITICAL:** Active investments (`status = 'active'`) cannot be rejected
+- Once an investment is active, it can only transition to `withdrawal_notice` or remain `active`
+- This rule must be enforced in both API validation and UI (disabled reject button)
+- Attempting to reject an active investment should return HTTP 400 with error: "Cannot reject an active investment"
+
+### Trusted Contact (Optional)
+- All fields are optional
+- Email must be valid format if provided
+- Phone must be valid US 10-digit format if provided
+- Relationship must be one of: spouse, parent, sibling, child, friend, attorney, financial_advisor, other
+
 ---
 
 ## Database Indexes
@@ -1108,9 +1259,9 @@ CREATE INDEX idx_investment_confirmed
 -- User lookup
 CREATE INDEX idx_user_email ON users(email);
 
--- Transaction queries
-CREATE INDEX idx_transaction_user ON transactions(user_id, date DESC);
-CREATE INDEX idx_transaction_investment ON transactions(investment_id, date DESC);
+-- Activity queries
+CREATE INDEX idx_activity_user ON activity(user_id, date DESC);
+CREATE INDEX idx_activity_investment ON activity(investment_id, date DESC);
 ```
 
 ### Common Queries
@@ -1267,6 +1418,90 @@ return {
     "investments": all_visible_investments  # includes withdrawn
 }
 ```
+
+---
+
+## Admin Interface Requirements
+
+### Admin Dashboard
+
+**Navigation Tabs:**
+- Dashboard - Overview metrics and action items
+- Accounts - User account management
+- **Transactions** - Investment management (renamed from "Investments")
+- Withdrawals - Withdrawal request management
+- Pending Payouts - Monthly payout failure management
+- Time Machine - Testing and time manipulation
+
+**Dashboard Metrics:**
+The admin dashboard shows:
+- Active Accounts count
+- Number of Investors
+- Total Pending capital
+- Total Amount Raised
+- Total AUM (Assets Under Management)
+- Monthly Inflows
+- Action Required section with pending items
+
+**Dashboard Panels:**
+- Primary Metrics (4 cards: Total AUM, Total Accounts, Active Investments, Monthly Inflows)
+- Action Required (shows only when there are pending items)
+  - Pending Approvals (links to Transactions tab)
+  - Pending Withdrawals
+  - Pending Payouts
+  - Unverified Accounts
+- Overview (statistics grid)
+- Distribution (Account Types and Lockup Periods)
+- Recent Activity - Latest Investments only (Recent Sign-ups panel removed)
+
+### Transactions Tab (formerly Investments)
+
+**Purpose:** Manage all investment transactions across all users
+
+**Features:**
+- Search by investment ID, account ID, name, email, or status
+- No summary metrics displayed at top (removed for cleaner view)
+- Card-based layout showing each investment with:
+  - Investment ID and Account ID
+  - Status badge (Active, Pending, Rejected, etc.)
+  - Account type badge (Joint, Entity, etc.)
+  - User information
+  - Amount, Lockup period, Payment frequency
+  - Created date
+  - Action buttons: Approve, Reject, View Account
+
+**Status Pills:**
+Investment status badges must be properly centered (using flexbox: `display: flex`, `align-items: center`, `justify-content: center`)
+
+**Button States:**
+- Approve button: Disabled when status is `active`, `withdrawn`, or `rejected`
+- Reject button: Disabled when status is `rejected`, `active`, or `withdrawn`
+- **CRITICAL:** Active investments cannot be rejected (enforced in both frontend and backend)
+
+### User Profile - Trusted Contact
+
+**Location:** User profile page, between Primary Holder and Joint Holder sections
+
+**Purpose:** Emergency contact information for situations where the investor cannot be reached
+
+**Fields (all optional):**
+- First Name
+- Last Name
+- Relationship (dropdown: Spouse, Parent, Sibling, Child, Friend, Attorney, Financial Advisor, Other)
+- Email (validated format if provided)
+- Phone (US format validation if provided)
+
+**Validation Rules:**
+- All fields are optional
+- Email must be valid format if provided
+- Phone must be valid US 10-digit number if provided
+- No fields are required, allowing partial information
+
+**Save Functionality:**
+- Primary Holder section has its own "Save Changes" button at the bottom
+- Allows investors to save personal information without scrolling to page bottom
+- Shows "Saving..." state during save operation
+- Displays "Saved!" success message after completion
 
 ---
 

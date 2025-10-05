@@ -11,7 +11,7 @@ export async function GET() {
     for (const user of usersData.users) {
       if (user.isAdmin) continue
       
-      const transactions = Array.isArray(user.transactions) ? user.transactions : []
+      const transactions = Array.isArray(user.activity) ? user.activity : []
       const investments = Array.isArray(user.investments) ? user.investments : []
       
       // Find monthly_distribution events with pending or failed status
@@ -87,7 +87,7 @@ export async function POST(request) {
     }
 
     const user = usersData.users[userIndex]
-    const transactions = Array.isArray(user.transactions) ? user.transactions : []
+    const transactions = Array.isArray(user.activity) ? user.activity : []
     const txIndex = transactions.findIndex(tx => tx.id === transactionId)
 
     if (txIndex === -1) {
@@ -146,7 +146,7 @@ export async function POST(request) {
     }
 
     transactions[txIndex] = transaction
-    user.transactions = transactions
+    user.activity = transactions
     user.updatedAt = now
     usersData.users[userIndex] = user
 

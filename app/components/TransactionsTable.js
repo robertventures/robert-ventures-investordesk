@@ -31,7 +31,7 @@ export default function TransactionsTable() {
         const data = await res.json()
         if (data.success && data.user) {
           setUserData(data.user)
-          const persisted = Array.isArray(data.user.transactions) ? data.user.transactions : []
+          const persisted = Array.isArray(data.user.activity) ? data.user.activity : []
           
           // Convert investments to transaction format (for purchases tab)
           const investments = data.user.investments || []

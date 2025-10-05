@@ -83,12 +83,10 @@ export default function InvestmentForm({ onCompleted, onReviewSummary, disableAu
 
   const buildSummary = (lockupPeriodSelection) => {
     const effectiveLockup = lockupPeriodSelection || selectedLockup
-    const anticipated = effectiveLockup === '1-year' ? Number(earnings1Year) : Number(earnings3Year)
     return {
       amount: formData.investmentAmount,
       paymentFrequency: formData.paymentFrequency,
       lockupPeriod: effectiveLockup,
-      anticipatedEarnings: anticipated,
       bonds,
       accountType
     }
@@ -199,12 +197,10 @@ export default function InvestmentForm({ onCompleted, onReviewSummary, disableAu
         return
       }
 
-      const earnings = lockupPeriod === '1-year' ? earnings1Year : earnings3Year
       const investmentPayload = {
         amount: formData.investmentAmount,
         paymentFrequency: formData.paymentFrequency,
         lockupPeriod,
-        anticipatedEarnings: Number(earnings),
         bonds,
       }
 

@@ -50,7 +50,7 @@ export default function TransactionsList({ limit = null, showViewAll = true, fil
         const data = await res.json()
         if (data.success && data.user) {
           setUser(data.user)
-          const tx = Array.isArray(data.user.transactions) ? data.user.transactions : []
+          const tx = Array.isArray(data.user.activity) ? data.user.activity : []
           const sorted = tx.slice().sort((a, b) => new Date(b.date) - new Date(a.date))
           setEvents(sorted)
         }
@@ -79,6 +79,8 @@ export default function TransactionsList({ limit = null, showViewAll = true, fil
           const isWithdrawal = ev.type === 'withdrawal_requested'
           const amountClass = isWithdrawal ? styles.negative : styles.positive
           const isExpanded = expandable && expandedId === ev.id
+          // Only show amount for events that have a monetary value
+          const shouldShowAmount = ev.type !== 'account_created'
           return (
             <div className={styles.event} key={ev.id} onClick={() => { if (expandable) setExpandedId(prev => prev === ev.id ? null : ev.id) }} style={{ cursor: expandable ? 'pointer' : 'default' }}>
               <div className={`${styles.icon} ${meta.iconClass}`}>{meta.icon}</div>
@@ -113,9 +115,11 @@ export default function TransactionsList({ limit = null, showViewAll = true, fil
                   </div>
                 )}
               </div>
-              <div className={`${styles.amount} ${amountClass}`}>
-                {formatCurrency(ev.amount || 0)}
-              </div>
+              {shouldShowAmount && (
+                <div className={`${styles.amount} ${amountClass}`}>
+                  {formatCurrency(ev.amount || 0)}
+                </div>
+              )}
             </div>
           )
         })}

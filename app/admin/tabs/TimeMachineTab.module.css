@@ -1,0 +1,150 @@
+.timeMachineTab {
+  /* Container for time machine */
+}
+
+.titleWithBadge {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.activeIndicator {
+  color: #dc2626;
+  font-weight: 700;
+  font-size: 12px;
+  background: #fee2e2;
+  padding: 4px 10px;
+  border-radius: 4px;
+}
+
+.description {
+  color: #6b7280;
+  margin-bottom: 24px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.timeMachineControls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-5);
+  align-items: start;
+}
+
+.timeDisplaySection {
+  /* Left column */
+}
+
+.timeDisplay {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.timeRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.timeLabel {
+  font-weight: 600;
+  color: #374151;
+  font-size: 14px;
+}
+
+.timeValue {
+  font-family: 'Courier New', monospace;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.timeControlsSection {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.inputLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.timeInput {
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+}
+
+.timeInput:focus {
+  outline: none;
+  border-color: var(--color-info);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.timeInput:disabled {
+  background: #f3f4f6;
+  cursor: not-allowed;
+}
+
+.buttonGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.setTimeButton {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  font-size: 14px;
+}
+
+.setTimeButton:hover:not(:disabled) {
+  background: #2563eb;
+}
+
+.setTimeButton:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+}
+
+.resetTimeButton {
+  background: var(--color-danger);
+  color: white;
+  border: none;
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  font-size: 14px;
+}
+
+.resetTimeButton:hover:not(:disabled) {
+  background: var(--color-danger-dark);
+}
+
+.resetTimeButton:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+}
+
+@media (max-width: 768px) {
+  .timeMachineControls {
+    grid-template-columns: 1fr;
+    gap: var(--space-3);
+  }
+}
+

@@ -178,6 +178,13 @@ export async function PUT(request, { params }) {
         return NextResponse.json({ success: false, error: 'Investment not found' }, { status: 404 })
       }
 
+      const currentInvestment = investments[invIndex]
+
+      // VALIDATION: Cannot reject an active investment
+      if (body.fields.status === 'rejected' && currentInvestment.status === 'active') {
+        return NextResponse.json({ success: false, error: 'Cannot reject an active investment' }, { status: 400 })
+      }
+
       // VALIDATION: Investment amount must be positive (if being updated)
       if (typeof body.fields.amount === 'number' && body.fields.amount <= 0) {
         return NextResponse.json({ success: false, error: 'Investment amount must be greater than zero' }, { status: 400 })

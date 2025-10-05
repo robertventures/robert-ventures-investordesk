@@ -26,8 +26,6 @@ export default function PortfolioSummary() {
       if (!userId) return
 
       try {
-        // First, run migration to fix any missing fields
-        await fetch('/api/migrate-investments', { method: 'POST' })
         // Ensure transaction events (distributions/compounding) are generated
         await fetch('/api/migrate-transactions', { method: 'POST' })
         
@@ -53,7 +51,7 @@ export default function PortfolioSummary() {
           )
           const pendingInvestments = investments.filter(inv => inv.status === 'pending')
           const draftInvestments = investments.filter(inv => inv.status === 'draft')
-          const transactions = Array.isArray(data.user.transactions) ? data.user.transactions : []
+          const transactions = Array.isArray(data.user.activity) ? data.user.activity : []
           
           // Calculate totals using the precise calculation functions - only for confirmed investments
           let totalInvested = 0
@@ -468,7 +466,7 @@ export default function PortfolioSummary() {
                             const confirmedInvestments = nextInvestments.filter(i => i.status === 'active')
                             const pendingInvestments = nextInvestments.filter(i => i.status === 'pending')
                             const draftInvestments = nextInvestments.filter(i => i.status === 'draft')
-                            const transactions = Array.isArray(data.user.transactions) ? data.user.transactions : []
+                            const transactions = Array.isArray(data.user.activity) ? data.user.activity : []
                             let totalInvested = 0
                             let totalEarnings = 0
                             let totalCurrentValue = 0

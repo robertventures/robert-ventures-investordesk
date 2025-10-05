@@ -123,7 +123,20 @@ export default function InvestmentReviewForm() {
               </div>
               <div className={styles.infoItem}>
                 <span className={styles.label}>Estimated annual earnings:</span>
-                <span className={styles.value}>${investmentData.anticipatedEarnings || 'N/A'}</span>
+                <span className={styles.value}>${(() => {
+                  const amount = investmentData.amount || 0
+                  const apy = investmentData.lockupPeriod === '1-year' ? 0.08 : 0.10
+                  const years = investmentData.lockupPeriod === '1-year' ? 1 : 3
+
+                  if (investmentData.paymentFrequency === 'monthly') {
+                    return (amount * apy * years).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                  } else {
+                    const monthlyRate = apy / 12
+                    const totalMonths = years * 12
+                    const compoundAmount = amount * Math.pow(1 + monthlyRate, totalMonths)
+                    return (compoundAmount - amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                  }
+                })()}</span>
               </div>
             </div>
           </div>

@@ -1,0 +1,223 @@
+.operationsTab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.sectionHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-4);
+}
+
+.sectionDescription {
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+  margin: 0;
+}
+
+.refreshButton {
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.refreshButton:hover:not(:disabled) {
+  background: var(--color-muted);
+  color: white;
+}
+
+.refreshButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.alertBox {
+  margin-bottom: var(--space-4);
+  padding: var(--space-4);
+  background-color: #fef3c7;
+  border: 1px solid #f59e0b;
+  border-radius: var(--radius-md);
+}
+
+.alertBox strong {
+  display: block;
+  margin-bottom: var(--space-2);
+  color: #92400e;
+}
+
+.alertBox p {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: #78350f;
+}
+
+.tableContainer {
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.table thead {
+  background: var(--color-muted-bg);
+}
+
+.table th {
+  text-align: left;
+  padding: var(--space-3);
+  font-weight: 600;
+  color: var(--color-text);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.table td {
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.table tbody tr:hover {
+  background: var(--color-muted-bg);
+}
+
+.failedRow {
+  background-color: #fee !important;
+}
+
+.pendingRow {
+  background-color: #fffbeb !important;
+}
+
+.monospaceCell {
+  font-family: monospace;
+  font-size: 0.85rem;
+}
+
+.reasonCell {
+  font-size: 0.85rem;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.emptyState {
+  text-align: center !important;
+  color: var(--color-muted);
+  padding: var(--space-6) !important;
+}
+
+.badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.badge.pending {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.badge.failed {
+  background-color: #fecaca;
+  color: #991b1b;
+}
+
+.badge.approved {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+.badge.rejected {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+.actionButtonGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.actionButtonGroup button {
+  font-size: 0.85rem;
+  padding: 0.4rem 0.6rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.retryButton {
+  background-color: #dbeafe;
+  color: #1e40af;
+}
+
+.retryButton:hover {
+  background-color: #bfdbfe;
+}
+
+.completeButton {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+.completeButton:hover {
+  background-color: #a7f3d0;
+}
+
+.failButton {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+.failButton:hover {
+  background-color: #fecaca;
+}
+
+.approveButton {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+.approveButton:hover:not(:disabled) {
+  background-color: #a7f3d0;
+}
+
+.approveButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.rejectButton {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+.rejectButton:hover:not(:disabled) {
+  background-color: #fecaca;
+}
+
+.rejectButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+

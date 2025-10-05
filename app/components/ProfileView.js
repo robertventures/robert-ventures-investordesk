@@ -130,6 +130,13 @@ export default function ProfileView() {
                 country: data.user.entity?.address?.country || 'United States'
               }
             },
+            trustedContact: {
+              firstName: data.user.trustedContact?.firstName || '',
+              lastName: data.user.trustedContact?.lastName || '',
+              email: data.user.trustedContact?.email || '',
+              phone: formatPhone(data.user.trustedContact?.phone || ''),
+              relationship: data.user.trustedContact?.relationship || ''
+            },
             authorizedRepresentative: {
               dob: data.user.authorizedRepresentative?.dob || '',
               ssn: data.user.authorizedRepresentative?.ssn || '',
@@ -304,6 +311,20 @@ export default function ProfileView() {
     setSaveSuccess(false)
   }
 
+  const handleTrustedContactChange = (e) => {
+    const { name, value } = e.target
+    let formattedValue = value
+    if (name === 'firstName' || name === 'lastName') {
+      formattedValue = formatName(value)
+    }
+    if (name === 'phone') {
+      formattedValue = formatPhone(value)
+    }
+    setFormData(prev => ({ ...prev, trustedContact: { ...prev.trustedContact, [name]: formattedValue } }))
+    if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }))
+    setSaveSuccess(false)
+  }
+
   const validate = () => {
     const newErrors = {}
     if (!formData.firstName.trim()) newErrors.firstName = 'Required'
@@ -372,6 +393,20 @@ export default function ProfileView() {
         else if (/[0-9]/.test(formData.jointHolder.address.city)) newErrors.jointCity = 'No numbers allowed'
         if (!formData.jointHolder.address.state) newErrors.jointState = 'Required'
         if (!formData.jointHolder.address.zip.trim()) newErrors.jointZip = 'Required'
+      }
+    }
+
+    // Validate trusted contact (optional but if filled, validate format)
+    if (formData.trustedContact) {
+      if (formData.trustedContact.email && !/\S+@\S+\.\S+/.test(formData.trustedContact.email)) {
+        newErrors.trustedEmail = 'Invalid email format'
+      }
+      if (formData.trustedContact.phone) {
+        const rawTrusted = formData.trustedContact.phone.replace(/\D/g, '')
+        const normalizedTrusted = rawTrusted.length === 11 && rawTrusted.startsWith('1') ? rawTrusted.slice(1) : rawTrusted
+        if (normalizedTrusted.length > 0 && normalizedTrusted.length !== 10) {
+          newErrors.trustedPhone = 'Enter a valid US 10-digit phone'
+        }
       }
     }
     setErrors(newErrors)
@@ -450,7 +485,14 @@ export default function ProfileView() {
                 country: formData.authorizedRepresentative.address.country
               }
             }
-          } : {})
+          } : {}),
+          trustedContact: formData.trustedContact ? {
+            firstName: formData.trustedContact.firstName,
+            lastName: formData.trustedContact.lastName,
+            email: formData.trustedContact.email,
+            phone: formData.trustedContact.phone,
+            relationship: formData.trustedContact.relationship
+          } : {}
         })
       })
       const data = await res.json()
@@ -606,6 +648,93 @@ export default function ProfileView() {
               </div>
             </div>
           )}
+
+          <div className={styles.actions}>
+            <button
+              className={styles.saveButton}
+              onClick={handleSave}
+              disabled={isSaving}
+            >
+              {isSaving ? 'Saving...' : 'Save Changes'}
+            </button>
+            {saveSuccess && <span className={styles.success}>Saved!</span>}
+          </div>
+        </section>
+
+        <section className={styles.section}>
+          <h2 className={styles.sectionTitle}>Trusted Contact</h2>
+          <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '16px' }}>
+            Provide a trusted contact who we can reach in case we cannot contact you or in emergency situations.
+          </p>
+
+          <div className={styles.subCard}>
+            <h3 className={styles.subSectionTitle}>Contact Information</h3>
+            <div className={styles.compactGrid}>
+              <div className={styles.field}>
+                <label className={styles.label}>First Name</label>
+                <input
+                  className={`${styles.input} ${errors.trustedFirstName ? styles.inputError : ''}`}
+                  name="firstName"
+                  value={formData.trustedContact?.firstName || ''}
+                  onChange={handleTrustedContactChange}
+                  placeholder="Optional"
+                />
+              </div>
+              <div className={styles.field}>
+                <label className={styles.label}>Last Name</label>
+                <input
+                  className={`${styles.input} ${errors.trustedLastName ? styles.inputError : ''}`}
+                  name="lastName"
+                  value={formData.trustedContact?.lastName || ''}
+                  onChange={handleTrustedContactChange}
+                  placeholder="Optional"
+                />
+              </div>
+              <div className={styles.field}>
+                <label className={styles.label}>Relationship</label>
+                <select
+                  className={styles.input}
+                  name="relationship"
+                  value={formData.trustedContact?.relationship || ''}
+                  onChange={handleTrustedContactChange}
+                >
+                  <option value="">Select relationship</option>
+                  <option value="spouse">Spouse</option>
+                  <option value="parent">Parent</option>
+                  <option value="sibling">Sibling</option>
+                  <option value="child">Child</option>
+                  <option value="friend">Friend</option>
+                  <option value="attorney">Attorney</option>
+                  <option value="financial_advisor">Financial Advisor</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div className={styles.field}>
+                <label className={styles.label}>Email</label>
+                <input
+                  className={`${styles.input} ${errors.trustedEmail ? styles.inputError : ''}`}
+                  type="email"
+                  name="email"
+                  value={formData.trustedContact?.email || ''}
+                  onChange={handleTrustedContactChange}
+                  placeholder="Optional"
+                />
+                {errors.trustedEmail && <span className={styles.errorText}>{errors.trustedEmail}</span>}
+              </div>
+              <div className={styles.field}>
+                <label className={styles.label}>Phone</label>
+                <input
+                  className={`${styles.input} ${errors.trustedPhone ? styles.inputError : ''}`}
+                  type="tel"
+                  name="phone"
+                  value={formData.trustedContact?.phone || ''}
+                  onChange={handleTrustedContactChange}
+                  placeholder="(555) 555-5555 - Optional"
+                />
+                {errors.trustedPhone && <span className={styles.errorText}>{errors.trustedPhone}</span>}
+              </div>
+            </div>
+          </div>
         </section>
 
         {showJointSection && (

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getUsers, saveUsers } from '../../../lib/database'
 import { getCurrentAppTime } from '../../../lib/appTime'
+import { generateTransactionId } from '../../../lib/idGenerator'
 
 // Helper functions matching investmentCalculations.js
 const MS_PER_DAY = 24 * 60 * 60 * 1000
@@ -87,14 +88,14 @@ export async function POST() {
       const investments = Array.isArray(user.investments) ? user.investments : []
       const withdrawals = Array.isArray(user.withdrawals) ? user.withdrawals : []
 
-      if (!Array.isArray(user.transactions)) {
-        user.transactions = []
+      if (!Array.isArray(user.activity)) {
+        user.activity = []
       }
 
       // Remove any future-dated generated events if app time moved backwards
       // Also prune events tied to investments that no longer exist
       const existingInvestmentIds = new Set((investments || []).map(i => i.id))
-      user.transactions = user.transactions.filter(ev => {
+      user.activity = user.activity.filter(ev => {
         if (!ev || !ev.date) return true
         const evDate = new Date(ev.date)
         if (evDate > now) return false
@@ -103,10 +104,10 @@ export async function POST() {
         return true
       })
 
-      const existingIds = new Set(user.transactions.map(t => t.id))
+      const existingIds = new Set(user.activity.map(t => t.id))
       const ensureEvent = (event) => {
         if (!existingIds.has(event.id)) {
-          user.transactions.push(event)
+          user.activity.push(event)
           existingIds.add(event.id)
           eventsCreated++
           return true
@@ -117,9 +118,8 @@ export async function POST() {
       // Account created event (always present when user.createdAt exists)
       if (user.createdAt) {
         ensureEvent({
-          id: `tx-${user.id}-account-created`,
+          id: generateTransactionId('USR', user.id, 'account_created'),
           type: 'account_created',
-          amount: 0,
           date: user.createdAt
         })
       }
@@ -131,17 +131,10 @@ export async function POST() {
         const lockup = inv.lockupPeriod
         const payFreq = inv.paymentFrequency
 
-        // Created event: only for non-draft investments. If draft, ensure any previous created event is removed.
-        if (inv.status === 'draft') {
-          // Purge any previously created event for this draft investment
-          const createdId = `tx-${invId}-created`
-          if (existingIds.has(createdId)) {
-            user.transactions = user.transactions.filter(ev => ev.id !== createdId)
-            existingIds.delete(createdId)
-          }
-        } else if (inv.createdAt) {
+        // Created event: only for non-draft investments
+        if (inv.status !== 'draft' && inv.createdAt) {
           ensureEvent({
-            id: `tx-${invId}-created`,
+            id: generateTransactionId('INV', invId, 'investment_created'),
             type: 'investment_created',
             investmentId: invId,
             amount,
@@ -154,7 +147,7 @@ export async function POST() {
         // Confirmed event (status = active)
         if (inv.status === 'active' && inv.confirmedAt) {
           ensureEvent({
-            id: `tx-${invId}-confirmed`,
+            id: generateTransactionId('INV', invId, 'investment_confirmed'),
             type: 'investment_confirmed',
             investmentId: invId,
             amount,
@@ -228,8 +221,7 @@ export async function POST() {
             
             // Distribution date is the 1st of the month AFTER the segment ends
             const distributionDate = addDaysUtc(segment.end, 1)
-            
-            const eventId = `tx-${invId}-md-${distributionDate.getUTCFullYear()}-${String(distributionDate.getUTCMonth() + 1).padStart(2, '0')}`
+            const eventId = generateTransactionId('INV', invId, 'monthly_distribution', { date: distributionDate })
             
             // Determine payout status based on bank connection
             let payoutStatus = 'completed'
@@ -307,8 +299,7 @@ export async function POST() {
             
             // Compounding date is the 1st of the month AFTER the segment ends
             const compoundingDate = addDaysUtc(segment.end, 1)
-            
-            const eventId = `tx-${invId}-mc-${compoundingDate.getUTCFullYear()}-${String(compoundingDate.getUTCMonth() + 1).padStart(2, '0')}`
+            const eventId = generateTransactionId('INV', invId, 'monthly_compounded', { date: compoundingDate })
             ensureEvent({
               id: eventId,
               type: 'monthly_compounded',
@@ -337,7 +328,7 @@ export async function POST() {
         }
         if (wd.status === 'notice') {
           ensureEvent({
-            id: `tx-${wd.id}-notice`,
+            id: generateTransactionId('WDL', wd.id, 'withdrawal_notice_started'),
             type: 'withdrawal_notice_started',
             ...base,
             date: wd.noticeStartAt || wd.requestedAt || new Date().toISOString(),
@@ -345,21 +336,21 @@ export async function POST() {
           })
         } else if (wd.status === 'approved') {
           ensureEvent({
-            id: `tx-${wd.id}-approved`,
+            id: generateTransactionId('WDL', wd.id, 'withdrawal_approved'),
             type: 'withdrawal_approved',
             ...base,
             date: wd.approvedAt || wd.paidAt || new Date().toISOString()
           })
         } else if (wd.status === 'rejected') {
           ensureEvent({
-            id: `tx-${wd.id}-rejected`,
+            id: generateTransactionId('WDL', wd.id, 'withdrawal_rejected'),
             type: 'withdrawal_rejected',
             ...base,
             date: wd.rejectedAt || new Date().toISOString()
           })
         } else {
           ensureEvent({
-            id: `tx-${wd.id}-requested`,
+            id: generateTransactionId('WDL', wd.id, 'withdrawal_requested'),
             type: 'withdrawal_requested',
             ...base,
             date: wd.requestedAt || new Date().toISOString(),
@@ -387,5 +378,3 @@ export async function POST() {
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
 }
-
-
