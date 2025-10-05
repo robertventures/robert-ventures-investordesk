@@ -289,7 +289,31 @@ export async function PUT(request, { params }) {
       // Lock user account type only when investment transitions to pending or confirmed
       const isLockingStatus = updatedInvestment.status === 'pending' || updatedInvestment.status === 'active'
       const shouldSetAccountType = isLockingStatus && updatedInvestment.accountType && !user.accountType
-      const updatedUser = { ...user, investments, ...(shouldSetAccountType ? { accountType: updatedInvestment.accountType } : {}), updatedAt: new Date().toISOString() }
+      
+      // Unlock user account type if investment was rejected and there are no pending/active investments
+      let shouldClearAccountType = false
+      if (updatedInvestment.status === 'rejected') {
+        const hasPendingOrActiveInvestments = investments.some(inv => 
+          inv.id !== updatedInvestment.id && (inv.status === 'pending' || inv.status === 'active')
+        )
+        shouldClearAccountType = !hasPendingOrActiveInvestments && user.accountType
+      }
+      
+      // When unlocking account, also clear account-type-specific fields to avoid stale data
+      const accountTypeFields = shouldClearAccountType ? {
+        accountType: null,
+        jointHolder: null,
+        jointHoldingType: null,
+        entity: null
+      } : {}
+      
+      const updatedUser = { 
+        ...user, 
+        investments, 
+        ...(shouldSetAccountType ? { accountType: updatedInvestment.accountType } : {}),
+        ...accountTypeFields,
+        updatedAt: new Date().toISOString() 
+      }
       usersData.users[userIndex] = updatedUser
       if (!await saveUsers(usersData)) {
         return NextResponse.json({ success: false, error: 'Failed to update investment' }, { status: 500 })
@@ -320,7 +344,30 @@ export async function PUT(request, { params }) {
 
       // Remove the investment
       investments.splice(invIndex, 1)
-      const updatedUser = { ...user, investments, updatedAt: new Date().toISOString() }
+      
+      // Unlock user account type if there are no pending/active investments remaining after deletion
+      let shouldClearAccountType = false
+      if (user.accountType) {
+        const hasPendingOrActiveInvestments = investments.some(inv => 
+          inv.status === 'pending' || inv.status === 'active'
+        )
+        shouldClearAccountType = !hasPendingOrActiveInvestments
+      }
+      
+      // When unlocking account, also clear account-type-specific fields to avoid stale data
+      const accountTypeFields = shouldClearAccountType ? {
+        accountType: null,
+        jointHolder: null,
+        jointHoldingType: null,
+        entity: null
+      } : {}
+      
+      const updatedUser = { 
+        ...user, 
+        investments, 
+        ...accountTypeFields,
+        updatedAt: new Date().toISOString() 
+      }
       usersData.users[userIndex] = updatedUser
       if (!await saveUsers(usersData)) {
         return NextResponse.json({ success: false, error: 'Failed to delete investment' }, { status: 500 })

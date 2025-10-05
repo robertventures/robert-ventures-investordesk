@@ -357,8 +357,9 @@ export default function ProfileView() {
       if (!formData.address.zip.trim()) newErrors.zip = 'Required'
     }
 
-    const hasEntityInvestment = Array.isArray(userData?.investments) && userData.investments.some(inv => inv.accountType === 'entity')
-    const showEntity = hasEntityInvestment || !!userData?.entity
+    const hasPendingOrActiveEntity = Array.isArray(userData?.investments) && 
+      userData.investments.some(inv => inv.accountType === 'entity' && (inv.status === 'pending' || inv.status === 'active'))
+    const showEntity = userData?.accountType === 'entity' || hasPendingOrActiveEntity
     if (showEntity && formData.entity) {
       if (!formData.entity.name.trim()) newErrors.entityName = 'Required'
       if (!formData.entity.registrationDate) newErrors.entityRegistrationDate = 'Required'
@@ -384,8 +385,9 @@ export default function ProfileView() {
       }
     }
 
-    const hasJointInvestment = Array.isArray(userData?.investments) && userData.investments.some(inv => inv.accountType === 'joint')
-    const showJoint = hasJointInvestment || !!userData?.jointHolder
+    const hasPendingOrActiveJoint = Array.isArray(userData?.investments) && 
+      userData.investments.some(inv => inv.accountType === 'joint' && (inv.status === 'pending' || inv.status === 'active'))
+    const showJoint = userData?.accountType === 'joint' || hasPendingOrActiveJoint
     if (showJoint && formData.jointHolder) {
       if (!formData.jointHoldingType?.trim()) newErrors.jointHoldingType = 'Required'
       if (!formData.jointHolder.firstName.trim()) newErrors.jointFirstName = 'Required'
@@ -559,10 +561,15 @@ export default function ProfileView() {
     return <div className={styles.loading}>Loading profile...</div>
   }
 
-  const hasJointInvestment = Array.isArray(userData?.investments) && userData.investments.some(inv => inv.accountType === 'joint')
-  const showJointSection = hasJointInvestment || !!userData?.jointHolder
-  const hasEntityInvestment = Array.isArray(userData?.investments) && userData.investments.some(inv => inv.accountType === 'entity')
-  const showEntitySection = hasEntityInvestment || !!userData?.entity
+  // Only show account type sections if the account is locked to that type
+  // (i.e., has pending/active investments of that type or accountType is set)
+  const hasPendingOrActiveJoint = Array.isArray(userData?.investments) && 
+    userData.investments.some(inv => inv.accountType === 'joint' && (inv.status === 'pending' || inv.status === 'active'))
+  const showJointSection = userData?.accountType === 'joint' || hasPendingOrActiveJoint
+  
+  const hasPendingOrActiveEntity = Array.isArray(userData?.investments) && 
+    userData.investments.some(inv => inv.accountType === 'entity' && (inv.status === 'pending' || inv.status === 'active'))
+  const showEntitySection = userData?.accountType === 'entity' || hasPendingOrActiveEntity
 
   // Banking derived values (read-only display)
   const availableBanks = Array.isArray(userData?.bankAccounts) ? userData.bankAccounts : []

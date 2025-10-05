@@ -1539,6 +1539,138 @@ See `/lib/idGenerator.js` for the complete implementation with:
 - **Entity** - Business entity (LLC, Corporation, Trust, etc.)
 - **IRA** - Individual Retirement Account (Traditional or Roth)
 
+### 5. Account Type Locking
+
+**Overview:** Once a user submits an investment for approval, their account becomes locked to that specific account type. This prevents mixing different account types under the same user account.
+
+**Locking Rules:**
+
+1. **Account locks when:**
+   - Investment transitions to `pending` status (submitted for approval)
+   - Investment is approved and transitions to `active` status
+   - The user's `accountType` field is set to match the investment's account type
+
+2. **Account unlocks when:**
+   - Investment is rejected AND there are no other pending/active investments
+   - Draft investment is deleted AND there are no other pending/active investments
+   - When unlocking, the following fields are cleared:
+     - `accountType` → `null`
+     - `jointHolder` → `null`
+     - `jointHoldingType` → `null`
+     - `entity` → `null`
+
+3. **Account remains locked when:**
+   - User has at least one pending OR active investment
+   - Even if one investment is rejected, if another is still pending/active, the account stays locked
+
+**Implementation:**
+
+```python
+def update_investment_status(user_id, investment_id, new_status, admin_user_id=None):
+    """
+    Update investment status and manage account type locking.
+    """
+    user = get_user(user_id)
+    investment = get_investment(user, investment_id)
+    
+    # Update investment status
+    investment.status = new_status
+    investment.updated_at = get_current_app_time()
+    
+    # Handle approval (locking)
+    if new_status == 'active':
+        investment.confirmed_at = get_current_app_time()
+        investment.confirmed_by_admin_id = admin_user_id
+        investment.confirmation_source = 'admin' if admin_user_id else 'system'
+        
+        # Lock account type if not already set
+        if not user.account_type:
+            user.account_type = investment.account_type
+    
+    # Handle rejection (potential unlocking)
+    elif new_status == 'rejected':
+        investment.rejected_at = get_current_app_time()
+        investment.rejected_by_admin_id = admin_user_id
+        investment.rejection_source = 'admin' if admin_user_id else 'system'
+        
+        # Check if account should be unlocked
+        has_pending_or_active = any(
+            inv.id != investment_id and 
+            inv.status in ['pending', 'active']
+            for inv in user.investments
+        )
+        
+        # Unlock account if no pending/active investments remain
+        if not has_pending_or_active and user.account_type:
+            user.account_type = None
+            user.joint_holder = None
+            user.joint_holding_type = None
+            user.entity = None
+    
+    save_user(user)
+    return {"success": True}
+
+def delete_draft_investment(user_id, investment_id):
+    """
+    Delete a draft investment and potentially unlock the account.
+    """
+    user = get_user(user_id)
+    investment = get_investment(user, investment_id)
+    
+    if investment.status != 'draft':
+        raise ValueError("Only draft investments can be deleted")
+    
+    # Remove investment
+    user.investments.remove(investment)
+    
+    # Check if account should be unlocked
+    has_pending_or_active = any(
+        inv.status in ['pending', 'active']
+        for inv in user.investments
+    )
+    
+    # Unlock account if no pending/active investments remain
+    if not has_pending_or_active and user.account_type:
+        user.account_type = None
+        user.joint_holder = None
+        user.joint_holding_type = None
+        user.entity = None
+    
+    save_user(user)
+    return {"success": True}
+```
+
+**UI/UX Implications:**
+
+1. **Profile View:**
+   - Only show account-type-specific sections (Joint Holder, Entity) when account is locked to that type
+   - Check: `user.account_type == 'joint'` OR has pending/active joint investments
+   - Don't show sections based on rejected/draft investments
+
+2. **Investment Flow:**
+   - If account is locked, only allow selecting the locked account type
+   - Display locked type as read-only/disabled in account type selector
+   - Show helpful message: "Your account is locked to [Type] investments"
+
+3. **Account Freedom:**
+   - Users with no pending/active investments can freely choose any account type
+   - After rejection, user can immediately create a different account type investment
+
+**Validation Rules:**
+
+```python
+def validate_investment_account_type(user, investment_data):
+    """
+    Validate that investment account type matches user's locked type (if any).
+    """
+    if user.account_type and investment_data['account_type'] != user.account_type:
+        raise ValueError(
+            f"Account type must be {user.account_type} for this user."
+        )
+    
+    return True
+```
+
 ---
 
 ## Interest Calculations
