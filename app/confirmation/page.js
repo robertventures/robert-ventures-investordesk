@@ -17,9 +17,11 @@ export default function ConfirmationPage() {
   useEffect(() => {
     // Get the email from localStorage
     const signupEmail = localStorage.getItem('signupEmail')
-    if (!signupEmail) {
-      // If no email found, redirect to home
-      router.push('/')
+    const userId = localStorage.getItem('currentUserId')
+    
+    if (!signupEmail || !userId) {
+      // If no email/user found, redirect to sign-in
+      router.push('/sign-in')
       return
     }
     setEmail(signupEmail)
@@ -161,9 +163,12 @@ export default function ConfirmationPage() {
           <h1 className={styles.title}>Let's Verify It's You</h1>
           
           <p className={styles.description}>
-            A 6 digit verification code has been sent to
+            Please enter the 6 digit verification code sent to
           </p>
           <p className={styles.email}>{email}</p>
+          <p className={styles.hint}>
+            Use <strong>000000</strong> for testing purposes
+          </p>
 
           <form onSubmit={handleSubmit}>
             <div className={styles.codeInputContainer}>

@@ -4,8 +4,8 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import AdminHeader from '../components/AdminHeader'
 import { useAdminData } from './hooks/useAdminData'
 import { useAdminMetrics } from './hooks/useAdminMetrics'
-import DashboardTab from './tabs/DashboardTab'
-import OperationsTab from './tabs/OperationsTab'
+import DashboardTab from './components/DashboardTab'
+import OperationsTab from './components/OperationsTab'
 import styles from './page.module.css'
 
 /**
@@ -87,6 +87,11 @@ export default function AdminPage() {
     })
     return investments
   }, [nonAdminUsers])
+
+  // Get pending investments for dashboard
+  const pendingInvestments = useMemo(() => {
+    return allInvestments.filter(inv => inv.status === 'pending')
+  }, [allInvestments])
 
   const filteredInvestments = useMemo(() => {
     if (!investmentsSearch.trim()) return allInvestments
@@ -315,7 +320,15 @@ export default function AdminPage() {
           </div>
 
           {/* Tab Content */}
-          {activeTab === 'dashboard' && <DashboardTab metrics={metrics} />}
+          {activeTab === 'dashboard' && (
+            <DashboardTab 
+              metrics={metrics} 
+              pendingInvestments={pendingInvestments}
+              onApprove={approveInvestment}
+              onReject={rejectInvestment}
+              savingId={savingId}
+            />
+          )}
 
           {activeTab === 'operations' && (
             <OperationsTab
@@ -365,6 +378,9 @@ export default function AdminPage() {
                           {inv.status}
                         </div>
                         {inv.user.accountType === 'joint' && <span className={styles.jointBadge}>Joint</span>}
+                        {inv.user.accountType === 'individual' && <span className={styles.individualBadge}>Individual</span>}
+                        {inv.user.accountType === 'entity' && <span className={styles.entityBadge}>Entity</span>}
+                        {inv.user.accountType === 'ira' && <span className={styles.iraBadge}>IRA</span>}
                       </div>
                     </div>
 
@@ -461,6 +477,9 @@ export default function AdminPage() {
                         <div className={styles.accountBadges}>
                           {user.isVerified && <span className={styles.verifiedBadge}>✓ Verified</span>}
                           {user.accountType === 'joint' && <span className={styles.jointBadge}>Joint</span>}
+                          {user.accountType === 'individual' && <span className={styles.individualBadge}>Individual</span>}
+                          {user.accountType === 'entity' && <span className={styles.entityBadge}>Entity</span>}
+                          {user.accountType === 'ira' && <span className={styles.iraBadge}>IRA</span>}
                         </div>
                       </div>
                       <div className={styles.accountCardBody}>

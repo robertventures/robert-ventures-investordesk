@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Header from '../../../components/Header'
+import AdminHeader from '../../../components/AdminHeader'
 import styles from './page.module.css'
 
 export default function AdminUserDetailsPage({ params }) {
@@ -11,6 +11,7 @@ export default function AdminUserDetailsPage({ params }) {
   const [user, setUser] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [isVerifying, setIsVerifying] = useState(false)
 
   const MIN_DOB = '1900-01-01'
 
@@ -170,19 +171,27 @@ export default function AdminUserDetailsPage({ params }) {
 
   if (isLoading) {
     return (
-      <main className={styles.main}>
-        <Header />
-        <div className={styles.container}><div className={styles.card}>Loading user...</div></div>
-      </main>
+      <div className={styles.main}>
+        <AdminHeader activeTab="accounts" />
+        <div className={styles.container}>
+          <div className={styles.content}>
+            <div className={styles.loadingState}>Loading user details...</div>
+          </div>
+        </div>
+      </div>
     )
   }
 
   if (!user) {
     return (
-      <main className={styles.main}>
-        <Header />
-        <div className={styles.container}><div className={styles.card}>User not found.</div></div>
-      </main>
+      <div className={styles.main}>
+        <AdminHeader activeTab="accounts" />
+        <div className={styles.container}>
+          <div className={styles.content}>
+            <div className={styles.errorState}>User not found.</div>
+          </div>
+        </div>
+      </div>
     )
   }
 
@@ -265,6 +274,35 @@ export default function AdminUserDetailsPage({ params }) {
 
     setErrors(v)
     return Object.keys(v).length === 0
+  }
+
+  const handleVerifyAccount = async () => {
+    if (!confirm('Manually verify this account? The user will be able to access their dashboard and make investments.')) {
+      return
+    }
+    setIsVerifying(true)
+    try {
+      const res = await fetch(`/api/users/${user.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          isVerified: true,
+          verifiedAt: new Date().toISOString()
+        })
+      })
+      const data = await res.json()
+      if (data.success) {
+        setUser(data.user)
+        alert('Account verified successfully!')
+      } else {
+        alert(data.error || 'Failed to verify account')
+      }
+    } catch (e) {
+      console.error('Failed to verify account', e)
+      alert('An error occurred')
+    } finally {
+      setIsVerifying(false)
+    }
   }
 
   const handleSave = async () => {
@@ -353,52 +391,69 @@ export default function AdminUserDetailsPage({ params }) {
     }
   }
 
-  const handleLogout = () => {
-    localStorage.removeItem('currentUserId')
-    localStorage.removeItem('signupEmail')
-    localStorage.removeItem('currentInvestmentId')
-    router.push('/')
-  }
-
   const investedTotal = (user.investments || []).filter(inv => inv.status === 'active').reduce((sum, inv) => sum + (inv.amount || 0), 0)
   const pendingTotal = (user.investments || []).filter(inv => inv.status === 'pending' || inv.status === 'draft').reduce((sum, inv) => sum + (inv.amount || 0), 0)
 
   return (
-    <main className={styles.main}>
-      <Header />
+    <div className={styles.main}>
+      <AdminHeader activeTab="accounts" />
       <div className={styles.container}>
-        <div className={styles.card}>
-          <div className={styles.headerRow}>
-            <div>
-              <button className={styles.backButton} onClick={() => router.push('/admin?tab=accounts')}>← Back</button>
-              <h1 className={styles.title}>User Account</h1>
-              <p className={styles.subtitle}>{user.firstName} {user.lastName} — {user.email}</p>
-            </div>
-            <button className={styles.secondaryButton} onClick={handleLogout}>Sign Out</button>
+        <div className={styles.content}>
+          {/* Breadcrumb Navigation */}
+          <div className={styles.breadcrumb}>
+            <button className={styles.breadcrumbLink} onClick={() => router.push('/admin?tab=accounts')}>
+              ← Accounts
+            </button>
+            <span className={styles.breadcrumbSeparator}>/</span>
+            <span className={styles.breadcrumbCurrent}>Account #{user.id}</span>
           </div>
 
-          <div className={styles.metrics}>
-            <div className={styles.metric}>
-              <div className={styles.metricLabel}>INVESTMENTS</div>
+          {/* Page Header */}
+          <div className={styles.pageHeader}>
+            <div>
+              <h1 className={styles.title}>Account Details</h1>
+              <p className={styles.subtitle}>
+                {user.firstName} {user.lastName} • {user.email}
+              </p>
+            </div>
+          </div>
+
+          {/* Metrics Cards */}
+          <div className={styles.metricsGrid}>
+            <div className={styles.metricCard}>
+              <div className={styles.metricLabel}>Total Investments</div>
               <div className={styles.metricValue}>{(user.investments || []).length}</div>
             </div>
-            <div className={styles.metric}>
-              <div className={styles.metricLabel}>TOTAL PENDING</div>
+            <div className={styles.metricCard}>
+              <div className={styles.metricLabel}>Pending Amount</div>
               <div className={styles.metricValue}>${pendingTotal.toLocaleString()}</div>
             </div>
-            <div className={styles.metric}>
-              <div className={styles.metricLabel}>TOTAL APPROVED</div>
+            <div className={styles.metricCard}>
+              <div className={styles.metricLabel}>Approved Amount</div>
               <div className={styles.metricValue}>${investedTotal.toLocaleString()}</div>
             </div>
           </div>
 
-          
-
-          <div className={styles.section}>
-            <h2 className={styles.sectionTitle}>Account Profile</h2>
+          {/* Account Profile Section */}
+          <div className={styles.sectionCard}>
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.sectionTitle}>Account Profile</h2>
+            </div>
             <div className={styles.grid}>
               <div><b>Account Type:</b> {form.accountType || '-'}</div>
-              <div><b>Verified:</b> {user.isVerified ? 'Yes' : 'No'}</div>
+              <div>
+                <b>Verified:</b> {user.isVerified ? 'Yes' : 'No'}
+                {!user.isVerified && (
+                  <button 
+                    onClick={handleVerifyAccount} 
+                    disabled={isVerifying}
+                    className={styles.verifyButton}
+                    style={{ marginLeft: '12px' }}
+                  >
+                    {isVerifying ? 'Verifying...' : 'Verify Account'}
+                  </button>
+                )}
+              </div>
               <div>
                 <label><b>Email</b></label>
                 <input name="email" value={form.email} onChange={handleChange} />
@@ -469,16 +524,19 @@ export default function AdminUserDetailsPage({ params }) {
                 <input name="country" value={form.country} readOnly disabled />
               </div>
             </div>
-            <div style={{ marginTop: 20 }}>
-              <button className={styles.secondaryButton} onClick={() => handleSave()} disabled={isSaving}>
-                {isSaving ? 'Saving...' : 'Save Changes'}
+            <div className={styles.sectionActions}>
+              <button className={styles.saveButton} onClick={() => handleSave()} disabled={isSaving}>
+                {isSaving ? 'Saving Changes...' : 'Save Changes'}
               </button>
             </div>
           </div>
 
+          {/* Joint Holder Section */}
           {form.accountType === 'joint' && (
-            <div className={styles.section}>
-              <h2 className={styles.sectionTitle}>Joint Holder</h2>
+            <div className={styles.sectionCard}>
+              <div className={styles.sectionHeader}>
+                <h2 className={styles.sectionTitle}>Joint Holder Information</h2>
+              </div>
               <div className={styles.grid}>
                 <div>
                   <label><b>Joint Holding Type</b></label>
@@ -555,16 +613,19 @@ export default function AdminUserDetailsPage({ params }) {
                   <input name="jointHolder.country" value={form.jointHolder.country} readOnly disabled />
                 </div>
               </div>
-              <div style={{ marginTop: 20 }}>
-                <button className={styles.secondaryButton} onClick={() => handleSave()} disabled={isSaving}>
-                  {isSaving ? 'Saving...' : 'Save Changes'}
+              <div className={styles.sectionActions}>
+                <button className={styles.saveButton} onClick={() => handleSave()} disabled={isSaving}>
+                  {isSaving ? 'Saving Changes...' : 'Save Changes'}
                 </button>
               </div>
             </div>
           )}
 
-          <div className={styles.section}>
-            <h2 className={styles.sectionTitle}>Investments</h2>
+          {/* Investments Section */}
+          <div className={styles.sectionCard}>
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.sectionTitle}>Investments</h2>
+            </div>
             {(user.investments && user.investments.length > 0) ? (
               <div className={styles.list}>
                 {user.investments.map(inv => {
@@ -654,7 +715,7 @@ export default function AdminUserDetailsPage({ params }) {
           </div>
         </div>
       </div>
-    </main>
+    </div>
   )
 }
 

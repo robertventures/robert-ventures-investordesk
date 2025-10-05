@@ -46,6 +46,17 @@ function ClientContent() {
       if (data.success && data.user) {
         setUser(data.user)
         const inv = (data.user.investments || []).find(i => i.id === investmentId) || null
+        
+        // SECURITY: Only allow finalization of draft investments
+        // If no draft investment exists, redirect to dashboard
+        if (!inv || inv.status !== 'draft') {
+          try {
+            localStorage.removeItem('currentInvestmentId')
+          } catch {}
+          window.location.href = '/dashboard'
+          return
+        }
+        
         setInvestment(inv)
         const banks = Array.isArray(data.user.bankAccounts) ? data.user.bankAccounts : []
         setAvailableBanks(banks)

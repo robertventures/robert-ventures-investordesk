@@ -7,6 +7,18 @@ import styles from './PersonalDetailsForm.module.css'
 // Names: Allow only letters, spaces, hyphens, apostrophes, and periods
 const formatName = (value = '') => value.replace(/[^a-zA-Z\s'\-\.]/g, '')
 
+// Normalize phone number to E.164 format for database storage (+1XXXXXXXXXX)
+const normalizePhoneForDB = (value = '') => {
+  const digits = value.replace(/\D/g, '')
+  if (digits.length === 10) {
+    return `+1${digits}`
+  }
+  if (digits.length === 11 && digits.startsWith('1')) {
+    return `+${digits}`
+  }
+  return value // Return original if format is unexpected
+}
+
 export default function PersonalDetailsForm() {
   const router = useRouter()
   const [formData, setFormData] = useState({
@@ -82,7 +94,7 @@ export default function PersonalDetailsForm() {
         const updateData = {
           firstName: formData.firstName,
           lastName: formData.lastName,
-          phoneNumber: formData.phoneNumber
+          phoneNumber: normalizePhoneForDB(formData.phoneNumber)
         }
         
         console.log('Updating user with data:', updateData)

@@ -1,33 +1,26 @@
 import { useRouter } from 'next/navigation'
-import MetricCard from '../components/MetricCard'
-import ActionCard from '../components/ActionCard'
-import SectionCard from '../components/SectionCard'
+import MetricCard from './MetricCard'
+import ActionCard from './ActionCard'
+import SectionCard from './SectionCard'
 import styles from './DashboardTab.module.css'
 
 /**
  * Main dashboard tab showing overview metrics and recent activity
  */
-export default function DashboardTab({ metrics }) {
+export default function DashboardTab({ metrics, pendingInvestments, onApprove, onReject, savingId }) {
   const router = useRouter()
-
-  const hasActionItems = (
-    metrics.pendingInvestmentsCount > 0 ||
-    metrics.pendingWithdrawalsCount > 0 ||
-    metrics.pendingPayoutsCount > 0 ||
-    metrics.unverifiedAccountsCount > 0
-  )
 
   return (
     <div className={styles.dashboardTab}>
       {/* Primary Metrics */}
       <div className={styles.primaryMetricsGrid}>
         <MetricCard 
-          label="Total Amount Raised" 
-          value={`$${metrics.totalAmountRaised.toLocaleString()}`} 
-        />
-        <MetricCard 
           label="Total AUM" 
           value={`$${metrics.totalAUM.toLocaleString()}`} 
+        />
+        <MetricCard 
+          label="Pending Capital" 
+          value={`$${metrics.pendingCapital.toLocaleString()}`} 
         />
         <MetricCard 
           label="Total Amount Owed" 
@@ -38,29 +31,87 @@ export default function DashboardTab({ metrics }) {
           value={metrics.totalAccounts} 
         />
         <MetricCard 
-          label="Active Investments" 
-          value={metrics.activeInvestmentsCount} 
+          label="Active Investors" 
+          value={metrics.investorsCount} 
         />
       </div>
 
-      {/* Action Items */}
-      {hasActionItems && (
-        <SectionCard title="Action Required">
+      {/* Pending Approvals List */}
+      {pendingInvestments && pendingInvestments.length > 0 && (
+        <SectionCard title="Pending Approvals">
+          <div className={styles.pendingList}>
+            {pendingInvestments.map(inv => (
+              <div key={`${inv.user.id}-${inv.id}`} className={styles.pendingItem}>
+                <div className={styles.pendingItemMain}>
+                  <div className={styles.pendingItemInfo}>
+                    <div className={styles.pendingItemHeader}>
+                      <span className={styles.pendingItemId}>#{inv.id}</span>
+                      <span 
+                        className={styles.pendingItemName}
+                        onClick={() => router.push(`/admin/users/${inv.user.id}`)}
+                      >
+                        {inv.user.firstName} {inv.user.lastName}
+                      </span>
+                    </div>
+                    <div className={styles.pendingItemDetails}>
+                      <span className={styles.pendingItemEmail}>{inv.user.email}</span>
+                      <span className={styles.pendingItemDivider}>•</span>
+                      <span className={styles.pendingItemAccountType}>
+                        {inv.accountType === 'individual' && 'Individual'}
+                        {inv.accountType === 'joint' && 'Joint'}
+                        {inv.accountType === 'entity' && 'Entity'}
+                        {inv.accountType === 'ira' && 'IRA'}
+                      </span>
+                      <span className={styles.pendingItemDivider}>•</span>
+                      <span className={styles.pendingItemLockup}>
+                        {inv.lockupPeriod === '1-year' ? '1-Year' : '3-Year'} Lockup
+                      </span>
+                    </div>
+                  </div>
+                  <div className={styles.pendingItemAmount}>
+                    ${inv.amount.toLocaleString()}
+                  </div>
+                </div>
+                <div className={styles.pendingItemActions}>
+                  <button
+                    onClick={() => {
+                      if (confirm(`Approve investment ${inv.id} for ${inv.user.firstName} ${inv.user.lastName}?\n\nAmount: $${inv.amount.toLocaleString()}\nAccount Type: ${inv.accountType}\nLockup: ${inv.lockupPeriod === '1-year' ? '1-Year' : '3-Year'}\n\nThis will activate the investment and lock the user's account type.`)) {
+                        onApprove(inv.user.id, inv.id)
+                      }
+                    }}
+                    disabled={savingId === inv.id}
+                    className={styles.approveButton}
+                  >
+                    {savingId === inv.id ? 'Approving...' : 'Approve'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (confirm(`Reject investment ${inv.id} for ${inv.user.firstName} ${inv.user.lastName}?\n\nThis action cannot be undone.`)) {
+                        onReject(inv.user.id, inv.id)
+                      }
+                    }}
+                    disabled={savingId === inv.id}
+                    className={styles.rejectButton}
+                  >
+                    Reject
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+      )}
+
+      {/* Other Action Items */}
+      {(metrics.pendingWithdrawalsCount > 0 || metrics.pendingPayoutsCount > 0) && (
+        <SectionCard title="Other Actions">
           <div className={styles.actionGrid}>
-            {metrics.pendingInvestmentsCount > 0 && (
-              <ActionCard
-                value={metrics.pendingInvestmentsCount}
-                label="Pending Approvals"
-                variant="alert"
-                onClick={() => router.push('/admin?tab=transactions')}
-              />
-            )}
             {metrics.pendingWithdrawalsCount > 0 && (
               <ActionCard
                 value={metrics.pendingWithdrawalsCount}
                 label="Pending Withdrawals"
                 variant="warning"
-                onClick={() => router.push('/admin?tab=withdrawals')}
+                onClick={() => router.push('/admin?tab=operations')}
               />
             )}
             {metrics.pendingPayoutsCount > 0 && (
@@ -68,15 +119,7 @@ export default function DashboardTab({ metrics }) {
                 value={metrics.pendingPayoutsCount}
                 label="Pending Payouts"
                 variant="warning"
-                onClick={() => router.push('/admin?tab=pending-payouts')}
-              />
-            )}
-            {metrics.unverifiedAccountsCount > 0 && (
-              <ActionCard
-                value={metrics.unverifiedAccountsCount}
-                label="Unverified Accounts"
-                variant="info"
-                onClick={() => router.push('/admin?tab=accounts')}
+                onClick={() => router.push('/admin?tab=operations')}
               />
             )}
           </div>
@@ -85,33 +128,8 @@ export default function DashboardTab({ metrics }) {
 
       {/* Two Column Layout */}
       <div className={styles.twoColumnLayout}>
-        {/* Left Column - Overview & Distribution */}
+        {/* Left Column - Distribution */}
         <div className={styles.column}>
-          <SectionCard title="Overview">
-            <div className={styles.overviewGrid}>
-              <div className={styles.overviewItem}>
-                <div className={styles.overviewLabel}>Pending Capital</div>
-                <div className={styles.overviewValue}>
-                  ${metrics.pendingCapital.toLocaleString()}
-                </div>
-              </div>
-              <div className={styles.overviewItem}>
-                <div className={styles.overviewLabel}>Avg Investment</div>
-                <div className={styles.overviewValue}>
-                  ${Math.round(metrics.avgInvestmentSize).toLocaleString()}
-                </div>
-              </div>
-              <div className={styles.overviewItem}>
-                <div className={styles.overviewLabel}>Active Investors</div>
-                <div className={styles.overviewValue}>{metrics.investorsCount}</div>
-              </div>
-              <div className={styles.overviewItem}>
-                <div className={styles.overviewLabel}>New Accounts (30d)</div>
-                <div className={styles.overviewValue}>{metrics.newAccountsCount}</div>
-              </div>
-            </div>
-          </SectionCard>
-
           <SectionCard title="Distribution">
             <div className={styles.distributionGrid}>
               <div className={styles.distributionCard}>

@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Header from '../../../components/Header'
+import AdminHeader from '../../../components/AdminHeader'
 import styles from './page.module.css'
 
 export default function AdminInvestmentDetailsPage({ params }) {
@@ -128,9 +128,11 @@ export default function AdminInvestmentDetailsPage({ params }) {
   if (isLoading) {
     return (
       <div className={styles.main}>
-        <Header />
+        <AdminHeader activeTab="transactions" />
         <div className={styles.container}>
-          <div className={styles.card}>Loading investment details...</div>
+          <div className={styles.content}>
+            <div className={styles.loadingState}>Loading investment details...</div>
+          </div>
         </div>
       </div>
     )
@@ -139,9 +141,11 @@ export default function AdminInvestmentDetailsPage({ params }) {
   if (!investment || !user) {
     return (
       <div className={styles.main}>
-        <Header />
+        <AdminHeader activeTab="transactions" />
         <div className={styles.container}>
-          <div className={styles.card}>Investment not found</div>
+          <div className={styles.content}>
+            <div className={styles.errorState}>Investment not found</div>
+          </div>
         </div>
       </div>
     )
@@ -156,28 +160,33 @@ export default function AdminInvestmentDetailsPage({ params }) {
 
   return (
     <div className={styles.main}>
-      <Header />
+      <AdminHeader activeTab="transactions" />
       <div className={styles.container}>
-        <button className={styles.backButton} onClick={() => router.push('/admin?tab=transactions')}>
-          ← Back to Transactions
-        </button>
+        <div className={styles.content}>
+          {/* Breadcrumb Navigation */}
+          <div className={styles.breadcrumb}>
+            <button className={styles.breadcrumbLink} onClick={() => router.push('/admin?tab=transactions')}>
+              ← Transactions
+            </button>
+            <span className={styles.breadcrumbSeparator}>/</span>
+            <span className={styles.breadcrumbCurrent}>Investment #{investment.id}</span>
+          </div>
 
-        <div className={styles.card}>
-          <div className={styles.headerRow}>
+          {/* Page Header */}
+          <div className={styles.pageHeader}>
             <div>
-              <h1 className={styles.title}>Investment #{investment.id}</h1>
+              <h1 className={styles.title}>Investment Details</h1>
               <p className={styles.subtitle}>
-                Account: <a href={`/admin/users/${user.id}`} style={{ color: '#2563eb', textDecoration: 'underline' }}>
+                Account: <button 
+                  className={styles.accountLink} 
+                  onClick={() => router.push(`/admin/users/${user.id}`)}
+                >
                   {user.firstName} {user.lastName} ({user.email})
-                </a>
+                </button>
               </p>
             </div>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <span style={{ 
-                padding: '6px 12px', 
-                borderRadius: '6px', 
-                fontSize: '14px',
-                fontWeight: '600',
+            <div className={styles.headerActions}>
+              <span className={styles.statusBadge} style={{ 
                 backgroundColor: `${statusColor}20`,
                 color: statusColor 
               }}>
@@ -189,26 +198,27 @@ export default function AdminInvestmentDetailsPage({ params }) {
             </div>
           </div>
 
-          <div className={styles.metrics}>
-            <div className={styles.metric}>
-              <div className={styles.metricLabel}>AMOUNT</div>
+          {/* Metrics Cards */}
+          <div className={styles.metricsGrid}>
+            <div className={styles.metricCard}>
+              <div className={styles.metricLabel}>Amount</div>
               <div className={styles.metricValue}>${(investment.amount || 0).toLocaleString()}</div>
             </div>
-            <div className={styles.metric}>
-              <div className={styles.metricLabel}>CREATED</div>
+            <div className={styles.metricCard}>
+              <div className={styles.metricLabel}>Created</div>
               <div className={styles.metricValue}>
                 {investment.createdAt ? new Date(investment.createdAt).toLocaleDateString() : '-'}
               </div>
             </div>
-            <div className={styles.metric}>
-              <div className={styles.metricLabel}>SUBMITTED</div>
+            <div className={styles.metricCard}>
+              <div className={styles.metricLabel}>Submitted</div>
               <div className={styles.metricValue}>
                 {investment.submittedAt ? new Date(investment.submittedAt).toLocaleDateString() : '-'}
               </div>
             </div>
             {investment.confirmedAt && (
-              <div className={styles.metric}>
-                <div className={styles.metricLabel}>CONFIRMED</div>
+              <div className={styles.metricCard}>
+                <div className={styles.metricLabel}>Confirmed</div>
                 <div className={styles.metricValue}>
                   {new Date(investment.confirmedAt).toLocaleDateString()}
                 </div>
@@ -216,8 +226,11 @@ export default function AdminInvestmentDetailsPage({ params }) {
             )}
           </div>
 
-          <div className={styles.section}>
-            <h2 className={styles.sectionTitle}>Investment Details</h2>
+          {/* Investment Details Section */}
+          <div className={styles.sectionCard}>
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.sectionTitle}>Investment Details</h2>
+            </div>
             <div className={styles.grid}>
               <div>
                 <label>Amount ($)</label>
@@ -267,20 +280,23 @@ export default function AdminInvestmentDetailsPage({ params }) {
               </div>
             </div>
 
-            <div className={styles.actions}>
+            <div className={styles.sectionActions}>
               <button
                 className={styles.saveButton}
                 onClick={handleSave}
                 disabled={isSaving}
               >
-                {isSaving ? 'Saving...' : 'Save Changes'}
+                {isSaving ? 'Saving Changes...' : 'Save Changes'}
               </button>
             </div>
           </div>
 
+          {/* Dates & Timeline Section */}
           {investment.lockupEndDate && (
-            <div className={styles.section}>
-              <h2 className={styles.sectionTitle}>Dates & Timeline</h2>
+            <div className={styles.sectionCard}>
+              <div className={styles.sectionHeader}>
+                <h2 className={styles.sectionTitle}>Dates & Timeline</h2>
+              </div>
               <div className={styles.grid}>
                 <div>
                   <label>Created At</label>
@@ -310,9 +326,12 @@ export default function AdminInvestmentDetailsPage({ params }) {
             </div>
           )}
 
+          {/* Banking Information Section */}
           {investment.banking && (
-            <div className={styles.section}>
-              <h2 className={styles.sectionTitle}>Banking Information</h2>
+            <div className={styles.sectionCard}>
+              <div className={styles.sectionHeader}>
+                <h2 className={styles.sectionTitle}>Banking Information</h2>
+              </div>
               <div className={styles.grid}>
                 <div>
                   <label>Funding Method</label>
@@ -338,9 +357,12 @@ export default function AdminInvestmentDetailsPage({ params }) {
             </div>
           )}
 
+          {/* Personal Information Section */}
           {investment.personalInfo && (
-            <div className={styles.section}>
-              <h2 className={styles.sectionTitle}>Personal Information</h2>
+            <div className={styles.sectionCard}>
+              <div className={styles.sectionHeader}>
+                <h2 className={styles.sectionTitle}>Personal Information</h2>
+              </div>
               <div className={styles.grid}>
                 <div>
                   <label>First Name</label>
@@ -362,9 +384,12 @@ export default function AdminInvestmentDetailsPage({ params }) {
             </div>
           )}
 
+          {/* Address Section */}
           {investment.address && (
-            <div className={styles.section}>
-              <h2 className={styles.sectionTitle}>Address</h2>
+            <div className={styles.sectionCard}>
+              <div className={styles.sectionHeader}>
+                <h2 className={styles.sectionTitle}>Address</h2>
+              </div>
               <div className={styles.grid}>
                 <div>
                   <label>Street 1</label>

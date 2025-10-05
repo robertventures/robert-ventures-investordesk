@@ -139,6 +139,18 @@ export default function InvestmentPage() {
           window.location.href = '/confirmation'
           return
         }
+        
+        // SECURITY: Prevent editing if user has pending or active investments
+        // Users can only create new investments from dashboard, not edit via this page
+        const investments = Array.isArray(data.user.investments) ? data.user.investments : []
+        const hasPendingOrActive = investments.some(inv => inv.status === 'pending' || inv.status === 'active')
+        if (hasPendingOrActive) {
+          // If they have pending/active investments, redirect to dashboard
+          // They should use "Make New Investment" button from dashboard which clears draft state
+          window.location.href = '/dashboard'
+          return
+        }
+        
         // Load user's account type and set as locked
         if (data.success && data.user?.accountType) {
           setUserAccountType(data.user.accountType)

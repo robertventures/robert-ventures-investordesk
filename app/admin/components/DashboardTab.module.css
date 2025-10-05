@@ -212,6 +212,158 @@
   margin: 0;
 }
 
+/* Pending Approvals List */
+.pendingList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pendingItem {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 14px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.pendingItem:hover {
+  border-color: #d1d5db;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.pendingItemMain {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 1;
+  min-width: 0;
+}
+
+.pendingItemInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.pendingItemHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.pendingItemId {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+  padding: 2px 6px;
+  background: #e5e7eb;
+  border-radius: 3px;
+}
+
+.pendingItemName {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-accent);
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.pendingItemName:hover {
+  color: var(--color-info);
+}
+
+.pendingItemDetails {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.pendingItemEmail {
+  color: #6b7280;
+}
+
+.pendingItemDivider {
+  color: #d1d5db;
+}
+
+.pendingItemAccountType {
+  font-weight: 500;
+  color: #374151;
+}
+
+.pendingItemLockup {
+  color: #6b7280;
+}
+
+.pendingItemAmount {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-accent);
+  white-space: nowrap;
+  margin-left: auto;
+}
+
+.pendingItemActions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.approveButton {
+  padding: 6px 12px;
+  border: 1px solid var(--color-success);
+  background: var(--color-success);
+  color: white;
+  border-radius: 5px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.approveButton:hover:not(:disabled) {
+  background: #059669;
+  border-color: #059669;
+}
+
+.approveButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.rejectButton {
+  padding: 6px 12px;
+  border: 1px solid #e5e7eb;
+  background: white;
+  color: #6b7280;
+  border-radius: 5px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.rejectButton:hover:not(:disabled) {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+  background: #fef2f2;
+}
+
+.rejectButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 @media (max-width: 768px) {
   .primaryMetricsGrid {
     grid-template-columns: 1fr 1fr;
@@ -263,6 +415,30 @@
 
   .dashboardTab {
     gap: 24px;
+  }
+
+  .pendingItem {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pendingItemMain {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .pendingItemAmount {
+    font-size: 16px;
+    margin-left: 0;
+  }
+
+  .pendingItemActions {
+    width: 100%;
+  }
+
+  .approveButton,
+  .rejectButton {
+    flex: 1;
   }
 }
 
@@ -349,6 +525,28 @@
     font-size: 12px;
     flex-wrap: wrap;
     gap: 4px;
+  }
+
+  .pendingItem {
+    padding: 10px;
+  }
+
+  .pendingItemName {
+    font-size: 13px;
+  }
+
+  .pendingItemDetails {
+    font-size: 11px;
+  }
+
+  .pendingItemAmount {
+    font-size: 14px;
+  }
+
+  .approveButton,
+  .rejectButton {
+    padding: 8px 10px;
+    font-size: 12px;
   }
 }
 

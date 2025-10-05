@@ -94,6 +94,9 @@ export default function SignInForm() {
       // Redirect admins to admin dashboard
       if (user.isAdmin) {
         router.push('/admin')
+      } else if (!user.isVerified) {
+        // Redirect unverified users to verification page
+        router.push('/confirmation')
       } else {
         router.push('/dashboard')
       }
@@ -165,6 +168,13 @@ export default function SignInForm() {
       </form>
 
       <div className={styles.footer}>
+        <button 
+          onClick={() => router.push('/forgot-password')} 
+          className={styles.linkButton}
+          style={{ marginBottom: '12px', display: 'block' }}
+        >
+          Forgot Password?
+        </button>
         <p className={styles.footerText}>
           Don't have an account?{' '}
           <button 

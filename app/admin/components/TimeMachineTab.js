@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import SectionCard from '../components/SectionCard'
+import SectionCard from './SectionCard'
 import styles from './TimeMachineTab.module.css'
 
 /**

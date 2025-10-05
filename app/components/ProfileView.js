@@ -34,6 +34,18 @@ export default function ProfileView() {
     return `(${withoutCountry.slice(0, 3)}) ${withoutCountry.slice(3, 6)}-${withoutCountry.slice(6, 10)}`
   }
 
+  // Normalize phone number to E.164 format for database storage (+1XXXXXXXXXX)
+  const normalizePhoneForDB = (value = '') => {
+    const digits = value.replace(/\D/g, '')
+    if (digits.length === 10) {
+      return `+1${digits}`
+    }
+    if (digits.length === 11 && digits.startsWith('1')) {
+      return `+${digits}`
+    }
+    return value // Return original if format is unexpected
+  }
+
   const parseDateString = (value = '') => {
     const [year, month, day] = (value || '').split('-').map(Number)
     if (!year || !month || !day) return null
@@ -425,7 +437,7 @@ export default function ProfileView() {
         body: JSON.stringify({
           firstName: formData.firstName,
           lastName: formData.lastName,
-          phoneNumber: formData.phoneNumber,
+          phoneNumber: normalizePhoneForDB(formData.phoneNumber),
           dob: formData.dob,
           ssn: formData.ssn,
           // We keep email read-only in UI but send it anyway for consistency
@@ -444,7 +456,7 @@ export default function ProfileView() {
               firstName: formData.jointHolder.firstName,
               lastName: formData.jointHolder.lastName,
               email: formData.jointHolder.email,
-              phone: formData.jointHolder.phone,
+              phone: normalizePhoneForDB(formData.jointHolder.phone),
               dob: formData.jointHolder.dob,
               ssn: formData.jointHolder.ssn,
               address: {

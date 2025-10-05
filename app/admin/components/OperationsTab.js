@@ -1,4 +1,4 @@
-import SectionCard from '../components/SectionCard'
+import SectionCard from './SectionCard'
 import TimeMachineTab from './TimeMachineTab'
 import styles from './OperationsTab.module.css'
 

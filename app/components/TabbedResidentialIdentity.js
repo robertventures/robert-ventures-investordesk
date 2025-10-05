@@ -15,6 +15,30 @@ const formatPhone = (value = '') => {
 
 const isCompletePhone = (value = '') => value.replace(/\D/g, '').length === 10
 
+// Normalize phone number to E.164 format for database storage (+1XXXXXXXXXX)
+const normalizePhoneForDB = (value = '') => {
+  const digits = value.replace(/\D/g, '')
+  if (digits.length === 10) {
+    return `+1${digits}`
+  }
+  if (digits.length === 11 && digits.startsWith('1')) {
+    return `+${digits}`
+  }
+  return value // Return original if format is unexpected
+}
+
+// Convert E.164 phone number back to display format
+const formatPhoneFromDB = (value = '') => {
+  if (!value) return ''
+  if (value.startsWith('+1')) {
+    const digits = value.slice(2) // Remove +1
+    if (digits.length === 10) {
+      return formatPhone(digits)
+    }
+  }
+  return value // Return original if format is unexpected
+}
+
 const formatSsn = (value = '') => {
   const digits = value.replace(/\D/g, '').slice(0, 9)
   if (digits.length <= 3) return digits
@@ -103,6 +127,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
   const [showSsnHelp, setShowSsnHelp] = useState(false)
   const [showAuthorizedRepSsnHelp, setShowAuthorizedRepSsnHelp] = useState(false)
   const [showJointSsnHelp, setShowJointSsnHelp] = useState(false)
+  const [hasActiveInvestments, setHasActiveInvestments] = useState(false)
   const idLabel = accountType === 'entity' ? 'EIN or TIN' : 'SSN'
   const dateLabel = accountType === 'entity' ? 'Registration Date' : 'Date of Birth'
 
@@ -133,13 +158,17 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
           const investments = Array.isArray(u.investments) ? u.investments : []
           const currentInv = investments.find(inv => inv.id === localStorage.getItem('currentInvestmentId'))
           if (!accountTypeProp && currentInv?.accountType) setAccountType(currentInv.accountType)
+          
+          // Check if user has any pending or active investments (for read-only enforcement)
+          const hasPendingOrActive = investments.some(inv => inv.status === 'pending' || inv.status === 'active')
+          setHasActiveInvestments(hasPendingOrActive)
 
           setForm(prev => ({
             ...prev,
             entityName: u.entityName || '',
             firstName: u.firstName || '',
             lastName: u.lastName || '',
-            phone: u.phone || '',
+            phone: formatPhoneFromDB(u.phoneNumber || ''),
             street1: u.address?.street1 || '',
             street2: u.address?.street2 || '',
             city: u.address?.city || '',
@@ -161,7 +190,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
               dob: u.jointHolder?.dob || '',
               ssn: u.jointHolder?.ssn || '',
               email: u.jointHolder?.email || '',
-              phone: u.jointHolder?.phone || ''
+              phone: formatPhoneFromDB(u.jointHolder?.phone || '')
             },
             authorizedRep: {
               firstName: u.authorizedRepresentative?.firstName || '',
@@ -184,12 +213,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
     bootstrap()
   }, [])
 
-  // When switching to joint account type, default the joint holding type if not set
-  useEffect(() => {
-    if (accountType === 'joint' && !form.jointHoldingType) {
-      setForm(prev => ({ ...prev, jointHoldingType: 'spouse' }))
-    }
-  }, [accountType])
+  // Joint holding type should not be auto-defaulted - user must select explicitly
 
   useEffect(() => {
     if (accountType !== 'joint') return
@@ -330,6 +354,13 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
 
   const handleSave = async () => {
     if (!validate()) return
+    
+    // SECURITY: Prevent editing KYC information if user has pending/active investments
+    if (hasActiveInvestments) {
+      alert('Cannot modify investor information while you have pending or active investments. Please contact support if you need to update your information.')
+      return
+    }
+    
     setIsSaving(true)
     try {
       const userId = localStorage.getItem('currentUserId')
@@ -358,7 +389,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
           firstName: form.firstName.trim(),
           lastName: form.lastName.trim()
         } : {}),
-        phone: form.phone.trim(),
+        phoneNumber: normalizePhoneForDB(form.phone.trim()),
         ...(accountType === 'entity' ? { entity: {
           name: form.entityName,
           registrationDate: form.dob,
@@ -410,7 +441,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
           dob: form.jointHolder.dob,
           ssn: form.jointHolder.ssn,
           email: form.jointHolder.email,
-          phone: form.jointHolder.phone
+          phone: normalizePhoneForDB(form.jointHolder.phone)
         }
       }
 
@@ -475,7 +506,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
             dob: form.jointHolder.dob,
             ssn: form.jointHolder.ssn,
             email: form.jointHolder.email,
-            phone: form.jointHolder.phone
+            phone: normalizePhoneForDB(form.jointHolder.phone)
           }
         }
 
@@ -542,6 +573,22 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
 
   return (
     <div className={styles.wrapper}>
+      {/* Warning message if user has active investments */}
+      {hasActiveInvestments && (
+        <div style={{
+          padding: '16px',
+          marginBottom: '20px',
+          backgroundColor: '#fef3c7',
+          border: '1px solid #f59e0b',
+          borderRadius: '8px',
+          color: '#92400e',
+          fontSize: '14px',
+          lineHeight: '1.5'
+        }}>
+          <strong>⚠️ Information Locked:</strong> Your investor information cannot be modified while you have pending or active investments. If you need to update your information, please contact support.
+        </div>
+      )}
+      
       {/* Joint Holding Type Selection - only show for joint accounts */}
       {accountType === 'joint' && (
         <div className={styles.jointHoldingTypeSection}>
@@ -850,8 +897,8 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
       )}
 
       <div className={styles.actions}>
-        <button className={styles.primaryButton} onClick={handleSave} disabled={isSaving}>
-          {isSaving ? 'Saving...' : 'Continue'}
+        <button className={styles.primaryButton} onClick={handleSave} disabled={isSaving || hasActiveInvestments}>
+          {isSaving ? 'Saving...' : hasActiveInvestments ? 'Information Locked' : 'Continue'}
         </button>
       </div>
     </div>
