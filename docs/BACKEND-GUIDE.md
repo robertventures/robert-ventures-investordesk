@@ -1,7 +1,66 @@
 # Backend Implementation Guide
 
-**For:** Backend Development Team  
-**Purpose:** Complete reference for implementing the investment platform backend
+**Welcome to the Robert Ventures Investment Platform Backend Development Team!**
+
+This guide is your complete technical reference for implementing a Python backend that powers our investment management platform. Every business rule, calculation, API endpoint, and data model is documented here.
+
+---
+
+## 📋 About This Platform
+
+Robert Ventures Investment Platform enables investors to purchase bonds with flexible terms:
+- **Investment amounts:** $1,000 minimum (increments of $10)
+- **Lockup periods:** 1-year (8% APY) or 3-year (10% APY)
+- **Payment options:** Monthly payouts or compounding
+- **Account types:** Individual, Joint, Entity, or IRA
+
+The platform handles the complete investment lifecycle: user registration, investment creation, admin approval workflow, interest calculations, monthly distributions, and withdrawal processing.
+
+---
+
+## 🎯 Your Mission
+
+Build a **Python FastAPI backend** [[memory:9422626]] that:
+1. Mirrors the exact business logic of the existing Next.js implementation
+2. Reads from the same data store (Netlify Blobs) [[memory:9329168]]
+3. Generates activity events including proration and compounding
+4. Respects the admin-controlled app time for calculations
+5. Matches calculations to the penny with the reference implementation
+
+---
+
+## 📖 How to Use This Guide
+
+This document is organized by topic. Read sequentially for complete understanding, or jump to specific sections as needed:
+
+1. **Read Overview & Authentication** - Understand user flows
+2. **Study Investment States & Rules** - Learn the core business logic  
+3. **Master Interest Calculations** - Get calculations exactly right
+4. **Implement Data Models** - Match the expected JSON structure
+5. **Build API Endpoints** - Follow the exact endpoint specifications
+6. **Test Thoroughly** - Validate against test scenarios
+
+**Estimated reading time:** 3-4 hours  
+**Implementation time:** 2-3 weeks (depending on team size)
+
+---
+
+## 🔑 Critical Success Factors
+
+### ✅ Exact JSON Structure
+Frontend expects precise field names and data types. Do not modify schema.
+
+### ✅ Penny-Perfect Calculations
+Interest calculations must match reference implementation exactly. Use provided formulas.
+
+### ✅ App Time System
+All date/time logic uses "app time" (not system time) for testing and demos.
+
+### ✅ Sequential IDs
+Human-readable IDs like `USR-1001`, `INV-10000`, `WDL-10000` (not UUIDs).
+
+### ✅ State Machine Integrity
+Investment states must transition according to defined rules only.
 
 ---
 
@@ -2922,53 +2981,327 @@ Run these to understand expected behavior.
 
 ## Summary
 
-**Authentication Flow:**
-```
-Sign Up → Unverified Account → Sign In → Verification Required → Verified → Can Invest
+This final section provides quick reference for key concepts. Bookmark this page!
 
-Alternative: Password Reset → Auto-Verified
+---
+
+### 🔄 Authentication Flow
+
+```
+┌─────────────┐
+│  User Signs │
+│     Up      │
+└──────┬──────┘
+       │
+       ▼
+┌─────────────────┐
+│ Unverified      │ ← Can sign in, but redirected to verification
+│ Account Created │
+└──────┬──────────┘
+       │
+       ├──────────────┐
+       │              │
+       ▼              ▼
+┌──────────────┐  ┌─────────────────┐
+│   Verify     │  │  Password Reset │ (Auto-verifies)
+│   with Code  │  │  via Email Link │
+└──────┬───────┘  └────────┬────────┘
+       │                   │
+       └─────────┬─────────┘
+                 ▼
+         ┌──────────────┐
+         │   Verified   │ ← Can now invest
+         │   Account    │
+         └──────────────┘
 ```
 
-**Investment States:**
+**Key Rules:**
+- ✅ Unverified users can sign in (but must verify to invest)
+- ✅ Password reset automatically verifies account (proves email ownership)
+- ✅ Test verification code: `000000`
+- ✅ Reset tokens expire after 1 hour
+
+---
+
+### 🔄 Investment State Machine
+
 ```
-draft → pending → active → withdrawal_notice → withdrawn
-                    ↓
-                 rejected
+       draft ────────┐
+         │           │
+         │ submit    │ delete
+         ▼           ▼
+      pending ───> (deleted)
+         │
+         ├─── approve (bank + admin) ───┐
+         │                              │
+         │                              ▼
+         │                          active
+         │                              │
+         │                              │ request withdrawal
+         │                              ▼
+         │                    withdrawal_notice
+         │                              │
+         │                              │ admin processes
+         │                              ▼
+         │                          withdrawn (FINAL)
+         │
+         └─── reject ───> rejected (FINAL)
+```
+
+**State Rules:**
+- `draft` → User can edit/delete, no interest
+- `pending` → Requires bank + admin approval, no interest
+- `active` → Earning interest, can only move to withdrawal_notice
+- `withdrawal_notice` → Still earning interest, processing withdrawal
+- `withdrawn` → Final state, historical record
+- `rejected` → Final state, never earned interest
+
+**⚠️ CRITICAL:** Active investments **cannot** be rejected!
+
+---
+
+### 💰 Interest Calculation Quick Reference
+
+#### Monthly Payout Formula
+```python
+# Full month
+monthly_payout = principal * (annual_rate / 12)
+
+# Partial month (prorated)
+monthly_payout = principal * (annual_rate / 12) * (days_accrued / days_in_month)
+```
+
+**Example:**
+- Principal: $10,000
+- Rate: 8% APY (1-year lockup)
+- Confirmed: Jan 15 (interest starts Jan 16)
+- February payout: $10,000 × 0.08/12 × (16/31) = **$34.45**
+- March payout (full month): $10,000 × 0.08/12 = **$66.67**
+
+#### Compounding Formula
+```python
+# Full month
+interest = current_balance * (annual_rate / 12)
+new_balance = current_balance + interest
+
+# Partial month (prorated)
+daily_rate = (annual_rate / 12) / days_in_month
+interest = current_balance * daily_rate * days_accrued
+new_balance = current_balance + interest
+```
+
+**Interest Start Rule:** Day **after** `confirmedAt`
+
+---
+
+### 🏦 Dual Approval System
+
+**Phase 1 (Current - Development):**
+```python
+investment.bankApproved = True      # Auto-approved by system
+investment.adminApproved = False    # Requires admin action
+
+# When admin approves → investment activates immediately
+```
+
+**Phase 2 (Future - Banking Integration):**
+```python
+investment.bankApproved = False     # Requires banking API confirmation
+investment.adminApproved = False    # Requires admin action
+
+# Investment activates when BOTH are true (order doesn't matter)
+```
+
+**Payout Approval:**
+- Monthly payouts default to `pending_approval` status
+- Admin must approve each payout before it's sent to bank
+- Batch approval supported for efficiency
+
+---
+
+### 🔢 ID Formats
+
+| Entity | Format | Example | Starting ID |
+|--------|--------|---------|-------------|
+| User | `USR-{seq}` | `USR-1001` | `USR-1000` (admin) |
+| Investment | `INV-{seq}` | `INV-10001` | `INV-10000` |
+| Withdrawal | `WDL-{seq}` | `WDL-10001` | `WDL-10000` |
+| Bank Account | `BANK-{userId}-{seq}` | `BANK-USR-1001-2` | `BANK-{userId}-1` |
+| Activity Event | `TX-{type}-{numericId}-{TYPE}` | `TX-INV-10000-CREATED` | Varies by type |
+
+**Activity Event Patterns:**
+- `TX-USR-1001-ACCOUNT-CREATED` (account creation)
+- `TX-INV-10000-CREATED` (investment created)
+- `TX-INV-10000-CONFIRMED` (investment confirmed)
+- `TX-INV-10000-MD-2025-11` (monthly distribution, November 2025)
+- `TX-INV-10000-MC-2025-11` (monthly compounded, November 2025)
+- `TX-WDL-10000-NOTICE` (withdrawal notice)
+- `TX-WDL-10000-APPROVED` (withdrawal approved)
+
+**⚠️ CRITICAL:** 
+- All activity event IDs must be **ALL UPPERCASE**
+- Never duplicate entity prefix (e.g., avoid `TX-INV-INV-10000`)
+- Create exactly ONE event per occurrence
+
+---
+
+### 📅 Withdrawal Timeline
+
+```
+User Request → Robert Ventures has 90 days to process
+│
+├─ Investment status: withdrawal_notice
+├─ Still earning interest (if compounding)
+├─ payoutDueBy = request_date + 90 days
+└─ Admin can process anytime within window
+   │
+   ▼
+Withdrawal Processed → Investment status: withdrawn (FINAL)
 ```
 
 **Key Points:**
-1. **Authentication:** Unverified users can sign in but must verify before investing
-2. **Password Reset:** Automatically verifies account (proves email ownership)
-3. **Dual Approval (Phase 1):** Bank auto-approved, admin approval required for activation
-4. **Dual Approval (Phase 2):** Both bank AND admin approval required (future with banking integration)
-5. **Payout Approval:** All monthly payouts require admin approval before sending
-6. Investment states: `draft`, `pending`, `active`, `withdrawal_notice`, `withdrawn`, `rejected`
-7. Interest calculations are **daily-prorated** for partial months
-8. Monthly payouts start as `pending_approval`, not auto-sent
-9. Withdrawals: **Robert Ventures has 90 days** to process (not user waiting period)
-10. Investments earn interest while in `withdrawal_notice` status (if compounding)
-11. **Withdrawn investments remain visible** to users in dashboard (for records)
-12. Admin can **time travel** for testing
-13. All calculations must use **app time** (not real time)
+- ⏰ 90 days is Robert Ventures' **processing deadline** (not user waiting period)
+- 💰 Investment continues earning interest during this period
+- 🔒 User can only withdraw after lockup period ends
+- 📊 Withdrawn investments remain visible for historical records
 
-**Critical Fields:**
-- `confirmedAt` - When investment became active (interest starts next day)
-- `lockupEndDate` - Earliest possible withdrawal date
-- `payoutDueBy` - Deadline for Robert Ventures to complete payout (request + 90 days)
-- `finalValue` - Total amount paid out (principal + interest) when withdrawn
+---
 
-**Data to preserve:**
-- User accounts and profiles (including verification status)
-- Email verification and password reset tokens
-- Investments and their complete status history
-- All activity events (never delete)
-- Withdrawal requests and processing
-- Bank connection status
+### 📊 Critical Data Fields
 
-**Integration:**
-- Frontend expects same JSON response structure
-- API endpoints must match exactly
-- Business rules must be identical
-- Calculations must match to the penny
+| Field | Type | Purpose | Set When |
+|-------|------|---------|----------|
+| `confirmedAt` | ISO8601 | Interest start calculation | Both approvals complete |
+| `lockupEndDate` | ISO8601 | Earliest withdrawal date | Investment activated |
+| `payoutDueBy` | ISO8601 | RV processing deadline | Withdrawal requested |
+| `finalValue` | Number | Total payout amount | Withdrawal completed |
+| `totalEarnings` | Number | Lifetime earnings | Withdrawal completed |
+| `bankApproved` | Boolean | Bank confirmation | Auto-set (Phase 1) |
+| `adminApproved` | Boolean | Admin confirmation | Admin action |
 
-Need clarification? Check the existing Next.js API routes in `/app/api/` for reference implementation.
+---
+
+### 🚫 Common Mistakes to Avoid
+
+❌ **DON'T:**
+- Modify JSON field names or structure
+- Use lowercase in activity event IDs
+- Create duplicate activity events
+- Allow rejection of active investments
+- Auto-send monthly payouts without approval
+- Use real time instead of app time
+- Delete withdrawn investments from database
+- Store `anticipatedEarnings` in database (calculate dynamically)
+
+✅ **DO:**
+- Match calculations to the penny
+- Follow state transition rules strictly
+- Generate activity events in UPPERCASE
+- Preserve withdrawn investments for history
+- Use app time for all calculations
+- Validate all state transitions
+- Log all approval actions for audit trail
+
+---
+
+### 🎯 Testing Checklist
+
+Before deploying, verify:
+
+- [ ] User sign-up and verification flow works
+- [ ] Password reset auto-verifies accounts
+- [ ] Investment states transition correctly
+- [ ] Dual approval activates investments properly
+- [ ] Interest calculations match reference (penny-perfect)
+- [ ] Monthly events generate on correct dates
+- [ ] Prorated calculations work for partial months
+- [ ] Monthly payouts require admin approval
+- [ ] Withdrawals respect lockup periods
+- [ ] 90-day withdrawal window enforced
+- [ ] Admin can time travel (app time works)
+- [ ] All activity events use UPPERCASE format
+- [ ] Account type locking works correctly
+- [ ] Withdrawn investments remain visible
+- [ ] API responses match expected JSON structure
+
+---
+
+### 📚 Quick Reference Links
+
+**Code References:**
+- `/app/api/` - Next.js API routes (reference implementation)
+- `/lib/investmentCalculations.js` - Interest calculation logic
+- `/lib/idGenerator.js` - ID generation functions
+- `/lib/database.js` - Data access patterns
+- `/lib/appTime.js` - App time system
+
+**Test Scenarios:**
+- `/testing-docs/test-all-account-types.js` - 16 account combinations
+- `/testing-docs/test-time-machine.js` - Time-based calculations
+- `/testing-docs/test-edge-cases.js` - Edge case validation
+- `/testing-docs/test-pending-payouts.js` - Payout approval system
+- `/testing-docs/test-account-type-locking.js` - Account locking
+
+**Data Examples:**
+- `/data/users.json` - Sample user data structure
+
+---
+
+### 🔐 Security Considerations
+
+1. **Password Storage:** Use bcrypt with at least 10 rounds
+2. **Email Enumeration:** Always return success on password reset (don't reveal if email exists)
+3. **Token Expiry:** Reset tokens expire after 1 hour
+4. **Admin Permissions:** Verify admin status on all protected endpoints
+5. **Audit Logging:** Log all approval actions with admin ID and timestamp
+6. **Input Validation:** Validate all inputs (amounts, dates, status transitions)
+
+---
+
+### 💡 Pro Tips
+
+1. **Start with authentication** - Get user management solid first
+2. **Test calculations obsessively** - Use time machine to verify edge cases
+3. **Follow the state machine** - Never allow invalid transitions
+4. **Check reference implementation** - When stuck, look at `/app/api/` routes
+5. **Use provided ID generators** - Don't reinvent ID generation logic
+6. **Preserve all data** - Never delete withdrawn investments or activity events
+7. **App time everywhere** - Always use `get_current_app_time()` for consistency
+
+---
+
+### 📞 Getting Help
+
+**When stuck:**
+1. Check this guide's relevant section
+2. Review reference implementation in `/app/api/`
+3. Run test scenarios in `/testing-docs/`
+4. Verify against calculation examples in Interest Calculations section
+5. Compare data structures with `/data/users.json`
+
+**Documentation Issues:**
+If anything is unclear, incomplete, or contradictory, flag it immediately. This documentation should answer all questions.
+
+**Reference Implementation:**
+The Next.js implementation in `/app/api/` is the source of truth. When in doubt, match its behavior exactly.
+
+---
+
+## 🎓 You're Ready!
+
+You now have everything you need to build the backend. Key reminders:
+
+1. **Read this entire guide** before starting
+2. **Match the reference implementation** exactly
+3. **Test thoroughly** using provided scenarios
+4. **Ask questions** when documentation is unclear
+
+The existing Next.js implementation has been battle-tested. Your job is to replicate its behavior in Python with the same precision and reliability.
+
+Good luck, and welcome to the team! 🚀
+
+---
+
+**Document Version:** 2.0  
+**Last Updated:** October 2025  
+**Maintained By:** Robert Ventures Development Team
