@@ -1688,67 +1688,302 @@ def validate_investment_account_type(user, investment_data):
 
 ## Interest Calculations
 
-### For Monthly Payout Investments
+### 🎯 Critical Principle: Every Day Counts
 
-Interest is calculated **daily** and paid on the **1st of each month**.
+**Core Rule:** Interest accrues for **every single day** that Robert Ventures holds investor funds. No exceptions.
 
-**First month is prorated:**
+**Implementation:** We use a **hybrid calculation approach**:
+1. **Partial months** (start/end) → Daily prorated calculation
+2. **Full months** (middle period) → Monthly calculation
+3. **Withdrawal** → Daily prorated for final partial month
+
+This ensures investors earn interest for every day while simplifying calculations for full months.
+
+---
+
+### The Three Calculation Scenarios
+
+#### Scenario 1: Investment Start (Partial Month)
+When an investment is approved mid-month, calculate interest **daily** for the remaining days until month end.
+
+**Example:** Investment confirmed Jan 15
 ```python
-# Example: Investment confirmed on Jan 15
-# Interest accrues from Jan 16 to Jan 31 (16 days)
+# Interest starts accruing Jan 16 (day after confirmation)
+# Calculate for partial month: Jan 16-31
 
 principal = 10000
 annual_rate = 0.08  # 8% for 1-year
-monthly_rate = annual_rate / 12
+monthly_rate = annual_rate / 12  # 0.00667
 days_in_month = 31
-days_accrued = 16  # Jan 16-31
+days_accrued = 16  # Jan 16-31 (inclusive)
 
-first_payout = principal * monthly_rate * (days_accrued / days_in_month)
+# Prorated calculation for partial month
+interest = principal * monthly_rate * (days_accrued / days_in_month)
 # = 10000 * 0.00667 * (16/31) = $34.45
 
-# Subsequent months (full month):
-monthly_payout = principal * monthly_rate
-# = 10000 * 0.00667 = $66.67
+# This $34.45 is paid on Feb 1 (for monthly payout)
+# or added to balance on Feb 1 (for compounding)
 ```
 
-**Key rules:**
-- Interest starts accruing the **day after confirmation**
-- First partial month is prorated by days
-- Payment sent on 1st of following month
-- Principal never changes
+#### Scenario 2: Full Months (Middle Period)
+After the first partial month, calculate interest on a **monthly basis** (not daily) for efficiency.
+
+**Example:** Full months (Feb 1 onwards)
+```python
+# Feb 1: Calculate interest for February (full month)
+monthly_interest = principal * monthly_rate
+# = 10000 * 0.00667 = $66.67
+
+# March 1: Calculate interest for March (full month)
+monthly_interest = principal * monthly_rate
+# = 10000 * 0.00667 = $66.67
+
+# And so on for each full month...
+```
+
+**Why monthly calculation is safe:**
+- Full calendar month = investor held funds for all days
+- Monthly rate already represents average daily accrual
+- Simplifies calculations without losing accuracy
+
+#### Scenario 3: Withdrawal (Partial Final Month)
+When investor requests withdrawal, calculate interest **daily** for the partial month up to withdrawal date.
+
+**Example:** Withdrawal requested/processed Mar 20
+```python
+# Investment was active Mar 1-20
+# Calculate interest for 20 days of March
+
+current_balance = 10000  # or current value if compounding
+annual_rate = 0.08
+monthly_rate = annual_rate / 12
+days_in_march = 31
+days_accrued = 20  # Mar 1-20
+
+# Prorated calculation for partial month
+final_month_interest = current_balance * monthly_rate * (days_accrued / days_in_march)
+# = 10000 * 0.00667 * (20/31) = $43.01
+
+# Add this to total payout
+total_payout = current_balance + final_month_interest
+```
+
+---
+
+### Complete Investment Lifecycle Example
+
+**Investment Details:**
+- Amount: $10,000
+- APY: 8% (1-year lockup)
+- Payment: Monthly payout
+- Confirmed: Jan 15, 2025
+- Withdrawal: Mar 20, 2025
+
+**Interest Calculation Timeline:**
+
+| Period | Type | Calculation | Interest | Cumulative |
+|--------|------|-------------|----------|------------|
+| **Jan 16-31** | Partial | 10000 × 0.00667 × (16/31) | $34.45 | $34.45 |
+| **Feb 1-28** | Full month | 10000 × 0.00667 | $66.67 | $101.12 |
+| **Mar 1-20** | Partial | 10000 × 0.00667 × (20/31) | $43.01 | $144.13 |
+
+**Payout Events:**
+- Feb 1: Pay $34.45 (for Jan 16-31)
+- Mar 1: Pay $66.67 (for February)
+- Mar 20 (withdrawal): Pay $10,000 principal + $43.01 (for Mar 1-20) = **$10,043.01**
+
+**Total Interest Earned:** $144.13 (for 64 days)
+
+---
+
+### For Monthly Payout Investments
+
+**Calculation Rules:**
+
+```python
+def calculate_monthly_payout(investment, target_date):
+    """
+    Calculate monthly payout for a specific month.
+    
+    Rules:
+    1. First month after confirmation → Prorated (partial month)
+    2. Regular months → Full monthly calculation
+    3. Withdrawal month → Prorated (partial month)
+    """
+    principal = investment.amount
+    annual_rate = 0.08 if investment.lockup_period == '1-year' else 0.10
+    monthly_rate = annual_rate / 12
+    
+    confirmed_date = investment.confirmed_at.date()
+    interest_start_date = confirmed_date + timedelta(days=1)
+    
+    # Determine if this is first month, regular month, or withdrawal month
+    
+    # FIRST MONTH (Partial)
+    if target_date.month == interest_start_date.month and target_date.year == interest_start_date.year:
+        days_in_month = monthrange(target_date.year, target_date.month)[1]
+        # Count days from interest_start_date to end of month
+        days_accrued = (date(target_date.year, target_date.month, days_in_month) - interest_start_date).days + 1
+        interest = principal * monthly_rate * (days_accrued / days_in_month)
+        return round(interest, 2)
+    
+    # WITHDRAWAL MONTH (Partial)
+    elif investment.status == 'withdrawn' and target_date.month == investment.withdrawn_at.month:
+        withdrawn_date = investment.withdrawn_at.date()
+        days_in_month = monthrange(target_date.year, target_date.month)[1]
+        days_accrued = withdrawn_date.day  # Days from start of month to withdrawal
+        interest = principal * monthly_rate * (days_accrued / days_in_month)
+        return round(interest, 2)
+    
+    # REGULAR FULL MONTH
+    else:
+        interest = principal * monthly_rate
+        return round(interest, 2)
+```
+
+**Key Points:**
+- ✅ Interest starts **day after confirmation**
+- ✅ First month is **prorated by days**
+- ✅ Full months use **simple monthly rate**
+- ✅ Withdrawal month is **prorated by days**
+- ✅ Principal **never changes** (for monthly payout)
+
+---
 
 ### For Compounding Investments
 
-Interest compounds on the **1st of each month**.
+**Calculation Rules:**
 
-**First month is prorated:**
 ```python
-# Example: Investment confirmed on Jan 15
-# Interest accrues from Jan 16 to Jan 31
-
-principal = 10000
-annual_rate = 0.10  # 10% for 3-year
-monthly_rate = annual_rate / 12
-days_in_month = 31
-days_accrued = 16
-
-# First month (prorated):
-daily_rate = monthly_rate / days_in_month
-first_interest = principal * daily_rate * days_accrued
-new_balance = principal + first_interest
-# = 10000 + (10000 * 0.00833 / 31 * 16) = $10,043.00
-
-# Second month (full month):
-second_interest = new_balance * monthly_rate
-new_balance = new_balance + second_interest
-# = 10043 * 0.00833 = $83.66
-# new_balance = $10,126.66
+def calculate_compounding_value(investment, target_date):
+    """
+    Calculate current value of compounding investment.
+    
+    Rules:
+    1. First month → Prorated (partial month)
+    2. Each subsequent month → Compound full month's interest
+    3. Withdrawal month → Prorated final partial month
+    """
+    principal = investment.amount
+    annual_rate = 0.08 if investment.lockup_period == '1-year' else 0.10
+    monthly_rate = annual_rate / 12
+    
+    confirmed_date = investment.confirmed_at.date()
+    interest_start_date = confirmed_date + timedelta(days=1)
+    
+    current_balance = principal
+    current_date = date(interest_start_date.year, interest_start_date.month, 1)
+    
+    # Move to first day of next month (when first interest payment happens)
+    if interest_start_date.day > 1:
+        # FIRST PARTIAL MONTH
+        days_in_first_month = monthrange(interest_start_date.year, interest_start_date.month)[1]
+        days_accrued = (date(interest_start_date.year, interest_start_date.month, days_in_first_month) - interest_start_date).days + 1
+        
+        # Daily prorated for first partial month
+        daily_rate = monthly_rate / days_in_first_month
+        first_month_interest = current_balance * daily_rate * days_accrued
+        current_balance += first_month_interest
+        
+        # Move to next month
+        current_date = date(interest_start_date.year, interest_start_date.month, 1) + timedelta(days=days_in_first_month)
+    
+    # FULL MONTHS - Compound monthly
+    while current_date <= target_date:
+        # Check if we're in the withdrawal month (partial)
+        if investment.status == 'withdrawn' and current_date.month == investment.withdrawn_at.month:
+            withdrawn_date = investment.withdrawn_at.date()
+            days_in_month = monthrange(current_date.year, current_date.month)[1]
+            days_accrued = withdrawn_date.day
+            
+            # Daily prorated for final partial month
+            daily_rate = monthly_rate / days_in_month
+            final_month_interest = current_balance * daily_rate * days_accrued
+            current_balance += final_month_interest
+            break
+        
+        # Full month compound
+        month_interest = current_balance * monthly_rate
+        current_balance += month_interest
+        
+        # Move to next month
+        days_in_current = monthrange(current_date.year, current_date.month)[1]
+        current_date += timedelta(days=days_in_current)
+    
+    return {
+        'current_value': round(current_balance, 2),
+        'total_earnings': round(current_balance - principal, 2)
+    }
 ```
 
-**Key rules:**
-- Interest compounds into principal monthly
-- First partial month is prorated
-- Balance grows exponentially
+**Key Points:**
+- ✅ First partial month: **Daily prorated**
+- ✅ Full months: **Compound monthly** (interest added to principal)
+- ✅ Final partial month (withdrawal): **Daily prorated**
+- ✅ Balance **grows with each compounding**
+
+---
+
+### Withdrawal Final Payment Calculation
+
+**Critical:** When processing a withdrawal, calculate interest for the partial final month.
+
+```python
+def calculate_final_withdrawal_amount(investment, withdrawal_date):
+    """
+    Calculate total amount to pay investor on withdrawal.
+    Must include prorated interest for partial final month.
+    """
+    if investment.payment_frequency == 'monthly':
+        # Monthly payout: Return principal + prorated interest for final month
+        principal = investment.amount
+        annual_rate = 0.08 if investment.lockup_period == '1-year' else 0.10
+        monthly_rate = annual_rate / 12
+        
+        # Calculate days in current month until withdrawal
+        days_in_month = monthrange(withdrawal_date.year, withdrawal_date.month)[1]
+        days_accrued = withdrawal_date.day
+        
+        # Prorated interest for partial final month
+        final_month_interest = principal * monthly_rate * (days_accrued / days_in_month)
+        
+        total_payout = principal + final_month_interest
+        return round(total_payout, 2)
+    
+    else:  # compounding
+        # Compounding: Calculate current value including final partial month
+        calc = calculate_compounding_value(investment, withdrawal_date)
+        return calc['current_value']
+```
+
+---
+
+### Why This Hybrid Approach?
+
+**Benefits:**
+1. ✅ **Fair to investors** - Every day earns interest
+2. ✅ **Accurate** - No days are lost or double-counted
+3. ✅ **Efficient** - Full months use simple monthly calculation
+4. ✅ **Clear** - Easy to explain to investors
+5. ✅ **Auditable** - Clean monthly boundaries for accounting
+
+**Example: Why monthly calc is safe for full months:**
+```
+Daily calculation for full month:
+- Jan has 31 days
+- Daily rate: 8% / 365 = 0.0219% per day
+- 31 days: (1.000219)^31 - 1 ≈ 0.68%
+
+Monthly calculation:
+- Monthly rate: 8% / 12 = 0.667%
+
+Difference is negligible, and monthly is standard practice.
+```
+
+**When you MUST use daily prorated:**
+- ✅ First partial month after confirmation
+- ✅ Last partial month before withdrawal
+- ✅ Any month where investment wasn't active for all days
 
 ---
 
@@ -3016,35 +3251,62 @@ This final section provides quick reference for key concepts. Bookmark this page
 
 ### 💰 Interest Calculation Quick Reference
 
-#### Monthly Payout Formula
-```python
-# Full month
-monthly_payout = principal * (annual_rate / 12)
+#### 🎯 Core Principle: Every Day Counts
+**Interest accrues for EVERY DAY that Robert Ventures holds investor funds.**
 
-# Partial month (prorated)
-monthly_payout = principal * (annual_rate / 12) * (days_accrued / days_in_month)
+#### Hybrid Calculation Approach
+```
+┌─────────────────────────────────────────────────────┐
+│  Investment Lifecycle: Jan 15 confirmed             │
+├─────────────────────────────────────────────────────┤
+│  Jan 16-31    │ PARTIAL MONTH → Daily prorated      │
+│  Feb 1-28     │ FULL MONTH → Monthly calculation    │
+│  Mar 1-31     │ FULL MONTH → Monthly calculation    │
+│  Apr 1-31     │ FULL MONTH → Monthly calculation    │
+│  ...          │ (continue for all full months)      │
+│  Jun 1-15     │ PARTIAL MONTH → Daily prorated      │
+│               │ (withdrawal on Jun 15)              │
+└─────────────────────────────────────────────────────┘
 ```
 
-**Example:**
-- Principal: $10,000
-- Rate: 8% APY (1-year lockup)
-- Confirmed: Jan 15 (interest starts Jan 16)
-- February payout: $10,000 × 0.08/12 × (16/31) = **$34.45**
-- March payout (full month): $10,000 × 0.08/12 = **$66.67**
+#### Three Calculation Scenarios
 
-#### Compounding Formula
+**1. First Partial Month (after confirmation)**
 ```python
-# Full month
-interest = current_balance * (annual_rate / 12)
-new_balance = current_balance + interest
-
-# Partial month (prorated)
-daily_rate = (annual_rate / 12) / days_in_month
-interest = current_balance * daily_rate * days_accrued
-new_balance = current_balance + interest
+# Example: Confirmed Jan 15, interest starts Jan 16
+interest = principal * (annual_rate / 12) * (days_accrued / days_in_month)
+# = 10000 * 0.08/12 * (16/31) = $34.45
 ```
 
-**Interest Start Rule:** Day **after** `confirmedAt`
+**2. Full Months (middle period)**
+```python
+# Simple monthly calculation (not daily)
+interest = principal * (annual_rate / 12)
+# = 10000 * 0.08/12 = $66.67
+```
+
+**3. Last Partial Month (at withdrawal)**
+```python
+# Example: Withdrawn on Jun 15 (15 days into June)
+interest = principal * (annual_rate / 12) * (days_accrued / days_in_month)
+# = 10000 * 0.08/12 * (15/30) = $33.33
+```
+
+#### Complete Example: 64-Day Investment
+
+| Period | Type | Calculation | Interest |
+|--------|------|-------------|----------|
+| Jan 16-31 | Partial | 10000 × 0.00667 × (16/31) | $34.45 |
+| Feb 1-28 | Full | 10000 × 0.00667 | $66.67 |
+| Mar 1-20 | Partial | 10000 × 0.00667 × (20/31) | $43.01 |
+| **Total** | **64 days** | | **$144.13** |
+
+#### Key Rules
+- ✅ Interest starts **day after** `confirmedAt`
+- ✅ **Partial months** (start/withdrawal) → Daily prorated
+- ✅ **Full months** → Monthly calculation for efficiency
+- ✅ Withdrawal always includes final partial month interest
+- ✅ Every single day must earn interest
 
 ---
 
