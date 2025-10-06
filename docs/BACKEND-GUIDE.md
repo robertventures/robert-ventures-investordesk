@@ -1866,7 +1866,7 @@ def calculate_compounding_value(investment, target_date):
     """
     principal = investment.amount
     annual_rate = 0.08 if investment.lockup_period == '1-year' else 0.10
-    monthly_rate = annual_rate / 12
+monthly_rate = annual_rate / 12
     
     confirmed_date = investment.confirmed_at.date()
     interest_start_date = confirmed_date + timedelta(days=1)
@@ -1897,7 +1897,7 @@ def calculate_compounding_value(investment, target_date):
             days_accrued = withdrawn_date.day
             
             # Daily prorated for final partial month
-            daily_rate = monthly_rate / days_in_month
+daily_rate = monthly_rate / days_in_month
             final_month_interest = current_balance * daily_rate * days_accrued
             current_balance += final_month_interest
             break
@@ -3158,13 +3158,119 @@ Admin Dashboard
 
 ## Testing
 
-Reference implementation has extensive tests in `/testing-docs/`:
-- `test-all-account-types.js` - Tests 16 account type combinations
-- `test-time-machine.js` - Tests time-based calculations
-- `test-edge-cases.js` - Tests edge cases
-- `test-pending-payouts.js` - Tests pending payout system
+### Testing Strategy
 
-Run these to understand expected behavior.
+Your backend implementation should be validated against these core scenarios:
+
+#### 1. **Authentication & User Management**
+- User sign-up creates account with `isVerified: false`
+- Unverified users can sign in but redirected to verification
+- Verification code `000000` marks account as verified
+- Password reset automatically verifies account
+- Admin users bypass verification check
+
+#### 2. **Investment Lifecycle**
+Test all investment states and transitions:
+- `draft` → Create and edit investment
+- `pending` → Submit for approval (bank auto-approved, admin required)
+- `active` → Dual approval activates investment
+- `withdrawal_notice` → User requests withdrawal after lockup
+- `withdrawn` → Admin processes withdrawal (includes final partial month)
+- `rejected` → Admin rejects pending investment
+
+#### 3. **Account Type Combinations**
+Test all valid account type + payment frequency + lockup combinations:
+- **Individual:** All combinations valid (8 total)
+- **Joint:** All combinations valid (8 total)
+- **Entity:** All combinations valid (8 total)
+- **IRA:** Only compounding valid (2 total: 1-year, 3-year compounding)
+
+**Invalid combinations to reject:**
+- IRA + Monthly payout (must be compounding)
+
+#### 4. **Interest Calculations**
+Verify penny-perfect accuracy for:
+- **First partial month:** Daily prorated (e.g., 16/31 days)
+- **Full months:** Monthly rate calculation
+- **Current partial month:** Included in real-time display
+- **Final partial month:** Included in withdrawal payout
+
+**Example to verify:**
+```
+Investment: $10,000 at 8% APY
+Confirmed: Jan 15, 2025
+Withdrawal: Mar 20, 2025
+
+Expected:
+- Jan 16-31: $34.41
+- Feb 1-28: $66.67
+- Mar 1-20: $43.01
+- Total: $144.09
+```
+
+#### 5. **Monthly Event Generation**
+- Events generated only for completed months
+- First month prorated based on confirmation date
+- Monthly distributions require admin approval before payout
+- Compounding events compound interest into principal
+- Failed payouts queued with `pending` status
+
+#### 6. **Withdrawal Processing**
+- Only active investments after lockup can withdraw
+- Withdrawal request starts 90-day processing window
+- Investment continues earning interest during withdrawal notice
+- Final payout includes partial month interest
+- `finalValue` and `totalEarnings` stored on completion
+
+#### 7. **Account Type Locking**
+- Account locks when investment reaches `pending` status
+- User cannot create different account type while locked
+- Account unlocks only when no pending/active investments exist
+- Rejected investments allow immediate account type change
+
+#### 8. **Dual Approval System**
+- Bank approval defaults to `true` (Phase 1)
+- Admin approval required for activation
+- Investment auto-activates when both approvals complete
+- `confirmedAt` set when both approvals present
+
+#### 9. **App Time System**
+- All calculations use app time (not system time)
+- Admin can set custom date for testing
+- Time travel affects all calculations
+- Monthly events respect app time
+
+#### 10. **Edge Cases & Validation**
+- Minimum investment: $1,000
+- Amount must be divisible by $10
+- Age must be 18+
+- Email must be unique and valid
+- SSN format validation
+- Cannot reject active investments
+- Cannot withdraw before lockup ends
+
+### Test Data Requirements
+
+Create test investments covering:
+- Both payment frequencies (monthly, compounding)
+- Both lockup periods (1-year, 3-year)
+- All four account types
+- Various confirmation dates (mid-month, start of month, end of month)
+- Withdrawals at different points in the lifecycle
+
+### Validation Criteria
+
+Your implementation is correct when:
+1. ✅ All calculations match reference to the penny
+2. ✅ State transitions follow rules exactly
+3. ✅ Every day earns interest (including partial months)
+4. ✅ Dual approval workflow functions properly
+5. ✅ Monthly events generate correctly with proration
+6. ✅ Withdrawals include final partial month interest
+7. ✅ Account type locking prevents mixing types
+8. ✅ App time affects all date-based logic
+9. ✅ API responses match expected JSON structure
+10. ✅ All validation rules enforced consistently
 
 ---
 
@@ -3452,11 +3558,12 @@ Before deploying, verify:
 - `/lib/appTime.js` - App time system
 
 **Test Scenarios:**
-- `/testing-docs/test-all-account-types.js` - 16 account combinations
-- `/testing-docs/test-time-machine.js` - Time-based calculations
-- `/testing-docs/test-edge-cases.js` - Edge case validation
-- `/testing-docs/test-pending-payouts.js` - Payout approval system
-- `/testing-docs/test-account-type-locking.js` - Account locking
+Write tests to validate:
+- All 26 valid account type combinations (4 types × 2 frequencies × 2 lockups, minus 6 invalid IRA+monthly)
+- Time-based calculations with various confirmation dates
+- Edge cases: minimum amounts, invalid enums, age validation
+- Payout approval system with pending/completed/failed states
+- Account type locking behavior across all states
 
 **Data Examples:**
 - `/data/users.json` - Sample user data structure
@@ -3491,7 +3598,7 @@ Before deploying, verify:
 **When stuck:**
 1. Check this guide's relevant section
 2. Review reference implementation in `/app/api/`
-3. Run test scenarios in `/testing-docs/`
+3. Write tests based on scenarios in Testing section
 4. Verify against calculation examples in Interest Calculations section
 5. Compare data structures with `/data/users.json`
 

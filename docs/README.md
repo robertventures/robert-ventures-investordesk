@@ -60,7 +60,7 @@ This documentation is your complete reference for implementing a Python backend 
 ### 5. **Reference Implementation**
    - Check `/app/api/` for Next.js reference routes
    - See `/lib/` for calculation logic
-   - Review `/testing-docs/` for test scenarios
+   - All test scenarios and validation rules are documented in BACKEND-GUIDE.md
 
 ---
 
@@ -157,13 +157,6 @@ Comprehensive admin interface for:
 
 ## 🔍 Testing Your Implementation
 
-### Test Scenarios (in `/testing-docs/`)
-- `test-all-account-types.js` - 16 account type combinations
-- `test-time-machine.js` - Time-based calculations
-- `test-edge-cases.js` - Edge cases and validation
-- `test-pending-payouts.js` - Payout approval system
-- `test-account-type-locking.js` - Account locking behavior
-
 ### Validation Checklist
 - [ ] Investment calculations match to the penny
 - [ ] All 6 investment states work correctly
@@ -207,7 +200,6 @@ Use the admin time machine to test calculations at different dates. Results must
 - `/lib/investmentCalculations.js` - Reference calculation logic
 - `/lib/idGenerator.js` - ID generation patterns
 - `/lib/database.js` - Data access patterns
-- `/testing-docs/` - Test scenarios and expected results
 
 ---
 
