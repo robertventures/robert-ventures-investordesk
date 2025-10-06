@@ -15,6 +15,8 @@ function eventMeta(ev) {
       return { icon: '🧾', iconClass: styles.created, title: 'Investment Created' }
     case 'investment_confirmed':
       return { icon: '✅', iconClass: styles.confirmed, title: 'Investment Confirmed' }
+    case 'investment_rejected':
+      return { icon: '❌', iconClass: styles.rejected, title: 'Investment Rejected' }
     case 'monthly_distribution':
       return { icon: '💸', iconClass: styles.distribution, title: 'Monthly Payout' }
     case 'monthly_compounded':

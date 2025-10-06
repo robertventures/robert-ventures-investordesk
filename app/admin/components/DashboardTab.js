@@ -37,8 +37,8 @@ export default function DashboardTab({ metrics, pendingInvestments, onApprove, o
       </div>
 
       {/* Pending Approvals List */}
-      {pendingInvestments && pendingInvestments.length > 0 && (
-        <SectionCard title="Pending Approvals">
+      <SectionCard title="Pending Approvals">
+        {pendingInvestments && pendingInvestments.length > 0 ? (
           <div className={styles.pendingList}>
             {pendingInvestments.map(inv => (
               <div key={`${inv.user.id}-${inv.id}`} className={styles.pendingItem}>
@@ -99,8 +99,12 @@ export default function DashboardTab({ metrics, pendingInvestments, onApprove, o
               </div>
             ))}
           </div>
-        </SectionCard>
-      )}
+        ) : (
+          <div className={styles.emptyState}>
+            ✅ No pending investment approvals
+          </div>
+        )}
+      </SectionCard>
 
       {/* Other Action Items */}
       {(metrics.pendingWithdrawalsCount > 0 || metrics.pendingPayoutsCount > 0) && (

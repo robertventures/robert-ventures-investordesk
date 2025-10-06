@@ -157,6 +157,19 @@ export async function POST() {
           })
         }
 
+        // Rejected event (status = rejected)
+        if (inv.status === 'rejected' && inv.rejectedAt) {
+          ensureEvent({
+            id: generateTransactionId('INV', invId, 'investment_rejected'),
+            type: 'investment_rejected',
+            investmentId: invId,
+            amount,
+            lockupPeriod: lockup,
+            paymentFrequency: payFreq,
+            date: inv.rejectedAt
+          })
+        }
+
         // Monthly distributions for monthly payout investments (prorated first month)
         if (inv.status === 'active' && inv.paymentFrequency === 'monthly' && inv.confirmedAt) {
           const confirmedDate = new Date(inv.confirmedAt)

@@ -267,6 +267,24 @@ export async function PUT(request, { params }) {
         } else if (!updatedInvestment.rejectionSource) {
           updatedInvestment.rejectionSource = 'system'
         }
+
+        // Create activity event for investment rejection
+        if (!Array.isArray(user.activity)) {
+          user.activity = []
+        }
+        const rejectionEventId = generateTransactionId('INV', updatedInvestment.id, 'investment_rejected')
+        const existingRejectionEvent = user.activity.find(ev => ev.id === rejectionEventId)
+        if (!existingRejectionEvent) {
+          user.activity.push({
+            id: rejectionEventId,
+            type: 'investment_rejected',
+            investmentId: updatedInvestment.id,
+            amount: updatedInvestment.amount,
+            lockupPeriod: updatedInvestment.lockupPeriod,
+            paymentFrequency: updatedInvestment.paymentFrequency,
+            date: updatedInvestment.rejectedAt
+          })
+        }
       }
       
       investments[invIndex] = updatedInvestment

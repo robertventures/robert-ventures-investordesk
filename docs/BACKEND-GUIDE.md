@@ -1253,6 +1253,9 @@ def generate_activity_event_id(entity_type, entity_id, event_type, options=None)
     elif event_type == "investment_confirmed":
         return f"{prefix}-CONFIRMED"
     
+    elif event_type == "investment_rejected":
+        return f"{prefix}-REJECTED"
+    
     elif event_type == "monthly_distribution":
         # Format: TX-INV-{numericId}-MD-YYYY-MM
         date = options.get('date')
@@ -1605,6 +1608,19 @@ def update_investment_status(user_id, investment_id, new_status, admin_user_id=N
         investment.rejected_at = get_current_app_time()
         investment.rejected_by_admin_id = admin_user_id
         investment.rejection_source = 'admin' if admin_user_id else 'system'
+        
+        # Create activity event for rejection
+        event_id = generate_activity_event_id('INV', investment.id, 'investment_rejected')
+        if not any(ev.id == event_id for ev in user.activity):
+            user.activity.append({
+                'id': event_id,
+                'type': 'investment_rejected',
+                'investmentId': investment.id,
+                'amount': investment.amount,
+                'lockupPeriod': investment.lockup_period,
+                'paymentFrequency': investment.payment_frequency,
+                'date': investment.rejected_at
+            })
         
         # Check if account should be unlocked
         has_pending_or_active = any(
@@ -2321,7 +2337,7 @@ def calculate_total_earnings(investments, transactions, app_time):
   "id": "TX-INV-10000-MD-2025-11",  // Format: TX-{entityType}-{numericId}-{TYPE} (all uppercase)
   "userId": "USR-1001",  // Optional - usually inferred from context
   "investmentId": "INV-10000",  // Present for investment/withdrawal events, absent for account_created
-  "type": "account_created|investment_created|investment_confirmed|monthly_distribution|monthly_compounded|withdrawal_requested|withdrawal_approved",
+  "type": "account_created|investment_created|investment_confirmed|investment_rejected|monthly_distribution|monthly_compounded|withdrawal_requested|withdrawal_notice_started|withdrawal_approved|withdrawal_rejected",
   "amount": 66.67,  // Present for monetary events, ABSENT for account_created
   "date": "2025-10-05T00:00:00.000Z",  // ISO8601 format
 
@@ -2339,7 +2355,7 @@ def calculate_total_earnings(investments, transactions, app_time):
 
 **Important Activity Event Field Rules:**
 - `id`: Always uppercase format (e.g., `TX-INV-10000-CREATED`)
-- `amount`: Only present for monetary events (investment_created, investment_confirmed, monthly_distribution, monthly_compounded, withdrawals). **NOT present for account_created**.
+- `amount`: Only present for monetary events (investment_created, investment_confirmed, investment_rejected, monthly_distribution, monthly_compounded, withdrawals). **NOT present for account_created**.
 - `investmentId`: Present for investment and withdrawal events, absent for account_created
 - `payoutStatus`, `approvedBy`, `approvedAt`, `failureReason`, etc.: Only present for monthly_distribution events
 - **New:** `payoutStatus` includes `pending_approval` state for admin approval workflow
@@ -2943,9 +2959,8 @@ return {
 - Dashboard - Overview metrics and action items
 - Accounts - User account management
 - **Transactions** - Investment management (renamed from "Investments")
-- Withdrawals - Withdrawal request management
-- Pending Payouts - Monthly payout failure management
-- Time Machine - Testing and time manipulation
+- **Activity** - Platform-wide activity events viewer
+- Operations - Withdrawals, pending payouts, and time machine
 
 **Dashboard Metrics:**
 The admin dashboard shows:
@@ -2958,15 +2973,14 @@ The admin dashboard shows:
 - Action Required section with pending items
 
 **Dashboard Panels:**
-- Primary Metrics (4 cards: Total AUM, Total Accounts, Active Investments, Monthly Inflows)
-- Action Required (shows only when there are pending items)
-  - Pending Approvals (links to Transactions tab)
+- Primary Metrics (5 cards: Total AUM, Pending Capital, Total Amount Owed, Total Accounts, Active Investors)
+- **Pending Approvals** - Always visible section (shows friendly message when empty: "✅ No pending investment approvals")
+- Other Action Items (conditionally shown when there are items)
   - Pending Withdrawals
   - Pending Payouts
-  - Unverified Accounts
-- Overview (statistics grid)
-- Distribution (Account Types and Lockup Periods)
-- Recent Activity - Latest Investments only (Recent Sign-ups panel removed)
+- Two-Column Layout:
+  - Distribution (Account Types, Lockup Periods, Payment Frequencies)
+  - Recent Activity (Latest Investments)
 
 ### Transactions Tab (formerly Investments)
 
@@ -3090,6 +3104,61 @@ Investment status badges must be properly centered (using flexbox: `display: fle
 - "View Account" button navigates to `/admin/users/[userId]`
 - Account link in subtitle navigates to user account page
 
+### Activity Tab
+
+**Purpose:** View all platform-wide activity events in one centralized location
+
+**Features:**
+- Displays all activity events from all users across the platform
+- Real-time search functionality
+- Sort by date (most recent first)
+- Complete event tracking and audit trail
+
+**Search Capabilities:**
+Search bar filters events by:
+- User name
+- User email
+- User ID
+- Investment ID
+- Event type
+- Event ID
+
+**Data Table Columns:**
+1. **Event** - Icon + event type (color-coded)
+2. **User** - Clickable link to user details
+3. **Email** - User's email address
+4. **Investment ID** - Clickable link to investment details (when applicable)
+5. **Amount** - Monetary value (when applicable)
+6. **Date** - Full timestamp
+7. **Event ID** - Unique transaction identifier
+8. **Actions** - "View User" button
+
+**Event Types Displayed:**
+- `account_created` - 👤 Account Created (blue)
+- `investment_created` - 🧾 Investment Created (blue)
+- `investment_confirmed` - ✅ Investment Confirmed (green)
+- `investment_rejected` - ❌ Investment Rejected (red)
+- `monthly_distribution` - 💸 Monthly Payout (purple)
+- `monthly_compounded` - 📈 Monthly Compounded (purple)
+- `withdrawal_requested` - 🏦 Withdrawal Requested (amber)
+- `withdrawal_notice_started` - ⏳ Withdrawal Notice Started (amber)
+- `withdrawal_approved` - ✅ Withdrawal Processed (green)
+- `withdrawal_rejected` - ❌ Withdrawal Rejected (red)
+
+**Empty State:**
+- Shows message when no events match search criteria
+- Displays total count of filtered events in subtitle
+
+**Responsive Design:**
+- Event ID column hidden on screens < 1200px
+- Email column hidden on mobile devices
+- Maintains full functionality across all screen sizes
+
+**Navigation:**
+- Click user name → Navigate to user account page
+- Click investment ID → Navigate to investment details page
+- Click "View User" button → Navigate to user account page
+
 ### Accounts Tab
 
 **Purpose:** Manage user accounts
@@ -3123,10 +3192,11 @@ Investment status badges must be properly centered (using flexbox: `display: fle
 **Navigation Flow:**
 ```
 Admin Dashboard
+├── Dashboard Tab
 ├── Accounts Tab → User Details → Investment Details
 ├── Transactions Tab → Investment Details → User Details
-├── Operations Tab
-└── Dashboard Tab
+├── Activity Tab → User Details or Investment Details
+└── Operations Tab
 ```
 
 ### User Profile - Trusted Contact
