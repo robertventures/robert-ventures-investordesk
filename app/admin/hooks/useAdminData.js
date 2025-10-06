@@ -60,6 +60,10 @@ export function useAdminData() {
 
   const loadUsers = async () => {
     try {
+      // First, ensure all transaction events are generated based on current app time
+      await fetch('/api/migrate-transactions', { method: 'POST' })
+      
+      // Then load users with all their activity events
       const res = await fetch('/api/users')
       const data = await res.json()
       if (data.success) {

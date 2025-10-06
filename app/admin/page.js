@@ -7,6 +7,7 @@ import { useAdminMetrics } from './hooks/useAdminMetrics'
 import DashboardTab from './components/DashboardTab'
 import OperationsTab from './components/OperationsTab'
 import ActivityTab from './components/ActivityTab'
+import DistributionsTab from './components/DistributionsTab'
 import styles from './page.module.css'
 
 /**
@@ -19,7 +20,7 @@ export default function AdminPage() {
   // Tab management
   const initialTab = useMemo(() => {
     const t = searchParams?.get('tab') || 'dashboard'
-    const allowed = ['dashboard', 'transactions', 'accounts', 'activity', 'operations']
+    const allowed = ['dashboard', 'transactions', 'accounts', 'activity', 'distributions', 'operations']
     return allowed.includes(t) ? t : 'dashboard'
   }, [searchParams])
   const [activeTab, setActiveTab] = useState(initialTab)
@@ -316,6 +317,7 @@ export default function AdminPage() {
                 {activeTab === 'transactions' && 'Manage and approve investment transactions'}
                 {activeTab === 'accounts' && 'View and manage user accounts'}
                 {activeTab === 'activity' && 'View all activity events across the platform'}
+                {activeTab === 'distributions' && 'Track monthly payments and compounding interest calculations'}
                 {activeTab === 'operations' && 'Manage withdrawals, payouts, and system operations'}
               </p>
             </div>
@@ -352,6 +354,11 @@ export default function AdminPage() {
           {/* Activity Tab */}
           {activeTab === 'activity' && (
             <ActivityTab users={users || []} />
+          )}
+
+          {/* Distributions Tab */}
+          {activeTab === 'distributions' && (
+            <DistributionsTab users={users || []} />
           )}
 
           {/* Transactions Tab */}
