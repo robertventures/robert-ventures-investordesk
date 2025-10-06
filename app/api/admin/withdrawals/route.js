@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getUsers, saveUsers } from '../../../../lib/database'
 import { getCurrentAppTime } from '../../../../lib/appTime'
+import { calculateFinalWithdrawalPayout } from '../../../../lib/investmentCalculations'
 
 // GET - list all withdrawals pending admin action
 export async function GET() {
@@ -45,15 +46,41 @@ export async function POST(request) {
     if (action === 'approve') {
       // Admin can approve anytime within the 90-day window
       // No validation needed - Robert Ventures has flexibility to pay before the deadline
-      wd.status = 'approved'
-      wd.approvedAt = now.toISOString()
-      wd.paidAt = now.toISOString()
-      // Update investment status to withdrawn
+      
+      // Calculate final payout including partial month interest up to withdrawal date
       const invs = Array.isArray(user.investments) ? user.investments : []
       const invIdx = invs.findIndex(inv => inv.id === wd.investmentId)
+      
       if (invIdx !== -1) {
-        invs[invIdx] = { ...invs[invIdx], status: 'withdrawn', withdrawnAt: now.toISOString(), updatedAt: now.toISOString() }
+        const investment = invs[invIdx]
+        
+        // Calculate final value including interest for every day up to withdrawal date
+        const finalPayout = calculateFinalWithdrawalPayout(investment, now.toISOString())
+        
+        // Update withdrawal record with final calculated amounts
+        wd.status = 'approved'
+        wd.approvedAt = now.toISOString()
+        wd.paidAt = now.toISOString()
+        wd.amount = finalPayout.finalValue
+        wd.principalAmount = finalPayout.principalAmount
+        wd.earningsAmount = finalPayout.totalEarnings
+        
+        // Update investment status to withdrawn with final values
+        invs[invIdx] = { 
+          ...investment, 
+          status: 'withdrawn', 
+          withdrawnAt: now.toISOString(), 
+          finalValue: finalPayout.finalValue,
+          totalEarnings: finalPayout.totalEarnings,
+          updatedAt: now.toISOString() 
+        }
+      } else {
+        // Investment not found, still mark withdrawal as approved but without recalculation
+        wd.status = 'approved'
+        wd.approvedAt = now.toISOString()
+        wd.paidAt = now.toISOString()
       }
+      
       user.investments = invs
     } else if (action === 'reject') {
       wd.status = 'rejected'

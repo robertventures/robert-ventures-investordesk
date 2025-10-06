@@ -1783,16 +1783,16 @@ total_payout = current_balance + final_month_interest
 
 | Period | Type | Calculation | Interest | Cumulative |
 |--------|------|-------------|----------|------------|
-| **Jan 16-31** | Partial | 10000 × 0.00667 × (16/31) | $34.45 | $34.45 |
-| **Feb 1-28** | Full month | 10000 × 0.00667 | $66.67 | $101.12 |
-| **Mar 1-20** | Partial | 10000 × 0.00667 × (20/31) | $43.01 | $144.13 |
+| **Jan 16-31** | Partial | 10000 × 0.00667 × (16/31) | $34.41 | $34.41 |
+| **Feb 1-28** | Full month | 10000 × 0.00667 | $66.67 | $101.08 |
+| **Mar 1-20** | Partial | 10000 × 0.00667 × (20/31) | $43.01 | $144.09 |
 
 **Payout Events:**
-- Feb 1: Pay $34.45 (for Jan 16-31)
+- Feb 1: Pay $34.41 (for Jan 16-31)
 - Mar 1: Pay $66.67 (for February)
 - Mar 20 (withdrawal): Pay $10,000 principal + $43.01 (for Mar 1-20) = **$10,043.01**
 
-**Total Interest Earned:** $144.13 (for 64 days)
+**Total Interest Earned:** $144.09 (for 64 days)
 
 ---
 
@@ -3275,7 +3275,7 @@ This final section provides quick reference for key concepts. Bookmark this page
 ```python
 # Example: Confirmed Jan 15, interest starts Jan 16
 interest = principal * (annual_rate / 12) * (days_accrued / days_in_month)
-# = 10000 * 0.08/12 * (16/31) = $34.45
+# = 10000 * 0.08/12 * (16/31) = $34.41
 ```
 
 **2. Full Months (middle period)**
@@ -3296,10 +3296,10 @@ interest = principal * (annual_rate / 12) * (days_accrued / days_in_month)
 
 | Period | Type | Calculation | Interest |
 |--------|------|-------------|----------|
-| Jan 16-31 | Partial | 10000 × 0.00667 × (16/31) | $34.45 |
+| Jan 16-31 | Partial | 10000 × 0.00667 × (16/31) | $34.41 |
 | Feb 1-28 | Full | 10000 × 0.00667 | $66.67 |
 | Mar 1-20 | Partial | 10000 × 0.00667 × (20/31) | $43.01 |
-| **Total** | **64 days** | | **$144.13** |
+| **Total** | **64 days** | | **$144.09** |
 
 #### Key Rules
 - ✅ Interest starts **day after** `confirmedAt`
