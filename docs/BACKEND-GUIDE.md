@@ -370,6 +370,209 @@ def validate_password(password):
     return True
 ```
 
+#### Session Timeout & Inactivity
+
+**Security Requirement:** Automatic logout after inactivity to protect user accounts.
+
+**Timeout Duration:** 10 minutes of inactivity
+
+**Implementation Strategy:**
+
+Frontend tracks user activity and automatically logs out inactive users:
+
+```python
+# Session Configuration
+INACTIVITY_TIMEOUT = 10 * 60  # 10 minutes in seconds
+
+# Activity events that reset the timer:
+- Mouse movement
+- Keyboard input
+- Click events
+- Touch events (mobile)
+- Scroll events
+```
+
+**Frontend Implementation (JavaScript/TypeScript):**
+
+```javascript
+class SessionManager {
+    constructor(timeoutMinutes = 10) {
+        this.timeout = timeoutMinutes * 60 * 1000;  // Convert to milliseconds
+        this.warningTime = 1 * 60 * 1000;  // Show warning 1 minute before
+        this.lastActivity = Date.now();
+        this.timeoutId = null;
+        this.warningTimeoutId = null;
+        this.initActivityListeners();
+        this.startTimer();
+    }
+
+    initActivityListeners() {
+        // Activity events that reset the timer
+        const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
+        
+        events.forEach(event => {
+            document.addEventListener(event, () => this.resetTimer(), { passive: true });
+        });
+    }
+
+    resetTimer() {
+        this.lastActivity = Date.now();
+        
+        // Clear existing timers
+        if (this.timeoutId) clearTimeout(this.timeoutId);
+        if (this.warningTimeoutId) clearTimeout(this.warningTimeoutId);
+        
+        // Set warning timer (1 minute before logout)
+        this.warningTimeoutId = setTimeout(() => {
+            this.showWarning();
+        }, this.timeout - this.warningTime);
+        
+        // Set logout timer
+        this.timeoutId = setTimeout(() => {
+            this.logout();
+        }, this.timeout);
+    }
+
+    showWarning() {
+        // Show modal or notification
+        const shouldStay = confirm(
+            'Your session will expire in 1 minute due to inactivity. ' +
+            'Click OK to stay logged in.'
+        );
+        
+        if (shouldStay) {
+            this.resetTimer();
+        }
+    }
+
+    logout() {
+        // Clear local storage
+        localStorage.removeItem('currentUserId');
+        localStorage.removeItem('signupEmail');
+        localStorage.removeItem('currentInvestmentId');
+        
+        // Redirect to sign-in page
+        window.location.href = '/sign-in?timeout=true';
+    }
+
+    startTimer() {
+        this.resetTimer();
+    }
+
+    destroy() {
+        if (this.timeoutId) clearTimeout(this.timeoutId);
+        if (this.warningTimeoutId) clearTimeout(this.warningTimeoutId);
+    }
+}
+
+// Initialize session manager on protected pages
+if (localStorage.getItem('currentUserId')) {
+    const sessionManager = new SessionManager(10);  // 10 minutes
+}
+```
+
+**Backend Session Validation (Optional Enhancement):**
+
+For additional security, track session creation time on the backend:
+
+```python
+def validate_session(user_id, session_token):
+    """
+    Validate session hasn't expired on server side.
+    """
+    session = get_session(session_token)
+    
+    if not session:
+        return {"valid": False, "error": "Session not found"}
+    
+    # Check if session is expired (e.g., 24 hours)
+    if is_expired(session.created_at, hours=24):
+        delete_session(session_token)
+        return {"valid": False, "error": "Session expired"}
+    
+    # Update last activity timestamp
+    session.last_activity = get_current_time()
+    save_session(session)
+    
+    return {"valid": True}
+```
+
+**Implementation Requirements:**
+
+1. **Frontend (Required):**
+   - Implement activity listener on all authenticated pages
+   - Track mouse, keyboard, touch, and scroll events
+   - Show warning dialog 1 minute before timeout
+   - Automatically logout and redirect to sign-in page
+   - Display informative message on sign-in page when redirected due to timeout
+
+2. **Backend (Optional but Recommended):**
+   - Store session creation timestamp
+   - Implement session expiry check (24 hours max session life)
+   - Validate session on critical operations (investments, withdrawals, profile changes)
+   - Clean up expired sessions periodically
+
+3. **User Experience:**
+   - **Warning Dialog:** "Your session will expire in 1 minute due to inactivity. Click OK to stay logged in."
+   - **Timeout Redirect Message:** "Your session has expired due to inactivity. Please sign in again."
+   - **Activity Reset:** Any user interaction resets the 10-minute timer
+   - **Smooth UX:** Timer reset shouldn't interrupt user actions or cause UI flicker
+
+4. **Security Benefits:**
+   - Protects against unauthorized access from unattended devices
+   - Reduces risk of session hijacking
+   - Enforces security best practices
+   - Complies with financial industry security standards
+
+**Testing Scenarios:**
+
+```
+Test 1: Inactivity Timeout
+1. Sign in to user account
+2. Leave browser open without interaction for 10 minutes
+3. ✓ User automatically logged out
+4. ✓ Redirected to /sign-in with timeout message
+
+Test 2: Activity Reset
+1. Sign in to user account
+2. Wait 8 minutes
+3. Click anywhere on page
+4. Wait 8 more minutes (16 minutes total)
+5. ✓ User still logged in (timer was reset at 8 minutes)
+
+Test 3: Warning Dialog
+1. Sign in to user account
+2. Wait 9 minutes without interaction
+3. ✓ Warning dialog appears
+4. Click OK on warning
+5. ✓ Timer resets, user stays logged in
+
+Test 4: Multiple Tabs
+1. Open two tabs with the same account
+2. Be active in Tab A
+3. Switch to Tab B after 9 minutes
+4. ✓ Should still be logged in (shared session)
+```
+
+**Configuration Options:**
+
+```javascript
+// Adjustable timeout values
+const SESSION_CONFIG = {
+    // Inactivity timeout (10 minutes for production)
+    inactivityTimeout: process.env.NODE_ENV === 'development' ? 30 : 10,  // minutes
+    
+    // Warning before logout (1 minute)
+    warningBeforeTimeout: 1,  // minutes
+    
+    // Maximum session lifetime (24 hours)
+    maxSessionLife: 24,  // hours
+    
+    // Admin sessions (longer timeout)
+    adminInactivityTimeout: 30  // minutes
+};
+```
+
 ### Testing the Flow
 
 **Test Scenario 1: Unverified User Sign-In**
@@ -2853,6 +3056,39 @@ def get_current_time():
 
 ## UI/UX Requirements
 
+### Session Timeout & Auto-Logout
+
+**Security Feature:** Protect user accounts by automatically logging out inactive users.
+
+**Requirements:**
+- **Timeout Duration:** 10 minutes of inactivity
+- **Warning Dialog:** Show warning 1 minute before auto-logout
+- **User-Friendly Messaging:** Clear communication about session expiry
+- **Activity Tracking:** Monitor mouse, keyboard, touch, and scroll events
+- **Applies To:** All authenticated users (investors and admins)
+
+**User Experience Flow:**
+1. User logs in and starts session
+2. Session timer tracks inactivity (10 minutes)
+3. At 9 minutes: Warning dialog appears
+   - Message: "Your session will expire in 1 minute due to inactivity. Click OK to stay logged in."
+   - Options: OK (reset timer) or dismiss (logout in 1 minute)
+4. At 10 minutes: Automatic logout
+   - Clear all session data
+   - Redirect to sign-in page with message
+5. Sign-in page shows: "Your session has expired due to inactivity. Please sign in again."
+
+**Activity Events That Reset Timer:**
+- Mouse movement
+- Mouse clicks
+- Keyboard input
+- Touch events (mobile)
+- Scroll events
+- Any interaction with UI elements
+
+**Implementation Details:**
+See the **Authentication & Verification** section → **Session Timeout & Inactivity** for complete implementation guide with code examples.
+
 ### Investment Visibility Rules
 
 **Dashboard Investment List:**
@@ -3645,9 +3881,10 @@ Write tests to validate:
 1. **Password Storage:** Use bcrypt with at least 10 rounds
 2. **Email Enumeration:** Always return success on password reset (don't reveal if email exists)
 3. **Token Expiry:** Reset tokens expire after 1 hour
-4. **Admin Permissions:** Verify admin status on all protected endpoints
-5. **Audit Logging:** Log all approval actions with admin ID and timestamp
-6. **Input Validation:** Validate all inputs (amounts, dates, status transitions)
+4. **Session Timeout:** Auto-logout after 10 minutes of inactivity (see Authentication & Verification section)
+5. **Admin Permissions:** Verify admin status on all protected endpoints
+6. **Audit Logging:** Log all approval actions with admin ID and timestamp
+7. **Input Validation:** Validate all inputs (amounts, dates, status transitions)
 
 ---
 
