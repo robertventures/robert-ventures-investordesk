@@ -3309,11 +3309,39 @@ ORDER BY submitted_at ASC
 
 ## Admin Time Machine
 
-For testing and demos, admin can set a custom "app time" that affects:
+### Overview
+
+The time machine is a **testing and demo tool** that allows admins to manipulate app time for development, testing, and demonstrations. It is **NOT intended for active use in production**.
+
+**Primary Use Cases:**
+- 🧪 **Development & Testing** - Test scenarios months/years in the future without waiting
+- 🎥 **Demos** - Show investors how the platform works over time
+- 🐛 **Debugging** - Reproduce time-sensitive bugs
+- 📚 **Training** - Train new admins without waiting for real time to pass
+- 🔧 **Edge Case Testing** - Test production data with simulated time advancement
+
+### Production vs Development
+
+**Development/Testing Environment:**
+- Time machine fully enabled and visible
+- Admin can freely jump forward/backward in time
+- Events generated based on simulated app time
+- Perfect for testing 1-year and 3-year lockup scenarios instantly
+
+**Production Environment:**
+- Time machine should be **disabled or hidden** from UI
+- If kept available, restrict to super admins only
+- Use **scheduled jobs (cron)** to generate events as real time passes
+- Time machine only as backup for edge cases or corrections
+
+### How It Affects The System
+
+The time machine affects all time-based logic:
 - Investment calculations
 - Monthly payout generation
 - Lockup period checks
 - Withdrawal eligibility
+- Distribution event creation
 
 **Storage:**
 ```json
@@ -3330,11 +3358,114 @@ For testing and demos, admin can set a custom "app time" that affects:
 **Usage:**
 ```python
 def get_current_time():
+    """
+    Get current app time (simulated or real).
+    All date/time logic should use this function.
+    """
     if time_machine.is_active:
         return time_machine.app_time
     else:
         return datetime.now()
 ```
+
+### Production Implementation Pattern
+
+In production, use scheduled jobs instead of manual time manipulation:
+
+```python
+# Cron job - Runs daily at 1:00 AM
+@schedule.daily(hour=1, minute=0)
+async def generate_daily_distribution_events():
+    """
+    Daily job to generate distribution events for completed months.
+    Safe to run daily - the endpoint is idempotent.
+    
+    This replaces manual time machine usage in production.
+    """
+    try:
+        # Generate any events for completed months based on real time
+        await call_api('POST', '/api/migrate-transactions')
+        
+        # Log success
+        log_info(f"Distribution events generated successfully at {datetime.now()}")
+        
+        # Optional: Send notification to admins if new events created
+        # await notify_admins_of_new_distributions()
+        
+    except Exception as e:
+        log_error(f"Failed to generate distribution events: {str(e)}")
+        await alert_admins_of_failure(e)
+```
+
+### Security Considerations for Production
+
+If you choose to keep the time machine available in production:
+
+```python
+def can_use_time_machine(user):
+    """
+    Restrict time machine to super admins in production.
+    """
+    if os.getenv('NODE_ENV') != 'production':
+        # Allow all admins in development
+        return user.is_admin
+    
+    # In production, only super admins
+    return user.is_admin and user.is_super_admin
+```
+
+```javascript
+// Hide time machine UI in production
+const showTimeMachine = 
+    process.env.NODE_ENV === 'development' || 
+    (currentUser.isAdmin && currentUser.isSuperAdmin);
+```
+
+### Time Machine vs Real Time Flow
+
+**With Time Machine (Development):**
+```
+1. Admin sets time to "March 1, 2026"
+2. Admin loads dashboard
+3. Dashboard calls /api/migrate-transactions
+4. Events generated for all completed months up to March 2026
+5. Distributions tab shows all events
+```
+
+**Without Time Machine (Production):**
+```
+1. Cron job runs daily at 1:00 AM (real time)
+2. Calls /api/migrate-transactions
+3. Events generated for any newly completed months
+4. Distributions appear automatically as months complete
+5. No manual intervention needed
+```
+
+### Best Practices
+
+**✅ DO:**
+- Use time machine extensively in development and testing
+- Test edge cases by jumping to future dates
+- Verify calculations at various time points
+- Keep time machine available for production debugging (with restrictions)
+
+**❌ DON'T:**
+- Rely on time machine for normal production operations
+- Allow non-super-admin access to time machine in production
+- Use time machine instead of scheduled jobs in production
+- Manipulate time to bypass business rules
+
+### Why Keep It Available in Production?
+
+Even though it's primarily a testing tool, keeping the time machine available (but restricted) in production can help with:
+
+1. **Historical Corrections** - If events were missed, regenerate them
+2. **Data Migration** - Import historical data and generate correct events
+3. **Debugging** - Reproduce production issues in safe environment
+4. **Demonstrations** - Show potential investors how platform works
+5. **Testing with Real Data** - Validate edge cases without affecting live users
+
+The key is **restriction and monitoring** - log all time machine usage and restrict access appropriately.
 
 ---
 

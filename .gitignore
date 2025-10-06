@@ -38,3 +38,6 @@ next-env.d.ts
 # testing and documentation
 /testing-docs
 /docs/backend-integration
+
+# test scripts (local only)
+/scripts/seed-test-accounts.js
