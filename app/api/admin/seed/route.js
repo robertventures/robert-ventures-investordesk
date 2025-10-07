@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getUsers } from '../../../../lib/database'
-import seedTestAccounts from '../../../../scripts/seed-test-accounts.js'
+import { seedTestAccounts } from '../../../../lib/seedAccounts.js'
 
 export async function POST(request) {
   try {
