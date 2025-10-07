@@ -31,10 +31,20 @@ export default function TransactionsTable() {
         const data = await res.json()
         if (data.success && data.user) {
           setUserData(data.user)
-          const persisted = Array.isArray(data.user.activity) ? data.user.activity : []
+          const investments = data.user.investments || []
+          const investmentTransactions = investments.flatMap(inv => {
+            const txs = Array.isArray(inv.transactions) ? inv.transactions : []
+            return txs.map(tx => ({
+              ...tx,
+              investmentId: inv.id,
+              lockupPeriod: inv.lockupPeriod,
+              paymentFrequency: inv.paymentFrequency,
+              investmentAmount: inv.amount || 0,
+              investorName: `${data.user.firstName} ${data.user.lastName}`.trim()
+            }))
+          })
           
           // Convert investments to transaction format (for purchases tab)
-          const investments = data.user.investments || []
           const transactionData = investments.map(inv => {
             // Calculate actual earnings for this investment
             let actualEarnings = 0
@@ -79,17 +89,17 @@ export default function TransactionsTable() {
           })
           
           // Build earnings tab from persisted monthly_distribution events
-          const earningsData = persisted
-            .filter(ev => ev.type === 'monthly_distribution')
-            .sort((a, b) => new Date(a.date) - new Date(b.date))
+          const earningsData = investmentTransactions
+            .filter(tx => tx.type === 'distribution')
+            .sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0))
             .map(ev => ({
               id: ev.id,
               recordId: `${String(ev.investmentId).slice(-3).toUpperCase()}E${String(ev.monthIndex || 0).toString().padStart(2, '0')}`,
-              transactionDate: new Date(ev.date).toLocaleDateString(),
-              type: 'Monthly Distribution',
+              transactionDate: ev.date ? new Date(ev.date).toLocaleDateString() : '-',
+              type: 'Distribution',
               offeringType: 'S1',
               associatedTo: `${data.user.firstName} ${data.user.lastName}`,
-              status: 'Completed',
+              status: ev.status ? ev.status[0].toUpperCase() + ev.status.slice(1) : 'Pending',
               amount: ev.amount || 0,
               bonds: 0,
               rate: ev.lockupPeriod === '1-year' ? '8.00%' : '10.00%',

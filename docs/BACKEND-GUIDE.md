@@ -1614,19 +1614,32 @@ def generate_activity_event_id(entity_type, entity_id, event_type, options=None)
     elif event_type == "investment_rejected":
         return f"{prefix}-REJECTED"
     
-    elif event_type == "monthly_distribution":
-        # Format: TX-INV-{numericId}-MD-YYYY-MM
-        date = options.get('date')
-        year = date.year
-        month = str(date.month).zfill(2)
-        return f"{prefix}-MD-{year}-{month}"
+    elif event_type == "investment":
+        return f"{prefix}-INVESTMENT"
     
-    elif event_type == "monthly_compounded":
-        # Format: TX-INV-{numericId}-MC-YYYY-MM
+    elif event_type == "contribution":
+        # Format: TX-INV-{numericId}-CONTR-YYYY-MM
         date = options.get('date')
         year = date.year
         month = str(date.month).zfill(2)
-        return f"{prefix}-MC-{year}-{month}"
+        return f"{prefix}-CONTR-{year}-{month}"
+    
+    elif event_type == "distribution":
+        # Format: TX-INV-{numericId}-DIST-YYYY-MM
+        date = options.get('date')
+        year = date.year
+        month = str(date.month).zfill(2)
+        return f"{prefix}-DIST-{year}-{month}"
+    
+    elif event_type == "redemption":
+        withdrawal_id = options.get('withdrawal_id')
+        if withdrawal_id:
+            return f"{prefix}-REDEEM-{withdrawal_id}"
+        date = options.get('date')
+        year = date.year
+        month = str(date.month).zfill(2)
+        day = str(date.day).zfill(2)
+        return f"{prefix}-REDEEM-{year}-{month}-{day}"
     
     elif event_type == "withdrawal_notice_started":
         return f"{prefix}-NOTICE"
@@ -2691,37 +2704,76 @@ def calculate_total_earnings(investments, transactions, app_time):
 - **`anticipatedEarnings` is NOT stored** - This value is calculated dynamically based on amount, lockup period, and payment frequency. Do not include this field in the database schema.
 - **`accountType` values** - Only four types are valid: `individual`, `joint`, `entity`, `ira`. The `ira` type can have subtypes (traditional/roth) stored in `iraType` field.
 
-### Activity Entry (formerly Transaction)
+### Account Activity Entry (User-Level)
 
-**Note:** Activity entries are stored in the user's `activity` array (not `transactions`). Each entry represents a significant event in the user's investment journey.
+**Note:** Account activity entries live in the user's `activity` array. These events capture account-level milestones (account creation, investment lifecycle changes, withdrawal lifecycle changes) and continue to power timeline-style views in the admin dashboard.
 
 ```json
 {
-  "id": "TX-INV-10000-MD-2025-11",  // Format: TX-{entityType}-{numericId}-{TYPE} (all uppercase)
-  "userId": "USR-1001",  // Optional - usually inferred from context
-  "investmentId": "INV-10000",  // Present for investment/withdrawal events, absent for account_created
-  "type": "account_created|investment_created|investment_confirmed|investment_rejected|monthly_distribution|monthly_compounded|withdrawal_requested|withdrawal_notice_started|withdrawal_approved|withdrawal_rejected",
-  "amount": 66.67,  // Present for monetary events, ABSENT for account_created
-  "date": "2025-10-05T00:00:00.000Z",  // ISO8601 format
-
-  // For monthly distributions only:
-  "payoutStatus": "pending_approval|approved|completed|failed",
-  "approvedBy": "string or null",  // Admin user ID who approved
-  "approvedAt": "ISO8601 or null",
-  "failureReason": "string or null",
-  "retryCount": 0,
-  "payoutBankId": "BANK-USR-1001-1",
-  "payoutBankNickname": "Primary Account",
-  "monthIndex": 1
+  "id": "TX-INV-10000-CONFIRMED",  // Format: TX-{entityType}-{numericId}-{TYPE}
+  "userId": "USR-1001",            // Optional - usually inferred from context
+  "investmentId": "INV-10000",     // Present for investment/withdrawal events, absent for account_created
+  "type": "account_created|investment_created|investment_confirmed|investment_rejected|withdrawal_requested|withdrawal_notice_started|withdrawal_approved|withdrawal_rejected",
+  "amount": 1000,                  // Present for monetary events (confirmed, rejected, withdrawals)
+  "date": "2025-10-05T00:00:00.000Z", // ISO8601 format
+  "metadata": {                    // Optional contextual details (e.g., rejection reason)
+    "lockupPeriod": "1-year",
+    "paymentFrequency": "monthly"
+  }
 }
 ```
 
-**Important Activity Event Field Rules:**
-- `id`: Always uppercase format (e.g., `TX-INV-10000-CREATED`)
-- `amount`: Only present for monetary events (investment_created, investment_confirmed, investment_rejected, monthly_distribution, monthly_compounded, withdrawals). **NOT present for account_created**.
-- `investmentId`: Present for investment and withdrawal events, absent for account_created
-- `payoutStatus`, `approvedBy`, `approvedAt`, `failureReason`, etc.: Only present for monthly_distribution events
-- **New:** `payoutStatus` includes `pending_approval` state for admin approval workflow
+**Account Activity Field Rules**
+- `id`: Always uppercase and unique (e.g., `TX-INV-10000-CONFIRMED`)
+- `type`: Limited to account-level milestones listed above; distribution/compounding data no longer appears here.
+- `amount`: Only included when there is an actual dollar amount associated with the event (investment confirmation/rejection, withdrawals). Account creation entries omit this field.
+- `investmentId`: Present for investment/withdrawal events; omitted for `account_created`.
+- Additional fields are optional and scoped to the specific event type (e.g., withdrawal metadata such as `payoutDueBy`).
+
+### Investment Transaction Entry (Per-Investment Ledger)
+
+Each investment now owns its own immutable transaction ledger under `investment.transactions`. The ledger powers earnings calculations, investor dashboards, and admin payout workflows.
+
+```json
+{
+  "id": "TX-INV-10000-DIST-2025-11",     // TX-{INV}-{numericId}-{CONTR|DIST|REDEEM}
+  "type": "investment|distribution|contribution|redemption",
+  "status": "pending|approved|received|rejected",
+  "amount": 66.67,
+  "date": "2025-11-01T13:00:00.000Z",
+  "createdAt": "2025-11-01T13:00:00.000Z",
+  "updatedAt": "2025-11-01T13:00:00.000Z",
+
+  // Distribution-specific metadata
+  "monthIndex": 1,
+  "payoutMethod": "bank-account",
+  "payoutBankId": "BANK-USR-1001-1",
+  "payoutBankNickname": "Primary Account",
+  "retryCount": 0,
+  "failureReason": null,
+  "lastRetryAt": null,
+  "completedAt": null,
+
+  // Redemption-specific metadata
+  "withdrawalId": "WDL-10001",
+  "payoutDueBy": "2026-01-30T00:00:00.000Z",
+  "approvedAt": null,
+  "paidAt": null,
+  "rejectedAt": null
+}
+```
+
+**Investment Transaction Field Rules**
+- `type` meanings:
+  - `investment`: Principal allocation when an investment leaves draft status.
+  - `distribution`: Monthly interest payouts for monthly-frequency investments.
+  - `contribution`: Compounded interest that is retained in the investment balance.
+  - `redemption`: Withdrawal lifecycle entries (pending/processed/failed).
+- `status`: Normalized across all transaction types. `pending` represents scheduled actions, `approved` marks items awaiting funds movement, `received` indicates completion, and `rejected` captures failures/cancellations.
+- Distribution transactions may include bank routing metadata, retry counters, and completion timestamps.
+- Contribution transactions store the compounded amount (and optionally the principal snapshot) and are always `approved` autonomously.
+- Redemption transactions reference the corresponding withdrawal (`withdrawalId`) and inherit payout deadlines and timestamps as they move through the lifecycle.
+- Transaction arrays are ordered chronologically by `date`. Future-dated scheduled entries are pruned whenever the admin time machine is rolled back.
 
 ### Withdrawal
 ```json
@@ -2766,10 +2818,10 @@ def calculate_total_earnings(investments, transactions, app_time):
 **⚠️ CRITICAL REQUIREMENT - Admin Dashboard Data Loading:**
 
 The admin dashboard MUST call `/api/migrate-transactions` before loading user data. This endpoint:
-1. Generates all missing `monthly_distribution` events for monthly payout investments
-2. Generates all missing `monthly_compounded` events for compounding investments
-3. Creates events based on completed months according to current app time
-4. Is idempotent (safe to call multiple times - won't create duplicates)
+1. Backfills each investment's `transactions` ledger, creating the canonical `investment` entry when an opportunity leaves draft status.
+2. Generates all missing monthly `distribution` transactions for monthly payout investments (including prorated first/partial months).
+3. Generates all missing monthly `contribution` transactions for compounding investments, rolling interest into principal each period.
+4. Cleans up future-dated ledger entries when app time moves backwards and prunes orphaned activity. The operation is idempotent, so repeated calls are safe.
 
 **Implementation Pattern:**
 ```python
@@ -2804,10 +2856,8 @@ Without calling this endpoint, the Distributions tab will be empty even when inv
 - `POST /api/admin/withdrawals` - Process/reject withdrawal
 
 ### Pending Payouts & Approvals
-- `GET /api/admin/pending-payouts` - List payouts needing approval
-- `POST /api/admin/payouts/:event_id/approve` - Approve single payout
-- `POST /api/admin/payouts/batch-approve` - Approve multiple payouts
-- `POST /api/admin/payouts/:event_id/retry` - Retry failed payout
+- `GET /api/admin/pending-payouts` - List distribution transactions (`status = pending|approved`) requiring action
+- `POST /api/admin/pending-payouts` - Manage a payout (`action: retry|complete|fail`, body contains `userId` and `transactionId`)
 
 ### Admin
 - `GET /api/admin/time-machine` - Get app time
@@ -2821,13 +2871,19 @@ Without calling this endpoint, the Distributions tab will be empty even when inv
 
 ### Overview
 
-The platform automatically generates distribution events for active investments based on the app time. There are two types of distribution events:
+The platform automatically maintains each investment's transaction ledger based on the current app time. Two recurring transaction types are produced:
 
-1. **Monthly Distribution** (`monthly_distribution`) - For monthly payout investments
-   - Interest is calculated and paid out monthly
-   - ⚠️ **CRITICAL:** Events are dated on the **1st of the NEXT month** after accrual period ends
-   - Example: Interest accrued Jan 16-31 → Event dated Feb 1 (NOT Jan 31)
-   - First month is prorated based on confirmation date
+1. **Distribution** (`distribution`) - For monthly payout investments
+   - Interest is calculated and paid out monthly.
+   - ⚠️ **CRITICAL:** Transactions are dated on the **1st of the NEXT month** at 9:00 AM ET after the accrual period ends.
+   - Example: Interest accrued Jan 16-31 → Transaction dated Feb 1 (NOT Jan 31).
+   - First month is prorated based on confirmation date.
+   - Transactions default to `status = pending` with admin-managed settlement fields (`payoutBankId`, `retryCount`, etc.).
+
+2. **Contribution** (`contribution`) - For compounding investments
+   - Interest is calculated monthly and automatically added to principal.
+   - Transactions are created on the 1st of the following month (9:00 AM ET) and stored with `status = approved`.
+   - Each entry preserves the compounded amount and the principal snapshot used for the next period's calculation.
 
 2. **Monthly Compounded** (`monthly_compounded`) - For compounding investments
    - Interest is calculated and added to principal monthly

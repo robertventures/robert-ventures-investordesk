@@ -11,14 +11,20 @@ function eventMeta(ev) {
   switch (ev.type) {
     case 'account_created':
       return { icon: '👤', iconClass: styles.created, title: 'Account Created' }
+    case 'investment':
+      return { icon: '🧾', iconClass: styles.created, title: 'Investment' }
     case 'investment_created':
       return { icon: '🧾', iconClass: styles.created, title: 'Investment Created' }
     case 'investment_confirmed':
       return { icon: '✅', iconClass: styles.confirmed, title: 'Investment Confirmed' }
     case 'investment_rejected':
       return { icon: '❌', iconClass: styles.rejected, title: 'Investment Rejected' }
+    case 'distribution':
+      return { icon: '💸', iconClass: styles.distribution, title: 'Distribution' }
     case 'monthly_distribution':
       return { icon: '💸', iconClass: styles.distribution, title: 'Monthly Payout' }
+    case 'contribution':
+      return { icon: '📈', iconClass: styles.distribution, title: 'Contribution (Compounded)' }
     case 'monthly_compounded':
       return { icon: '📈', iconClass: styles.distribution, title: 'Monthly Compounded' }
     case 'withdrawal_requested':
@@ -29,6 +35,8 @@ function eventMeta(ev) {
       return { icon: '✅', iconClass: styles.confirmed, title: 'Withdrawal Processed' }
     case 'withdrawal_rejected':
       return { icon: '❌', iconClass: styles.withdrawal, title: 'Withdrawal Rejected' }
+    case 'redemption':
+      return { icon: '🏦', iconClass: styles.withdrawal, title: 'Redemption' }
     default:
       return { icon: '•', iconClass: '', title: ev.type }
   }
@@ -52,8 +60,21 @@ export default function TransactionsList({ limit = null, showViewAll = true, fil
         const data = await res.json()
         if (data.success && data.user) {
           setUser(data.user)
-          const tx = Array.isArray(data.user.activity) ? data.user.activity : []
-          const sorted = tx.slice().sort((a, b) => new Date(b.date) - new Date(a.date))
+          const baseEvents = Array.isArray(data.user.activity) ? data.user.activity : []
+          const investmentEvents = (data.user.investments || []).flatMap(inv => {
+            const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
+            return transactions.map(tx => ({
+              ...tx,
+              type: tx.type,
+              date: tx.date || tx.createdAt,
+              investmentId: inv.id,
+              lockupPeriod: inv.lockupPeriod,
+              paymentFrequency: inv.paymentFrequency,
+              investmentAmount: inv.amount || 0
+            }))
+          })
+          const combined = [...baseEvents, ...investmentEvents]
+          const sorted = combined.slice().sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))
           setEvents(sorted)
         }
       } finally {
@@ -77,8 +98,8 @@ export default function TransactionsList({ limit = null, showViewAll = true, fil
         {visibleEvents.map(ev => {
           const meta = eventMeta(ev)
           const date = ev.date ? new Date(ev.date).toLocaleDateString('en-US', { timeZone: 'UTC' }) : '-'
-          const isDistribution = ev.type === 'monthly_distribution'
-          const isWithdrawal = ev.type === 'withdrawal_requested'
+          const isDistribution = ev.type === 'distribution' || ev.type === 'monthly_distribution'
+          const isWithdrawal = ev.type === 'withdrawal_requested' || ev.type === 'redemption'
           const amountClass = isWithdrawal ? styles.negative : styles.positive
           const isExpanded = expandable && expandedId === ev.id
           // Only show amount for events that have a monetary value
@@ -91,7 +112,8 @@ export default function TransactionsList({ limit = null, showViewAll = true, fil
                 <div className={styles.metaRow}>
                   <span>{date}</span>
                   {isDistribution && ev.monthIndex ? <span>• Month {ev.monthIndex}</span> : null}
-                  {isDistribution && ev.payoutStatus ? <span>• Payout {ev.payoutStatus}</span> : null}
+                  {isDistribution && ev.status ? <span>• {ev.status.toUpperCase()}</span> : null}
+                  {ev.status && !isDistribution ? <span>• {ev.status.toUpperCase()}</span> : null}
                   {isDistribution && ev.payoutBankNickname ? <span>• {ev.payoutBankNickname}</span> : null}
                   {ev.investmentId ? (
                     <span
@@ -110,7 +132,7 @@ export default function TransactionsList({ limit = null, showViewAll = true, fil
                     {ev.lockupPeriod ? <div className={styles.detailRow}><span className={styles.detailKey}>Lockup</span><span className={styles.detailVal}>{ev.lockupPeriod}</span></div> : null}
                     {ev.paymentFrequency ? <div className={styles.detailRow}><span className={styles.detailKey}>Payment</span><span className={styles.detailVal}>{ev.paymentFrequency}</span></div> : null}
                     {typeof ev.monthIndex !== 'undefined' ? <div className={styles.detailRow}><span className={styles.detailKey}>Month Index</span><span className={styles.detailVal}>{ev.monthIndex}</span></div> : null}
-                    {ev.payoutStatus ? <div className={styles.detailRow}><span className={styles.detailKey}>Payout Status</span><span className={styles.detailVal}>{ev.payoutStatus}</span></div> : null}
+                    {ev.status ? <div className={styles.detailRow}><span className={styles.detailKey}>Status</span><span className={styles.detailVal}>{ev.status}</span></div> : null}
                     {ev.payoutBankNickname ? <div className={styles.detailRow}><span className={styles.detailKey}>Bank</span><span className={styles.detailVal}>{ev.payoutBankNickname}</span></div> : null}
                     {ev.noticeEndAt ? <div className={styles.detailRow}><span className={styles.detailKey}>Notice Ends</span><span className={styles.detailVal}>{new Date(ev.noticeEndAt).toLocaleDateString('en-US', { timeZone: 'UTC' })}</span></div> : null}
                     {ev.payoutDueBy ? <div className={styles.detailRow}><span className={styles.detailKey}>Payout Due By</span><span className={styles.detailVal}>{new Date(ev.payoutDueBy).toLocaleDateString('en-US', { timeZone: 'UTC' })}</span></div> : null}
@@ -134,5 +156,4 @@ export default function TransactionsList({ limit = null, showViewAll = true, fil
     </div>
   )
 }
-
 

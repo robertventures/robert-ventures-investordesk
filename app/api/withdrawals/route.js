@@ -64,6 +64,7 @@ export async function POST(request) {
 
     // Create withdrawal record with sequential ID
     const withdrawalId = generateWithdrawalId(usersData.users)
+    const nowIso = now.toISOString()
     const withdrawal = {
       id: withdrawalId,
       investmentId,
@@ -72,7 +73,7 @@ export async function POST(request) {
       principalAmount: principalAmount,
       earningsAmount: earningsAmount,
       status: 'notice',
-      requestedAt: now.toISOString(),
+      requestedAt: nowIso,
       noticeStartAt,
       payoutDueBy,
       investment: {
@@ -85,6 +86,32 @@ export async function POST(request) {
     }
 
     // Update investment status to reflect withdrawal notice period
+    const investmentTransactions = Array.isArray(investment.transactions) ? investment.transactions : []
+    const redemptionTxId = generateTransactionId('INV', investmentId, 'redemption', { withdrawalId })
+    const existingRedemptionIndex = investmentTransactions.findIndex(tx => tx.id === redemptionTxId)
+    const redemptionTransaction = {
+      id: redemptionTxId,
+      type: 'redemption',
+      amount: withdrawableAmount,
+      status: 'pending',
+      date: nowIso,
+      withdrawalId,
+      payoutDueBy,
+      approvedAt: null,
+      paidAt: null,
+      rejectedAt: null,
+      createdAt: nowIso,
+      updatedAt: nowIso
+    }
+    if (existingRedemptionIndex === -1) {
+      investmentTransactions.push(redemptionTransaction)
+    } else {
+      investmentTransactions[existingRedemptionIndex] = {
+        ...investmentTransactions[existingRedemptionIndex],
+        ...redemptionTransaction
+      }
+    }
+
     investments[invIndex] = {
       ...investment,
       status: 'withdrawal_notice',
@@ -93,7 +120,8 @@ export async function POST(request) {
       withdrawalId,
       finalValue: withdrawableAmount,
       totalEarnings: earningsAmount,
-      updatedAt: new Date().toISOString()
+      transactions: investmentTransactions,
+      updatedAt: nowIso
     }
 
     // Add withdrawal to user's withdrawals array

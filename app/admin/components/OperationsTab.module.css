@@ -272,6 +272,11 @@
   color: #065f46;
 }
 
+.badge.received {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
 .badge.rejected {
   background-color: #fee2e2;
   color: #991b1b;
@@ -349,5 +354,4 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
-
 

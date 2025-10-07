@@ -460,8 +460,9 @@ export default function AdminUserDetailsPage({ params }) {
   const pendingTotal = (user.investments || []).filter(inv => inv.status === 'pending' || inv.status === 'draft').reduce((sum, inv) => sum + (inv.amount || 0), 0)
   
   // Calculate pending payouts (monthly distributions awaiting admin approval)
-  const pendingPayouts = (user.activity || [])
-    .filter(tx => tx.type === 'monthly_distribution' && (tx.payoutStatus === 'pending' || tx.payoutStatus === 'failed'))
+  const pendingPayouts = (user.investments || [])
+    .flatMap(inv => Array.isArray(inv.transactions) ? inv.transactions : [])
+    .filter(tx => tx.type === 'distribution' && tx.status === 'pending')
     .reduce((sum, tx) => sum + (tx.amount || 0), 0)
   
   // Calculate original investment value (sum of all active investment principals)
@@ -827,5 +828,4 @@ export default function AdminUserDetailsPage({ params }) {
     </div>
   )
 }
-
 

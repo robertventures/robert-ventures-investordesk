@@ -9,7 +9,7 @@ import styles from './DistributionsTab.module.css'
 export default function DistributionsTab({ users }) {
   const router = useRouter()
   const [searchTerm, setSearchTerm] = useState('')
-  const [filterType, setFilterType] = useState('all') // 'all', 'monthly_distribution', 'monthly_compounded'
+  const [filterType, setFilterType] = useState('all') // 'all', 'distribution', 'contribution'
   const [groupBy, setGroupBy] = useState('date') // 'date', 'user', 'investment'
 
   // Collect all distribution events from all users
@@ -17,19 +17,23 @@ export default function DistributionsTab({ users }) {
     const events = []
     
     users.forEach(user => {
-      if (Array.isArray(user.activity)) {
-        user.activity.forEach(event => {
-          // Only include distribution-related events
-          if (event.type === 'monthly_distribution' || event.type === 'monthly_compounded') {
+      const investments = Array.isArray(user.investments) ? user.investments : []
+      investments.forEach(investment => {
+        const transactions = Array.isArray(investment.transactions) ? investment.transactions : []
+        transactions.forEach(tx => {
+          if (tx.type === 'distribution' || tx.type === 'contribution') {
             events.push({
-              ...event,
+              ...tx,
               userId: user.id,
               userEmail: user.email,
-              userName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email
+              userName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
+              investmentId: investment.id,
+              lockupPeriod: investment.lockupPeriod || tx.lockupPeriod,
+              paymentFrequency: investment.paymentFrequency || tx.paymentFrequency
             })
           }
         })
-      }
+      })
     })
 
     // Sort by date (most recent first)
@@ -70,8 +74,8 @@ export default function DistributionsTab({ users }) {
 
   // Calculate summary statistics
   const summary = useMemo(() => {
-    const payouts = filteredDistributions.filter(e => e.type === 'monthly_distribution')
-    const compounded = filteredDistributions.filter(e => e.type === 'monthly_compounded')
+    const payouts = filteredDistributions.filter(e => e.type === 'distribution')
+    const compounded = filteredDistributions.filter(e => e.type === 'contribution')
     
     const totalPayouts = payouts.reduce((sum, e) => sum + (e.amount || 0), 0)
     const totalCompounded = compounded.reduce((sum, e) => sum + (e.amount || 0), 0)
@@ -94,8 +98,7 @@ export default function DistributionsTab({ users }) {
     filteredDistributions.forEach(event => {
       if (!event.date) return
       
-      const displayDateValue = event.displayDate || event.date
-      const date = new Date(displayDateValue)
+      const date = new Date(event.date)
       const monthKey = date.toLocaleString('en-US', {
         timeZone: 'America/New_York',
         year: 'numeric',
@@ -105,7 +108,7 @@ export default function DistributionsTab({ users }) {
       if (!groups[monthKey]) {
         groups[monthKey] = {
           monthKey,
-          displayMonth: new Date(displayDateValue).toLocaleDateString('en-US', {
+          displayMonth: date.toLocaleDateString('en-US', {
             month: 'long',
             year: 'numeric',
             timeZone: 'America/New_York'
@@ -120,9 +123,9 @@ export default function DistributionsTab({ users }) {
       groups[monthKey].events.push(event)
       groups[monthKey].totalAmount += event.amount || 0
       
-      if (event.type === 'monthly_distribution') {
+      if (event.type === 'distribution') {
         groups[monthKey].payoutAmount += event.amount || 0
-      } else if (event.type === 'monthly_compounded') {
+      } else if (event.type === 'contribution') {
         groups[monthKey].compoundedAmount += event.amount || 0
       }
     })
@@ -135,15 +138,15 @@ export default function DistributionsTab({ users }) {
   }
 
   const getEventIcon = (eventType) => {
-    return eventType === 'monthly_distribution' ? '💸' : '📈'
+    return eventType === 'distribution' ? '💸' : '📈'
   }
 
   const getEventTitle = (eventType) => {
-    return eventType === 'monthly_distribution' ? 'Monthly Payout' : 'Compounded Interest'
+    return eventType === 'distribution' ? 'Distribution' : 'Contribution (Compounded)'
   }
 
   const getEventColor = (eventType) => {
-    return eventType === 'monthly_distribution' ? '#5b21b6' : '#0369a1'
+    return eventType === 'distribution' ? '#5b21b6' : '#0369a1'
   }
 
   return (
@@ -177,14 +180,14 @@ export default function DistributionsTab({ users }) {
             All Distributions
           </button>
           <button
-            className={`${styles.filterButton} ${filterType === 'monthly_distribution' ? styles.active : ''}`}
-            onClick={() => setFilterType('monthly_distribution')}
+            className={`${styles.filterButton} ${filterType === 'distribution' ? styles.active : ''}`}
+            onClick={() => setFilterType('distribution')}
           >
             💸 Payouts
           </button>
           <button
-            className={`${styles.filterButton} ${filterType === 'monthly_compounded' ? styles.active : ''}`}
-            onClick={() => setFilterType('monthly_compounded')}
+            className={`${styles.filterButton} ${filterType === 'contribution' ? styles.active : ''}`}
+            onClick={() => setFilterType('contribution')}
           >
             📈 Compounded
           </button>
@@ -329,4 +332,3 @@ export default function DistributionsTab({ users }) {
     </div>
   )
 }
-

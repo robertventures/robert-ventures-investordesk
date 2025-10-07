@@ -25,6 +25,21 @@ export default function ActivityTab({ users }) {
           })
         })
       }
+      const investments = Array.isArray(user.investments) ? user.investments : []
+      investments.forEach(investment => {
+        const transactions = Array.isArray(investment.transactions) ? investment.transactions : []
+        transactions.forEach(tx => {
+          events.push({
+            ...tx,
+            userId: user.id,
+            userEmail: user.email,
+            userName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
+            investmentId: investment.id,
+            lockupPeriod: investment.lockupPeriod || tx.lockupPeriod,
+            paymentFrequency: investment.paymentFrequency || tx.paymentFrequency
+          })
+        })
+      })
     })
 
     // Sort by date (most recent first)
@@ -65,8 +80,14 @@ export default function ActivityTab({ users }) {
         return { icon: '✅', title: 'Investment Confirmed', color: '#065f46' }
       case 'investment_rejected':
         return { icon: '❌', title: 'Investment Rejected', color: '#991b1b' }
+      case 'investment':
+        return { icon: '🧾', title: 'Investment Transaction', color: '#0369a1' }
+      case 'distribution':
+        return { icon: '💸', title: 'Distribution', color: '#5b21b6' }
       case 'monthly_distribution':
         return { icon: '💸', title: 'Monthly Payout', color: '#5b21b6' }
+      case 'contribution':
+        return { icon: '📈', title: 'Contribution (Compounded)', color: '#5b21b6' }
       case 'monthly_compounded':
         return { icon: '📈', title: 'Monthly Compounded', color: '#5b21b6' }
       case 'withdrawal_requested':
@@ -77,6 +98,8 @@ export default function ActivityTab({ users }) {
         return { icon: '✅', title: 'Withdrawal Processed', color: '#065f46' }
       case 'withdrawal_rejected':
         return { icon: '❌', title: 'Withdrawal Rejected', color: '#991b1b' }
+      case 'redemption':
+        return { icon: '🏦', title: 'Redemption', color: '#ca8a04' }
       default:
         return { icon: '•', title: eventType || 'Unknown Event', color: '#6b7280' }
     }
@@ -210,4 +233,3 @@ export default function ActivityTab({ users }) {
     </div>
   )
 }
-

@@ -112,6 +112,20 @@ const buildAccrualSegments = (startDate, endDate) => {
   return segments
 }
 
+const mapLegacyPayoutStatus = (status) => {
+  if (!status) return 'pending'
+  switch (status) {
+    case 'completed':
+      return 'received'
+    case 'failed':
+      return 'rejected'
+    case 'approved':
+      return 'approved'
+    default:
+      return 'pending'
+  }
+}
+
 // POST - Generate and persist transaction events for users (idempotent per period)
 // - investment_created
 // - investment_confirmed
@@ -127,321 +141,399 @@ export async function POST() {
     let usersUpdated = 0
     let eventsCreated = 0
 
+    let dataMutated = false
+
     for (const user of usersData.users) {
       const investments = Array.isArray(user.investments) ? user.investments : []
       const withdrawals = Array.isArray(user.withdrawals) ? user.withdrawals : []
+      let userTouched = false
 
       if (!Array.isArray(user.activity)) {
         user.activity = []
       }
 
-      // Remove any future-dated generated events if app time moved backwards
-      // Also prune events tied to investments that no longer exist
-      const existingInvestmentIds = new Set((investments || []).map(i => i.id))
+      const existingInvestmentIds = new Set(investments.map(i => i.id))
+      const legacyDistributionEvents = new Map()
+      const legacyContributionEvents = new Map()
+
+      for (const event of user.activity) {
+        if (!event || !event.investmentId) continue
+        if (!existingInvestmentIds.has(event.investmentId)) continue
+        const referenceDate = event.displayDate || event.date
+        if (!referenceDate) continue
+        const key = `${event.investmentId}-${new Date(referenceDate).toISOString()}`
+        if (event.type === 'monthly_distribution') {
+          legacyDistributionEvents.set(key, event)
+        } else if (event.type === 'monthly_compounded') {
+          legacyContributionEvents.set(key, event)
+        }
+      }
+
+      const transactionActivityTypes = new Set([
+        'monthly_distribution',
+        'monthly_compounded',
+        'withdrawal_requested',
+        'withdrawal_notice_started',
+        'withdrawal_approved',
+        'withdrawal_rejected'
+      ])
+
+      const originalActivityLength = user.activity.length
       user.activity = user.activity.filter(ev => {
         if (!ev || !ev.date) return true
         const evDate = new Date(ev.date)
         if (evDate > now) return false
-        // If this event references an investment that is gone, drop it
         if (ev.investmentId && !existingInvestmentIds.has(ev.investmentId)) return false
+        if (transactionActivityTypes.has(ev.type)) return false
         return true
       })
-
-      const existingIds = new Set(user.activity.map(t => t.id))
-      const ensureEvent = (event) => {
-        if (!existingIds.has(event.id)) {
-          user.activity.push(event)
-          existingIds.add(event.id)
-          eventsCreated++
-          return true
-        }
-        return false
+      if (user.activity.length !== originalActivityLength) {
+        userTouched = true
+        dataMutated = true
       }
 
-      // Account created event (always present when user.createdAt exists)
       if (user.createdAt) {
-        ensureEvent({
-          id: generateTransactionId('USR', user.id, 'account_created'),
-          type: 'account_created',
-          date: user.createdAt
-        })
+        const accountEventId = generateTransactionId('USR', user.id, 'account_created')
+        const hasAccountEvent = user.activity.some(ev => ev.id === accountEventId)
+        if (!hasAccountEvent) {
+          user.activity.push({
+            id: accountEventId,
+            type: 'account_created',
+            date: user.createdAt
+          })
+          eventsCreated++
+          userTouched = true
+          dataMutated = true
+        }
       }
 
-      // Investment events
       for (const inv of investments) {
-        const invId = inv.id
+        if (!inv || !inv.id) continue
+        let investmentTouched = false
+
+        if (!Array.isArray(inv.transactions)) {
+          inv.transactions = []
+          investmentTouched = true
+        }
+
+        const filteredTransactions = inv.transactions.filter(tx => {
+          if (!tx || !tx.date) return true
+          if ((tx.type === 'distribution' || tx.type === 'contribution') && new Date(tx.date) > now) {
+            return false
+          }
+          return true
+        })
+
+        if (filteredTransactions.length !== inv.transactions.length) {
+          inv.transactions = filteredTransactions
+          investmentTouched = true
+          dataMutated = true
+        }
+
+        const findTransaction = (id) => inv.transactions.find(tx => tx.id === id)
+        const ensureTransaction = (tx) => {
+          const existingIndex = inv.transactions.findIndex(existing => existing.id === tx.id)
+          const createdAt = tx.createdAt || tx.date || now.toISOString()
+          if (existingIndex === -1) {
+            inv.transactions.push({
+              ...tx,
+              createdAt,
+              updatedAt: tx.updatedAt || createdAt
+            })
+            investmentTouched = true
+            userTouched = true
+            dataMutated = true
+            eventsCreated++
+            return
+          }
+          const existing = inv.transactions[existingIndex]
+          let modified = false
+          for (const [key, value] of Object.entries(tx)) {
+            if (key === 'id') continue
+            const current = existing[key]
+            const isSame = (typeof value === 'object' && value !== null)
+              ? JSON.stringify(current) === JSON.stringify(value)
+              : current === value
+            if (!isSame) {
+              existing[key] = value
+              modified = true
+            }
+          }
+          if (modified) {
+            existing.updatedAt = tx.updatedAt || now.toISOString()
+            investmentTouched = true
+            userTouched = true
+            dataMutated = true
+          }
+        }
+
+        if (inv.status === 'draft') {
+          const before = inv.transactions.length
+          inv.transactions = inv.transactions.filter(tx => tx.type !== 'investment')
+          if (inv.transactions.length !== before) {
+            investmentTouched = true
+            dataMutated = true
+          }
+          if (investmentTouched) {
+            inv.updatedAt = now.toISOString()
+          }
+          continue
+        }
+
         const amount = inv.amount || 0
         const lockup = inv.lockupPeriod
         const payFreq = inv.paymentFrequency
 
-        // Created event: only for non-draft investments
-        if (inv.status !== 'draft' && inv.createdAt) {
-          ensureEvent({
-            id: generateTransactionId('INV', invId, 'investment_created'),
-            type: 'investment_created',
-            investmentId: invId,
-            amount,
-            lockupPeriod: lockup,
-            paymentFrequency: payFreq,
-            date: inv.createdAt
-          })
-        }
+        const investmentTxId = generateTransactionId('INV', inv.id, 'investment')
+        const investmentStatus = (() => {
+          switch (inv.status) {
+            case 'pending':
+              return 'pending'
+            case 'rejected':
+              return 'rejected'
+            case 'withdrawn':
+              return 'received'
+            case 'withdrawal_notice':
+            case 'active':
+            default:
+              return 'approved'
+          }
+        })()
+        const investmentDate = inv.submittedAt || inv.createdAt || inv.confirmedAt || inv.updatedAt || now.toISOString()
+        ensureTransaction({
+          id: investmentTxId,
+          type: 'investment',
+          amount,
+          status: investmentStatus,
+          date: investmentDate,
+          lockupPeriod: lockup,
+          paymentFrequency: payFreq,
+          confirmedAt: inv.confirmedAt || null,
+          approvedAt: inv.confirmedAt || null,
+          rejectedAt: inv.rejectedAt || null
+        })
 
-        // Confirmed event (status = active)
-        if (inv.status === 'active' && inv.confirmedAt) {
-          ensureEvent({
-            id: generateTransactionId('INV', invId, 'investment_confirmed'),
-            type: 'investment_confirmed',
-            investmentId: invId,
-            amount,
-            lockupPeriod: lockup,
-            paymentFrequency: payFreq,
-            date: inv.confirmedAt
-          })
-        }
-
-        // Rejected event (status = rejected)
-        if (inv.status === 'rejected' && inv.rejectedAt) {
-          ensureEvent({
-            id: generateTransactionId('INV', invId, 'investment_rejected'),
-            type: 'investment_rejected',
-            investmentId: invId,
-            amount,
-            lockupPeriod: lockup,
-            paymentFrequency: payFreq,
-            date: inv.rejectedAt
-          })
-        }
-
-        // Monthly distributions for monthly payout investments (prorated first month)
-        if (inv.status === 'active' && inv.paymentFrequency === 'monthly' && inv.confirmedAt) {
+        // Distributions for monthly payout investments
+        if ((inv.status === 'active' || inv.status === 'withdrawal_notice') && payFreq === 'monthly' && inv.confirmedAt) {
           const confirmedDate = new Date(inv.confirmedAt)
-          // Interest starts accruing from the day AFTER confirmation
           const accrualStartDate = addDaysUtc(toUtcStartOfDay(confirmedDate), 1)
-
           const annualRate = inv.lockupPeriod === '1-year' ? 0.08 : 0.10
           const monthlyRate = annualRate / 12
-          
-          // Resolve payout destination and check bank connection status
+
           const payoutMethod = user?.banking?.payoutMethod || 'bank-account'
           const investmentBank = inv?.banking?.bank
           let payoutBankId = investmentBank?.id || null
           let payoutBankNickname = investmentBank?.nickname || null
-          let bankConnectionActive = true
-          
+
           if (!payoutBankId && Array.isArray(user?.bankAccounts) && user?.banking?.defaultBankAccountId) {
             const acct = user.bankAccounts.find(b => b.id === user.banking.defaultBankAccountId)
             if (acct) {
               payoutBankId = acct.id
               payoutBankNickname = acct.nickname || 'Primary Account'
-              // Check if bank account has connection issues
-              bankConnectionActive = acct.connectionStatus !== 'disconnected' && acct.connectionStatus !== 'error'
             }
           }
-          
-          // If investment has specific bank info, check its connection status
-          if (investmentBank) {
-            bankConnectionActive = investmentBank.connectionStatus !== 'disconnected' && investmentBank.connectionStatus !== 'error'
+
+          if (!payoutBankId) {
+            payoutBankId = 'MOCK-BANK-001'
+            payoutBankNickname = 'Test Bank Account (Mock)'
           }
-          
-          // Find all completed month-end boundaries
+
           const completedMonthEnds = []
           let cursor = new Date(accrualStartDate)
-          
+
           while (true) {
             const monthEnd = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 0))
             if (monthEnd >= now) break
             completedMonthEnds.push(monthEnd)
             cursor = addDaysUtc(monthEnd, 1)
           }
-          
-          if (completedMonthEnds.length === 0) continue
-          
-          // Build segments up to the last completed month end
-          const lastCompletedMonthEnd = completedMonthEnds[completedMonthEnds.length - 1]
-          const segments = buildAccrualSegments(accrualStartDate, lastCompletedMonthEnd)
-          
-          // Generate distribution events for each segment
-          // CRITICAL: Distributions are paid on the 1st of the NEXT month after accrual period ends
-          let monthIndex = 1
-          segments.forEach(segment => {
-            const monthlyInterest = (inv.amount || 0) * monthlyRate
-            let distributionAmount = 0
-            
-            if (segment.type === 'full') {
-              distributionAmount = monthlyInterest
-            } else {
-              const prorated = monthlyInterest * (segment.days / segment.daysInMonth)
-              distributionAmount = prorated
-            }
-            
-            // Distribution date is explicitly set to the 1st of the NEXT month at 9:00 AM Eastern Time
-            // This ensures consistency across all time zones - all distributions happen at 9:00 AM EST/EDT
-            const segmentEndDate = new Date(segment.end)
-            // Calculate the year and month for the 1st of the NEXT month
-            const nextYear = segmentEndDate.getUTCMonth() === 11 ? 
-              segmentEndDate.getUTCFullYear() + 1 : 
-              segmentEndDate.getUTCFullYear()
-            const nextMonth = segmentEndDate.getUTCMonth() === 11 ? 1 : segmentEndDate.getUTCMonth() + 2
-            
-            // Create the distribution date at 9:00 AM Eastern Time on the 1st
-            const distributionDate = createEasternTime9AM(nextYear, nextMonth, 1)
-            const eventId = generateTransactionId('INV', invId, 'monthly_distribution', { date: distributionDate })
-            
-            // TESTING MODE: All payouts require admin approval
-            // In production, admin must manually approve all monthly payouts
-            // This ensures proper oversight and compliance
-            let payoutStatus = 'pending'
-            let failureReason = 'Awaiting admin approval'
-            
-            // For testing: Use mock bank details if no real bank is configured
-            if (!payoutBankId) {
-              payoutBankId = 'MOCK-BANK-001'
-              payoutBankNickname = 'Test Bank Account (Mock)'
-            }
-            
-            ensureEvent({
-              id: eventId,
-              type: 'monthly_distribution',
-              investmentId: invId,
-              amount: Math.round(distributionAmount * 100) / 100,
-              lockupPeriod: lockup,
-              paymentFrequency: payFreq,
-              date: distributionDate.toISOString(),
-              displayDate: distributionDate.toISOString(),
-              monthIndex,
-              payoutMethod,
-              payoutBankId,
-              payoutBankNickname,
-              payoutStatus,
-              failureReason,
-              retryCount: 0
+
+          if (completedMonthEnds.length > 0) {
+            const lastCompletedMonthEnd = completedMonthEnds[completedMonthEnds.length - 1]
+            const segments = buildAccrualSegments(accrualStartDate, lastCompletedMonthEnd)
+            let monthIndex = 1
+
+            segments.forEach(segment => {
+              const monthlyInterest = amount * monthlyRate
+              const distributionAmount = segment.type === 'full'
+                ? monthlyInterest
+                : monthlyInterest * (segment.days / segment.daysInMonth)
+
+              const segmentEndDate = new Date(segment.end)
+              const nextYear = segmentEndDate.getUTCMonth() === 11
+                ? segmentEndDate.getUTCFullYear() + 1
+                : segmentEndDate.getUTCFullYear()
+              const nextMonth = segmentEndDate.getUTCMonth() === 11
+                ? 1
+                : segmentEndDate.getUTCMonth() + 2
+              const distributionDate = createEasternTime9AM(nextYear, nextMonth, 1)
+              const distributionDateIso = distributionDate.toISOString()
+              const txId = generateTransactionId('INV', inv.id, 'distribution', { date: distributionDate })
+              const existingTx = findTransaction(txId)
+              const legacyKey = `${inv.id}-${distributionDateIso}`
+              const legacyEvent = legacyDistributionEvents.get(legacyKey)
+
+              let status = legacyEvent ? mapLegacyPayoutStatus(legacyEvent.payoutStatus) : 'pending'
+              if (existingTx && existingTx.status && existingTx.status !== 'pending' && status === 'pending') {
+                status = existingTx.status
+              }
+
+              ensureTransaction({
+                id: txId,
+                type: 'distribution',
+                amount: Math.round(distributionAmount * 100) / 100,
+                status,
+                date: distributionDateIso,
+                monthIndex,
+                lockupPeriod: lockup,
+                paymentFrequency: payFreq,
+                payoutMethod,
+                payoutBankId,
+                payoutBankNickname,
+                failureReason: legacyEvent?.failureReason || existingTx?.failureReason || null,
+                retryCount: legacyEvent?.retryCount ?? existingTx?.retryCount ?? 0,
+                lastRetryAt: legacyEvent?.lastRetryAt || existingTx?.lastRetryAt || null,
+                completedAt: legacyEvent?.completedAt || existingTx?.completedAt || null,
+                manuallyCompleted: legacyEvent?.manuallyCompleted || existingTx?.manuallyCompleted || false,
+                failedAt: legacyEvent?.failedAt || existingTx?.failedAt || null
+              })
+
+              monthIndex += 1
             })
-            
-            monthIndex += 1
-          })
+          }
         }
 
-        // Monthly compounding events (prorated first month, compounding principal)
-        if (inv.status === 'active' && inv.paymentFrequency === 'compounding' && inv.confirmedAt) {
+        // Contributions for compounding investments
+        if ((inv.status === 'active' || inv.status === 'withdrawal_notice') && payFreq === 'compounding' && inv.confirmedAt) {
           const confirmedDate = new Date(inv.confirmedAt)
-          // Interest starts accruing from the day AFTER confirmation
           const accrualStartDate = addDaysUtc(toUtcStartOfDay(confirmedDate), 1)
-
           const annualRate = inv.lockupPeriod === '1-year' ? 0.08 : 0.10
           const monthlyRate = annualRate / 12
-          
-          // Find all completed month-end boundaries
+
           const completedMonthEnds = []
           let cursor = new Date(accrualStartDate)
-          
+
           while (true) {
             const monthEnd = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 0))
             if (monthEnd >= now) break
             completedMonthEnds.push(monthEnd)
             cursor = addDaysUtc(monthEnd, 1)
           }
-          
-          if (completedMonthEnds.length === 0) continue
-          
-          // Build segments up to the last completed month end
-          const lastCompletedMonthEnd = completedMonthEnds[completedMonthEnds.length - 1]
-          const segments = buildAccrualSegments(accrualStartDate, lastCompletedMonthEnd)
-          
-          // Generate compounding events for each segment
-          // CRITICAL: Compounding happens on the 1st of the NEXT month after accrual period ends
-          let monthIndex = 1
-          let balance = amount
-          
-          segments.forEach(segment => {
-            let interest = 0
-            
-            if (segment.type === 'full') {
-              interest = balance * monthlyRate
-            } else {
-              const dailyRate = monthlyRate / segment.daysInMonth
-              interest = balance * dailyRate * segment.days
-            }
-            
-            // Compounding date is explicitly set to the 1st of the NEXT month at 9:00 AM Eastern Time
-            // This ensures consistency across all time zones - all compounding happens at 9:00 AM EST/EDT
-            const segmentEndDate = new Date(segment.end)
-            // Calculate the year and month for the 1st of the NEXT month
-            const nextYear = segmentEndDate.getUTCMonth() === 11 ? 
-              segmentEndDate.getUTCFullYear() + 1 : 
-              segmentEndDate.getUTCFullYear()
-            const nextMonth = segmentEndDate.getUTCMonth() === 11 ? 1 : segmentEndDate.getUTCMonth() + 2
-            
-            // Create the compounding date at 9:00 AM Eastern Time on the 1st
-            const compoundingDate = createEasternTime9AM(nextYear, nextMonth, 1)
-            const eventId = generateTransactionId('INV', invId, 'monthly_compounded', { date: compoundingDate })
-            ensureEvent({
-              id: eventId,
-              type: 'monthly_compounded',
-              investmentId: invId,
-              amount: Math.round(interest * 100) / 100,
-              lockupPeriod: lockup,
-              paymentFrequency: payFreq,
-              date: compoundingDate.toISOString(),
-              displayDate: compoundingDate.toISOString(),
-              monthIndex,
-              principal: Math.round(balance * 100) / 100
+
+          if (completedMonthEnds.length > 0) {
+            const lastCompletedMonthEnd = completedMonthEnds[completedMonthEnds.length - 1]
+            const segments = buildAccrualSegments(accrualStartDate, lastCompletedMonthEnd)
+            let monthIndex = 1
+            let balance = amount
+
+            segments.forEach(segment => {
+              const interest = segment.type === 'full'
+                ? balance * monthlyRate
+                : balance * (monthlyRate / segment.daysInMonth) * segment.days
+
+              const segmentEndDate = new Date(segment.end)
+              const nextYear = segmentEndDate.getUTCMonth() === 11
+                ? segmentEndDate.getUTCFullYear() + 1
+                : segmentEndDate.getUTCFullYear()
+              const nextMonth = segmentEndDate.getUTCMonth() === 11
+                ? 1
+                : segmentEndDate.getUTCMonth() + 2
+              const compoundingDate = createEasternTime9AM(nextYear, nextMonth, 1)
+              const compoundingDateIso = compoundingDate.toISOString()
+              const txId = generateTransactionId('INV', inv.id, 'contribution', { date: compoundingDate })
+              const legacyKey = `${inv.id}-${compoundingDateIso}`
+              const legacyEvent = legacyContributionEvents.get(legacyKey)
+
+              ensureTransaction({
+                id: txId,
+                type: 'contribution',
+                amount: Math.round(interest * 100) / 100,
+                status: 'approved',
+                date: compoundingDateIso,
+                monthIndex,
+                lockupPeriod: lockup,
+                paymentFrequency: payFreq,
+                principal: Math.round(balance * 100) / 100,
+                legacyReferenceId: legacyEvent?.id || null
+              })
+
+              balance += interest
+              monthIndex += 1
             })
+          }
+        }
 
-            // Compound the interest into balance for next period
-            balance += interest
-            monthIndex += 1
+        // Redemptions for withdrawals
+        const linkedWithdrawals = withdrawals.filter(wd => wd?.investmentId === inv.id)
+        const activeWithdrawalIds = new Set()
+
+        for (const wd of linkedWithdrawals) {
+          if (!wd || !wd.id) continue
+          activeWithdrawalIds.add(wd.id)
+          const txId = generateTransactionId('INV', inv.id, 'redemption', { withdrawalId: wd.id })
+          const existingTx = findTransaction(txId)
+
+          let status
+          switch (wd.status) {
+            case 'approved':
+              status = 'received'
+              break
+            case 'rejected':
+              status = 'rejected'
+              break
+            case 'pending':
+            case 'notice':
+            default:
+              status = 'pending'
+          }
+          if (existingTx && existingTx.status && existingTx.status !== 'pending' && status === 'pending') {
+            status = existingTx.status
+          }
+
+          ensureTransaction({
+            id: txId,
+            type: 'redemption',
+            amount: wd.amount || 0,
+            status,
+            date: wd.requestedAt || wd.noticeStartAt || wd.approvedAt || wd.paidAt || now.toISOString(),
+            withdrawalId: wd.id,
+            payoutDueBy: wd.payoutDueBy || null,
+            approvedAt: wd.approvedAt || null,
+            paidAt: wd.paidAt || null,
+            rejectedAt: wd.rejectedAt || null
           })
+        }
+
+        const beforeRedemptionLength = inv.transactions.length
+        inv.transactions = inv.transactions.filter(tx => {
+          if (tx.type !== 'redemption') return true
+          if (!tx.withdrawalId) return false
+          return activeWithdrawalIds.has(tx.withdrawalId)
+        })
+        if (inv.transactions.length !== beforeRedemptionLength) {
+          investmentTouched = true
+          userTouched = true
+          dataMutated = true
+        }
+
+        if (investmentTouched) {
+          inv.transactions.sort((a, b) => {
+            const dateA = new Date(a.date || a.createdAt || 0).getTime()
+            const dateB = new Date(b.date || b.createdAt || 0).getTime()
+            return dateA - dateB
+          })
+          inv.updatedAt = now.toISOString()
+          userTouched = true
         }
       }
 
-      // Mirror withdrawals as events based on status
-      for (const wd of withdrawals) {
-        if (!wd || !wd.id) continue
-        const base = {
-          investmentId: wd.investmentId,
-          amount: wd.amount || 0
-        }
-        if (wd.status === 'notice') {
-          ensureEvent({
-            id: generateTransactionId('WDL', wd.id, 'withdrawal_notice_started'),
-            type: 'withdrawal_notice_started',
-            ...base,
-            date: wd.noticeStartAt || wd.requestedAt || new Date().toISOString(),
-            payoutDueBy: wd.payoutDueBy || null
-          })
-        } else if (wd.status === 'approved') {
-          ensureEvent({
-            id: generateTransactionId('WDL', wd.id, 'withdrawal_approved'),
-            type: 'withdrawal_approved',
-            ...base,
-            date: wd.approvedAt || wd.paidAt || new Date().toISOString()
-          })
-        } else if (wd.status === 'rejected') {
-          ensureEvent({
-            id: generateTransactionId('WDL', wd.id, 'withdrawal_rejected'),
-            type: 'withdrawal_rejected',
-            ...base,
-            date: wd.rejectedAt || new Date().toISOString()
-          })
-        } else {
-          ensureEvent({
-            id: generateTransactionId('WDL', wd.id, 'withdrawal_requested'),
-            type: 'withdrawal_requested',
-            ...base,
-            date: wd.requestedAt || new Date().toISOString(),
-            status: wd.status || 'pending'
-          })
-        }
-      }
-
-      if (eventsCreated > 0) {
-        user.updatedAt = new Date().toISOString()
+      if (userTouched) {
+        user.updatedAt = now.toISOString()
         usersUpdated++
       }
     }
 
-    if (eventsCreated > 0) {
+    if (dataMutated) {
       const saved = await saveUsers(usersData)
       if (!saved) {
         return NextResponse.json({ success: false, error: 'Failed to save transaction events' }, { status: 500 })

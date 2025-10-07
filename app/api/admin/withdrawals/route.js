@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getUsers, saveUsers } from '../../../../lib/database'
 import { getCurrentAppTime } from '../../../../lib/appTime'
 import { calculateFinalWithdrawalPayout } from '../../../../lib/investmentCalculations'
+import { generateTransactionId } from '../../../../lib/idGenerator'
 
 // GET - list all withdrawals pending admin action
 export async function GET() {
@@ -66,12 +67,42 @@ export async function POST(request) {
         wd.earningsAmount = finalPayout.totalEarnings
         
         // Update investment status to withdrawn with final values
+        const transactions = Array.isArray(investment.transactions) ? investment.transactions : []
+        const redemptionTxId = generateTransactionId('INV', investment.id, 'redemption', { withdrawalId })
+        const txIdx = transactions.findIndex(tx => tx.id === redemptionTxId)
+        if (txIdx !== -1) {
+          transactions[txIdx] = {
+            ...transactions[txIdx],
+            status: 'received',
+            amount: finalPayout.finalValue,
+            approvedAt: now.toISOString(),
+            paidAt: now.toISOString(),
+            updatedAt: now.toISOString()
+          }
+        } else {
+          transactions.push({
+            id: redemptionTxId,
+            type: 'redemption',
+            amount: finalPayout.finalValue,
+            status: 'received',
+            date: wd.requestedAt || wd.noticeStartAt || now.toISOString(),
+            withdrawalId,
+            payoutDueBy: wd.payoutDueBy || null,
+            approvedAt: now.toISOString(),
+            paidAt: now.toISOString(),
+            rejectedAt: null,
+            createdAt: now.toISOString(),
+            updatedAt: now.toISOString()
+          })
+        }
+
         invs[invIdx] = { 
           ...investment, 
           status: 'withdrawn', 
           withdrawnAt: now.toISOString(), 
           finalValue: finalPayout.finalValue,
           totalEarnings: finalPayout.totalEarnings,
+          transactions,
           updatedAt: now.toISOString() 
         }
       } else {
@@ -89,7 +120,42 @@ export async function POST(request) {
       const invs = Array.isArray(user.investments) ? user.investments : []
       const invIdx = invs.findIndex(inv => inv.id === wd.investmentId)
       if (invIdx !== -1) {
-        invs[invIdx] = { ...invs[invIdx], status: 'active', updatedAt: now.toISOString(), withdrawalId: undefined, withdrawalNoticeStartAt: undefined, payoutDueBy: undefined }
+        const investment = invs[invIdx]
+        const transactions = Array.isArray(investment.transactions) ? investment.transactions : []
+        const redemptionTxId = generateTransactionId('INV', investment.id, 'redemption', { withdrawalId })
+        const txIdx = transactions.findIndex(tx => tx.id === redemptionTxId)
+        if (txIdx !== -1) {
+          transactions[txIdx] = {
+            ...transactions[txIdx],
+            status: 'rejected',
+            rejectedAt: now.toISOString(),
+            updatedAt: now.toISOString()
+          }
+        } else {
+          transactions.push({
+            id: redemptionTxId,
+            type: 'redemption',
+            amount: wd.amount || 0,
+            status: 'rejected',
+            date: wd.requestedAt || wd.noticeStartAt || now.toISOString(),
+            withdrawalId,
+            payoutDueBy: wd.payoutDueBy || null,
+            approvedAt: null,
+            paidAt: null,
+            rejectedAt: now.toISOString(),
+            createdAt: now.toISOString(),
+            updatedAt: now.toISOString()
+          })
+        }
+        invs[invIdx] = { 
+          ...investment, 
+          status: 'active', 
+          updatedAt: now.toISOString(), 
+          withdrawalId: undefined, 
+          withdrawalNoticeStartAt: undefined, 
+          payoutDueBy: undefined,
+          transactions
+        }
       }
       user.investments = invs
     } else {
@@ -107,5 +173,3 @@ export async function POST(request) {
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
 }
-
-

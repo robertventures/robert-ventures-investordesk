@@ -203,7 +203,7 @@ export default function OperationsTab({
                 pendingPayouts.map(payout => (
                   <tr 
                     key={payout.id} 
-                    className={`${payout.payoutStatus === 'failed' ? styles.failedRow : styles.pendingRow} ${selectedPayouts.has(payout.id) ? styles.selectedRow : ''}`}
+                    className={`${payout.status === 'rejected' ? styles.failedRow : styles.pendingRow} ${selectedPayouts.has(payout.id) ? styles.selectedRow : ''}`}
                   >
                     <td className={styles.checkboxCell}>
                       <input
@@ -224,8 +224,8 @@ export default function OperationsTab({
                     <td className={styles.dateCell}>{new Date(payout.date).toLocaleDateString()}</td>
                     <td className={styles.bankCell}>{payout.payoutBankNickname || 'Not configured'}</td>
                     <td>
-                      <span className={`${styles.badge} ${styles[payout.payoutStatus]}`}>
-                        {payout.payoutStatus.toUpperCase()}
+                      <span className={`${styles.badge} ${styles[payout.status]}`}>
+                        {payout.status.toUpperCase()}
                       </span>
                     </td>
                     <td className={styles.reasonCell}>{payout.failureReason || '-'}</td>
@@ -349,5 +349,4 @@ export default function OperationsTab({
     </div>
   )
 }
-
 

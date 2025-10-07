@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import styles from './PortfolioSummary.module.css'
 import TransactionsList from './TransactionsList'
@@ -20,39 +20,36 @@ export default function PortfolioSummary() {
   const [chartWidth, setChartWidth] = useState(600)
   const chartAreaRef = useRef(null)
 
-  useEffect(() => {
-    const loadData = async () => {
-      const userId = localStorage.getItem('currentUserId')
-      if (!userId) return
+  const loadData = useCallback(async () => {
+    const userId = localStorage.getItem('currentUserId')
+    if (!userId) return
 
-      try {
-        // Ensure transaction events (distributions/compounding) are generated
-        await fetch('/api/migrate-transactions', { method: 'POST' })
+    try {
+      // Ensure transaction events (distributions/compounding) are generated
+      await fetch('/api/migrate-transactions', { method: 'POST' })
+      
+      // Get current app time for calculations
+      const timeRes = await fetch('/api/admin/time-machine')
+      const timeData = await timeRes.json()
+      const currentAppTime = timeData.success ? timeData.appTime : new Date().toISOString()
+      setAppTime(currentAppTime)
+      
+      const res = await fetch(`/api/users/${userId}`)
+      const data = await res.json()
+      if (data.success && data.user) {
+        setUserData(data.user)
         
-        // Get current app time for calculations
-        const timeRes = await fetch('/api/admin/time-machine')
-        const timeData = await timeRes.json()
-        const currentAppTime = timeData.success ? timeData.appTime : new Date().toISOString()
-        setAppTime(currentAppTime)
-        
-        const res = await fetch(`/api/users/${userId}`)
-        const data = await res.json()
-        if (data.success && data.user) {
-          setUserData(data.user)
-          
-          // Calculate portfolio metrics from investments using the new calculation functions
-          const investments = data.user.investments || []
-          // Include active, withdrawal_notice, and withdrawn investments in the dashboard
-          // Investors should see all their investment history
-          const confirmedInvestments = investments.filter(inv => 
-            inv.status === 'active' || 
-            inv.status === 'withdrawal_notice' || 
-            inv.status === 'withdrawn'
-          )
-          const pendingInvestments = investments.filter(inv => inv.status === 'pending')
+        // Calculate portfolio metrics from investments using the new calculation functions
+        const investments = data.user.investments || []
+        // Include active, withdrawal_notice, and withdrawn investments in the dashboard
+        // Investors should see all their investment history
+        const confirmedInvestments = investments.filter(inv => 
+          inv.status === 'active' || 
+          inv.status === 'withdrawal_notice' || 
+          inv.status === 'withdrawn'
+        )
+        const pendingInvestments = investments.filter(inv => inv.status === 'pending')
           const draftInvestments = investments.filter(inv => inv.status === 'draft')
-          const transactions = Array.isArray(data.user.activity) ? data.user.activity : []
-          
           // Calculate totals using the precise calculation functions - only for confirmed investments
           let totalInvested = 0
           let totalEarnings = 0
@@ -61,6 +58,7 @@ export default function PortfolioSummary() {
           
           confirmedInvestments.forEach(inv => {
             const calculation = calculateInvestmentValue(inv, currentAppTime)
+            const investmentTransactions = Array.isArray(inv.transactions) ? inv.transactions : []
             const status = getInvestmentStatus(inv, currentAppTime)
             
             // Calculate earnings for ALL investments (including withdrawn)
@@ -72,8 +70,8 @@ export default function PortfolioSummary() {
               // For active investments, calculate current earnings
               if (inv.paymentFrequency === 'monthly') {
                 // For monthly payout investments, sum paid distributions from transactions
-                const paid = transactions
-                  .filter(ev => ev.type === 'monthly_distribution' && ev.investmentId === inv.id && new Date(ev.date) <= new Date(currentAppTime))
+                const paid = investmentTransactions
+                  .filter(tx => tx.type === 'distribution' && new Date(tx.date || 0) <= new Date(currentAppTime) && tx.status !== 'rejected')
                   .reduce((sum, ev) => sum + (Number(ev.amount) || 0), 0)
                 totalEarnings += Math.round(paid * 100) / 100
               } else {
@@ -182,6 +180,7 @@ export default function PortfolioSummary() {
             let totalEarnings = 0
             confirmed.forEach(inv => {
               if (inv.confirmedAt && new Date(inv.confirmedAt) <= asOf) {
+                const investmentTransactions = Array.isArray(inv.transactions) ? inv.transactions : []
                 // Include withdrawn investments in historical earnings
                 // If withdrawn before this point, use final earnings; otherwise calculate as of this point
                 if (inv.status === 'withdrawn' && inv.withdrawalNoticeStartAt && new Date(inv.withdrawalNoticeStartAt) <= asOf) {
@@ -189,8 +188,8 @@ export default function PortfolioSummary() {
                   totalEarnings += inv.totalEarnings || 0
                 } else if (inv.paymentFrequency === 'monthly') {
                   // For monthly payout investments, sum paid distributions from transactions
-                  const paidDistributions = transactions
-                    .filter(ev => ev.type === 'monthly_distribution' && ev.investmentId === inv.id && new Date(ev.date) <= asOf)
+                  const paidDistributions = investmentTransactions
+                    .filter(tx => tx.type === 'distribution' && new Date(tx.date || 0) <= asOf && tx.status !== 'rejected')
                     .reduce((sum, ev) => sum + (Number(ev.amount) || 0), 0)
                   totalEarnings += Math.round(paidDistributions * 100) / 100
                 } else {
@@ -203,39 +202,42 @@ export default function PortfolioSummary() {
             points.push({ date: asOf, value: totalEarnings })
           }
           // Final point at current app time to match current investment info
-          {
-            const asOf = new Date(end)
-            const asOfIso = asOf.toISOString()
-            let totalEarnings = 0
-            confirmed.forEach(inv => {
-              if (inv.confirmedAt && new Date(inv.confirmedAt) <= asOf) {
-                // Include withdrawn investments in current earnings
-                if (inv.status === 'withdrawn') {
-                  // Investment was withdrawn - use stored final earnings
-                  totalEarnings += inv.totalEarnings || 0
-                } else if (inv.paymentFrequency === 'monthly') {
-                  // For monthly payout investments, sum paid distributions from transactions
-                  const paidDistributions = transactions
-                    .filter(ev => ev.type === 'monthly_distribution' && ev.investmentId === inv.id && new Date(ev.date) <= asOf)
-                    .reduce((sum, ev) => sum + (Number(ev.amount) || 0), 0)
-                  totalEarnings += Math.round(paidDistributions * 100) / 100
-                } else {
-                  // For compounding investments, use calculated earnings
-                  const calc = calculateInvestmentValue(inv, asOfIso)
+        {
+          const asOf = new Date(end)
+          const asOfIso = asOf.toISOString()
+          let totalEarnings = 0
+          confirmed.forEach(inv => {
+            if (inv.confirmedAt && new Date(inv.confirmedAt) <= asOf) {
+              const investmentTransactions = Array.isArray(inv.transactions) ? inv.transactions : []
+              // Include withdrawn investments in current earnings
+              if (inv.status === 'withdrawn') {
+                // Investment was withdrawn - use stored final earnings
+                totalEarnings += inv.totalEarnings || 0
+              } else if (inv.paymentFrequency === 'monthly') {
+                // For monthly payout investments, sum paid distributions from transactions
+                const paidDistributions = investmentTransactions
+                  .filter(tx => tx.type === 'distribution' && new Date(tx.date || 0) <= asOf && tx.status !== 'rejected')
+                  .reduce((sum, ev) => sum + (Number(ev.amount) || 0), 0)
+                totalEarnings += Math.round(paidDistributions * 100) / 100
+              } else {
+                // For compounding investments, use calculated earnings
+                const calc = calculateInvestmentValue(inv, asOfIso)
                   totalEarnings += calc.totalEarnings
                 }
               }
             })
             points.push({ date: asOf, value: totalEarnings })
           }
-          setChartSeries(points)
-        }
-      } catch (e) {
-        console.error('Failed to load portfolio data', e)
+        setChartSeries(points)
       }
+    } catch (e) {
+      console.error('Failed to load portfolio data', e)
     }
-    loadData()
   }, [])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
 
   // Observe width of chart area for responsiveness
   useEffect(() => {
@@ -459,80 +461,7 @@ export default function PortfolioSummary() {
                               alert(data.error || 'Failed to delete draft')
                               return
                             }
-                            // Refresh local view
-                            setUserData(data.user)
-                            // Recompute portfolio from updated user
-                            const nextInvestments = data.user.investments || []
-                            const confirmedInvestments = nextInvestments.filter(i => i.status === 'active')
-                            const pendingInvestments = nextInvestments.filter(i => i.status === 'pending')
-                            const draftInvestments = nextInvestments.filter(i => i.status === 'draft')
-                            const transactions = Array.isArray(data.user.activity) ? data.user.activity : []
-                            let totalInvested = 0
-                            let totalEarnings = 0
-                            let totalCurrentValue = 0
-                            const investmentDetails = []
-                            const currentAppTime = appTime || new Date().toISOString()
-                            confirmedInvestments.forEach(i => {
-                              const calculation = calculateInvestmentValue(i, currentAppTime)
-                              const status = getInvestmentStatus(i, currentAppTime)
-                              
-                              // Calculate earnings for ALL investments (including withdrawn)
-                              if (i.status === 'withdrawn') {
-                                totalEarnings += i.totalEarnings || 0
-                              } else if (i.status === 'active' || i.status === 'withdrawal_notice') {
-                                if (i.paymentFrequency === 'monthly') {
-                                  const paid = transactions
-                                    .filter(ev => ev.type === 'monthly_distribution' && ev.investmentId === i.id && new Date(ev.date) <= new Date(currentAppTime))
-                                    .reduce((sum, ev) => sum + (Number(ev.amount) || 0), 0)
-                                  totalEarnings += Math.round(paid * 100) / 100
-                                } else {
-                                  totalEarnings += calculation.totalEarnings
-                                }
-                              }
-                              
-                              // Only include active/withdrawal_notice in current totals
-                              if (i.status === 'active' || i.status === 'withdrawal_notice') {
-                                totalInvested += i.amount || 0
-                                if (i.paymentFrequency === 'monthly') {
-                                  totalCurrentValue += i.amount || 0
-                                } else {
-                                  totalCurrentValue += calculation.currentValue
-                                }
-                              }
-                              investmentDetails.push({ ...i, calculation, status })
-                            })
-                            const totalPending = [...pendingInvestments, ...draftInvestments].reduce((sum, i) => sum + (i.amount || 0), 0)
-                            pendingInvestments.forEach(i => {
-                              investmentDetails.push({
-                                ...i,
-                                calculation: { currentValue: i.amount, totalEarnings: 0, monthsElapsed: 0, isWithdrawable: false, lockupEndDate: null },
-                                status: { status: 'pending', statusLabel: 'Pending', isActive: false, isLocked: true }
-                              })
-                            })
-                            draftInvestments.forEach(i => {
-                              investmentDetails.push({
-                                ...i,
-                                calculation: { currentValue: i.amount, totalEarnings: 0, monthsElapsed: 0, isWithdrawable: false, lockupEndDate: null },
-                                status: { status: 'draft', statusLabel: 'Draft', isActive: false, isLocked: false }
-                              })
-                            })
-                            // Sort investments: drafts first, then by creation date (most recent first)
-                            investmentDetails.sort((a, b) => {
-                              // Drafts always come first
-                              if (a.status.status === 'draft' && b.status.status !== 'draft') return -1
-                              if (a.status.status !== 'draft' && b.status.status === 'draft') return 1
-                              // Within same status group, sort by creation date (most recent first)
-                              const dateA = new Date(a.createdAt || 0)
-                              const dateB = new Date(b.createdAt || 0)
-                              return dateB - dateA
-                            })
-                            setPortfolioData({
-                              totalInvested,
-                              totalPending,
-                              totalEarnings,
-                              totalCurrentValue,
-                              investments: investmentDetails
-                            })
+                            await loadData()
                           } catch (e) {
                             console.error('Failed to delete draft', e)
                             alert('Failed to delete draft')

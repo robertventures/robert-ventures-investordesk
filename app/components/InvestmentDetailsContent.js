@@ -104,10 +104,11 @@ export default function InvestmentDetailsContent({ investmentId }) {
   let totalEarnings = calculation.totalEarnings
   let monthlyEarnings = calculation.monthlyInterestAmount
   // For monthly payout investments, compute earnings from paid distributions
-  if (userData && Array.isArray(userData.activity) && investmentData.paymentFrequency === 'monthly') {
-    const paid = userData.activity
-      .filter(ev => ev.type === 'monthly_distribution' && ev.investmentId === investmentId)
-      .reduce((sum, ev) => sum + (Number(ev.amount) || 0), 0)
+  if (investmentData.paymentFrequency === 'monthly') {
+    const transactions = Array.isArray(investmentData.transactions) ? investmentData.transactions : []
+    const paid = transactions
+      .filter(tx => tx.type === 'distribution' && tx.status !== 'rejected')
+      .reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0)
     totalEarnings = Math.round(paid * 100) / 100
     // Use the configured monthly payout amount if available; otherwise keep calc
     monthlyEarnings = calculation.monthlyInterestAmount

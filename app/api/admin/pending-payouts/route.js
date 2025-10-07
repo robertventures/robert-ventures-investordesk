@@ -7,39 +7,35 @@ export async function GET() {
     const usersData = await getUsers()
     const pendingPayouts = []
 
-    // Collect all pending/failed payout transactions
     for (const user of usersData.users) {
       if (user.isAdmin) continue
-      
-      const transactions = Array.isArray(user.activity) ? user.activity : []
       const investments = Array.isArray(user.investments) ? user.investments : []
-      
-      // Find monthly_distribution events with pending or failed status
-      transactions.forEach(tx => {
-        if (tx.type === 'monthly_distribution' && 
-            (tx.payoutStatus === 'pending' || tx.payoutStatus === 'failed')) {
-          
-          // Find the related investment
-          const investment = investments.find(inv => inv.id === tx.investmentId)
-          
+
+      investments.forEach(investment => {
+        if (!investment || !Array.isArray(investment.transactions)) return
+
+        investment.transactions.forEach(tx => {
+          if (tx.type !== 'distribution') return
+          if (tx.status !== 'pending' && tx.status !== 'approved') return
+
           pendingPayouts.push({
             ...tx,
             userId: user.id,
             userEmail: user.email,
             userName: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
-            investmentAmount: investment?.amount || 0,
-            lockupPeriod: investment?.lockupPeriod || tx.lockupPeriod,
+            investmentId: investment.id,
+            investmentAmount: investment.amount || 0,
+            lockupPeriod: investment.lockupPeriod || tx.lockupPeriod,
             payoutBankNickname: tx.payoutBankNickname || 'Unknown',
             failureReason: tx.failureReason || null,
             retryCount: tx.retryCount || 0,
             lastRetryAt: tx.lastRetryAt || null
           })
-        }
+        })
       })
     }
 
-    // Sort by date (oldest first)
-    pendingPayouts.sort((a, b) => new Date(a.date) - new Date(b.date))
+    pendingPayouts.sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0))
 
     return NextResponse.json({ 
       success: true, 
@@ -87,22 +83,23 @@ export async function POST(request) {
     }
 
     const user = usersData.users[userIndex]
-    const transactions = Array.isArray(user.activity) ? user.activity : []
-    const txIndex = transactions.findIndex(tx => tx.id === transactionId)
+    const investments = Array.isArray(user.investments) ? user.investments : []
+    const investment = investments.find(inv => Array.isArray(inv.transactions) && inv.transactions.some(tx => tx.id === transactionId))
 
-    if (txIndex === -1) {
+    if (!investment) {
       return NextResponse.json({ 
         success: false, 
         error: 'Transaction not found' 
       }, { status: 404 })
     }
 
-    const transaction = transactions[txIndex]
+    const txIndex = investment.transactions.findIndex(tx => tx.id === transactionId)
+    const transaction = investment.transactions[txIndex]
 
-    if (transaction.type !== 'monthly_distribution') {
+    if (!transaction || transaction.type !== 'distribution') {
       return NextResponse.json({ 
         success: false, 
-        error: 'Only monthly distribution transactions can be managed' 
+        error: 'Only distribution transactions can be managed' 
       }, { status: 400 })
     }
 
@@ -114,39 +111,34 @@ export async function POST(request) {
       // For testing, we simulate an 80% success rate
       
       const retryCount = (transaction.retryCount || 0) + 1
-      
-      // Simulate: 80% success rate on retry
       const retrySuccess = Math.random() > 0.2
-      
+
+      transaction.retryCount = retryCount
+      transaction.lastRetryAt = now
+
       if (retrySuccess) {
-        transaction.payoutStatus = 'completed'
+        transaction.status = 'received'
         transaction.completedAt = now
-        transaction.retryCount = retryCount
-        transaction.lastRetryAt = now
         transaction.failureReason = null
       } else {
-        transaction.payoutStatus = 'failed'
-        transaction.retryCount = retryCount
-        transaction.lastRetryAt = now
+        transaction.status = 'rejected'
         transaction.failureReason = failureReason || 'Mock bank transfer failed during retry'
       }
 
     } else if (action === 'complete') {
-      // Manually mark as completed (admin override)
-      transaction.payoutStatus = 'completed'
+      transaction.status = 'received'
       transaction.completedAt = now
       transaction.manuallyCompleted = true
       transaction.failureReason = null
 
     } else if (action === 'fail') {
-      // Manually mark as failed with reason
-      transaction.payoutStatus = 'failed'
+      transaction.status = 'rejected'
       transaction.failedAt = now
       transaction.failureReason = failureReason || 'Manually marked as failed by admin'
     }
 
-    transactions[txIndex] = transaction
-    user.activity = transactions
+    investment.transactions[txIndex] = transaction
+    investment.updatedAt = now
     user.updatedAt = now
     usersData.users[userIndex] = user
 
@@ -172,4 +164,3 @@ export async function POST(request) {
     }, { status: 500 })
   }
 }
-
