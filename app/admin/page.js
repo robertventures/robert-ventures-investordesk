@@ -20,7 +20,7 @@ export default function AdminPage() {
   // Tab management
   const initialTab = useMemo(() => {
     const t = searchParams?.get('tab') || 'dashboard'
-    const allowed = ['dashboard', 'transactions', 'accounts', 'activity', 'distributions', 'operations']
+    const allowed = ['dashboard', 'transactions', 'accounts', 'distributions', 'activity', 'operations']
     return allowed.includes(t) ? t : 'dashboard'
   }, [searchParams])
   const [activeTab, setActiveTab] = useState(initialTab)
@@ -74,6 +74,11 @@ export default function AdminPage() {
               lastName: user.lastName,
               email: user.email,
               phone: user.phone || user.phoneNumber,
+              phoneNumber: user.phoneNumber,
+              dob: user.dob,
+              ssn: user.ssn,
+              address: user.address,
+              bankAccounts: user.bankAccounts,
               accountType: user.accountType,
               isVerified: user.isVerified,
               jointHolder: user.jointHolder
@@ -537,6 +542,11 @@ export default function AdminPage() {
                         <div className={styles.accountId}>Account #{user.id}</div>
                         <div className={styles.accountBadges}>
                           {user.isVerified && <span className={styles.verifiedBadge}>✓ Verified</span>}
+                          {!isProfileComplete(user) && (
+                            <span className={styles.warningBadge} title="Profile incomplete: Personal details and bank connection required">
+                              ⚠ Profile Incomplete
+                            </span>
+                          )}
                           {user.accountType === 'joint' && <span className={styles.jointBadge}>Joint</span>}
                           {user.accountType === 'individual' && <span className={styles.individualBadge}>Individual</span>}
                           {user.accountType === 'entity' && <span className={styles.entityBadge}>Entity</span>}
