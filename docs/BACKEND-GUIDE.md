@@ -697,7 +697,8 @@ User Submits → pending (bank auto-approved ✓) → Admin Reviews → active
 
 2. **Admin Reviews & Approves** (`adminApproved: true`)
    - Admin verifies:
-     - User documents complete ✓
+     - User profile complete ✓
+     - Bank connection established ✓
      - Investment details correct ✓
      - No red flags ✓
    - Admin approves → `adminApproved: true`
@@ -707,6 +708,150 @@ User Submits → pending (bank auto-approved ✓) → Admin Reviews → active
    - System automatically sets `status: active`
    - `confirmedAt` timestamp set
    - Interest starts accruing next day
+
+#### Profile Completion Requirements
+
+**CRITICAL:** Investments can only be approved when the user profile is fully complete. The admin dashboard must validate and enforce these requirements before allowing approval.
+
+**Required Personal Details:**
+- ✅ First Name (`firstName`)
+- ✅ Last Name (`lastName`)
+- ✅ Phone Number (`phone` or `phoneNumber`)
+- ✅ Date of Birth (`dob`)
+- ✅ Social Security Number / Tax ID (`ssn`)
+
+**Required Address Information:**
+- ✅ Street Address (`address.street1`)
+- ✅ City (`address.city`)
+- ✅ State (`address.state`)
+- ✅ ZIP Code (`address.zip`)
+
+**Required Banking Connection:**
+- ✅ At least one bank account connected (`bankAccounts.length > 0`)
+
+**UI/UX Behavior:**
+- Investments with incomplete profiles display a **"⚠ Profile Incomplete"** warning badge
+- The **Approve** button is disabled when profile is incomplete
+- Hovering over disabled button shows tooltip: "Complete profile & bank connection required"
+- Admin must direct user to complete profile before approval is possible
+
+**Validation Function:**
+```python
+def is_profile_complete(user):
+    """
+    Check if user profile is complete enough to approve investments.
+    Returns True only if ALL requirements are met.
+    """
+    # Check personal details
+    has_personal_details = all([
+        user.first_name,
+        user.last_name,
+        user.phone or user.phone_number,
+        user.dob,
+        user.ssn
+    ])
+    
+    # Check address
+    has_address = all([
+        user.address,
+        user.address.get('street1'),
+        user.address.get('city'),
+        user.address.get('state'),
+        user.address.get('zip')
+    ])
+    
+    # Check bank connection
+    has_bank_connection = (
+        user.bank_accounts and 
+        len(user.bank_accounts) > 0
+    )
+    
+    return has_personal_details and has_address and has_bank_connection
+```
+
+**API Validation:**
+```python
+# POST /api/admin/investments/:id/approve-admin
+def approve_admin(investment_id, admin_id):
+    """
+    Admin approves investment after reviewing details.
+    Must validate profile completion before allowing approval.
+    """
+    investment = get_investment(investment_id)
+    user = get_user(investment.user_id)
+    
+    if investment.status != 'pending':
+        return {
+            "success": False, 
+            "error": "Only pending investments can be admin approved"
+        }
+    
+    # VALIDATE PROFILE COMPLETION
+    if not is_profile_complete(user):
+        missing_items = []
+        if not all([user.first_name, user.last_name, user.phone, user.dob, user.ssn]):
+            missing_items.append("personal details")
+        if not all([user.address, user.address.get('street1'), 
+                    user.address.get('city'), user.address.get('state'), 
+                    user.address.get('zip')]):
+            missing_items.append("address")
+        if not (user.bank_accounts and len(user.bank_accounts) > 0):
+            missing_items.append("bank connection")
+        
+        return {
+            "success": False,
+            "error": f"Cannot approve: User profile incomplete. Missing: {', '.join(missing_items)}"
+        }
+    
+    investment.admin_approved = True
+    investment.admin_approved_at = current_time()
+    investment.admin_approved_by = admin_id
+    
+    save_investment(investment)
+    
+    # Check if ready to activate
+    activate_investment_if_ready(investment)
+    
+    return {"success": True, "investment": investment}
+```
+
+**Frontend Validation (Admin Dashboard):**
+```javascript
+// Check if investment can be approved
+const isProfileComplete = (user) => {
+  if (!user) return false
+  
+  // Check personal details
+  const hasPersonalDetails = user.firstName && 
+                             user.lastName && 
+                             (user.phone || user.phoneNumber) &&
+                             user.dob &&
+                             user.ssn
+  
+  // Check address
+  const hasAddress = user.address && 
+                    user.address.street1 && 
+                    user.address.city && 
+                    user.address.state && 
+                    user.address.zip
+  
+  // Check bank connection
+  const hasBankConnection = user.bankAccounts && 
+                           user.bankAccounts.length > 0
+  
+  return hasPersonalDetails && hasAddress && hasBankConnection
+}
+
+// Disable approve button if profile incomplete
+const canApprove = isProfileComplete(investment.user) && 
+                   investment.status === 'pending'
+```
+
+**Why This Matters:**
+- **Compliance**: Cannot process investments without proper KYC (Know Your Customer) information
+- **Payment Processing**: Bank connection required to send monthly payouts or withdrawal proceeds
+- **User Experience**: Prevents approving investments that will fail during payout processing
+- **Legal**: SSN/Tax ID required for tax reporting (1099 forms)
 
 **Phase 2 Implementation (Future - Banking Integration):**
 When banking API is integrated, the flow changes to true dual approval:
@@ -826,11 +971,20 @@ def approve_bank(investment_id, admin_id):
 def approve_admin(investment_id, admin_id):
     """
     Admin approves investment after reviewing details.
+    IMPORTANT: Must validate profile completion before allowing approval.
     """
     investment = get_investment(investment_id)
+    user = get_user(investment.user_id)
     
     if investment.status != 'pending':
         return {"success": False, "error": "Only pending investments can be admin approved"}
+    
+    # VALIDATE PROFILE COMPLETION (see Profile Completion Requirements section)
+    if not is_profile_complete(user):
+        return {
+            "success": False,
+            "error": "Cannot approve: User profile incomplete. User must complete personal details, address, and bank connection."
+        }
     
     investment.admin_approved = True
     investment.admin_approved_at = current_time()
@@ -3239,6 +3393,41 @@ def create_withdrawal(user_id, investment_id):
 - Order doesn't matter: bank→admin or admin→bank (system handles both)
 - Each approval action is logged with timestamp and approver ID
 
+### Profile Completion Requirements for Approval
+
+**CRITICAL:** Before an admin can approve any investment, the user's profile MUST be complete:
+
+**Required Fields:**
+```python
+# Personal details (all required)
+- first_name (non-empty string)
+- last_name (non-empty string)
+- phone or phone_number (non-empty string)
+- dob (valid date, user must be 18+)
+- ssn (valid SSN format XXX-XX-XXXX)
+
+# Address (all required)
+- address.street1 (non-empty string)
+- address.city (non-empty string)
+- address.state (non-empty string)
+- address.zip (valid ZIP code)
+
+# Banking (at least one required)
+- bank_accounts (array with length > 0)
+```
+
+**Validation Logic:**
+- Frontend must disable "Approve" button when profile incomplete
+- Backend must validate profile completion in approve endpoint
+- Return error if profile incomplete: "Cannot approve: User profile incomplete"
+- Show "⚠ Profile Incomplete" badge on investment cards in admin UI
+
+**Rationale:**
+- **Compliance**: KYC (Know Your Customer) required before processing investments
+- **Payment Processing**: Bank connection required for monthly payouts/withdrawals
+- **Tax Reporting**: SSN required for generating 1099 tax forms
+- **Legal Protection**: Complete profile ensures proper documentation
+
 ### Monthly Payout Approvals
 - All monthly payouts (`paymentFrequency: 'monthly'`) start as `pending_approval`
 - Admin must approve before payout is sent to bank
@@ -4001,9 +4190,12 @@ Expected:
 - Account unlocks only when no pending/active investments exist
 - Rejected investments allow immediate account type change
 
-#### 8. **Dual Approval System**
+#### 8. **Dual Approval System & Profile Validation**
 - Bank approval defaults to `true` (Phase 1)
-- Admin approval required for activation
+- **Profile must be complete before admin approval allowed**
+- Required: personal details, address, bank connection
+- Frontend disables approve button if profile incomplete
+- Backend validates profile completion and returns error if incomplete
 - Investment auto-activates when both approvals complete
 - `confirmedAt` set when both approvals present
 
@@ -4021,6 +4213,8 @@ Expected:
 - SSN format validation
 - Cannot reject active investments
 - Cannot withdraw before lockup ends
+- **Cannot approve investment with incomplete profile**
+- Profile must include: name, phone, DOB, SSN, address, bank connection
 
 ### Test Data Requirements
 
@@ -4038,12 +4232,13 @@ Your implementation is correct when:
 2. ✅ State transitions follow rules exactly
 3. ✅ Every day earns interest (including partial months)
 4. ✅ Dual approval workflow functions properly
-5. ✅ Monthly events generate correctly with proration
-6. ✅ Withdrawals include final partial month interest
-7. ✅ Account type locking prevents mixing types
-8. ✅ App time affects all date-based logic
-9. ✅ API responses match expected JSON structure
-10. ✅ All validation rules enforced consistently
+5. ✅ Profile validation enforced before investment approval
+6. ✅ Monthly events generate correctly with proration
+7. ✅ Withdrawals include final partial month interest
+8. ✅ Account type locking prevents mixing types
+9. ✅ App time affects all date-based logic
+10. ✅ API responses match expected JSON structure
+11. ✅ All validation rules enforced consistently
 
 ---
 

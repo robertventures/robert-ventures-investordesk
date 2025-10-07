@@ -293,6 +293,17 @@
   text-align: center;
 }
 
+.warningBadge {
+  background: #fef3c7;
+  color: #92400e;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  text-align: center;
+  border: 1px solid #f59e0b;
+}
+
 .investmentStatus {
   padding: 4px 12px;
   border-radius: 12px;
@@ -337,14 +348,14 @@
 }
 
 .accountName {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--color-accent);
+  font-size: 14px;
+  color: #64748b;
 }
 
 .accountEmail {
-  font-size: 14px;
-  color: #64748b;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-accent);
 }
 
 .accountJointEmail {
@@ -586,7 +597,8 @@
   }
 
   .verifiedBadge,
-  .jointBadge {
+  .jointBadge,
+  .warningBadge {
     font-size: 10px;
     padding: 3px 6px;
   }

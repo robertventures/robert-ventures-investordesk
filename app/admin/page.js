@@ -133,6 +133,31 @@ export default function AdminPage() {
     })
   }, [sortedAccountUsers, accountsSearch])
 
+  // Helper function to check if user profile is complete for investment approval
+  const isProfileComplete = (user) => {
+    if (!user) return false
+    
+    // Check personal details
+    const hasPersonalDetails = user.firstName && 
+                               user.lastName && 
+                               (user.phone || user.phoneNumber) &&
+                               user.dob &&
+                               user.ssn
+    
+    // Check address
+    const hasAddress = user.address && 
+                      user.address.street1 && 
+                      user.address.city && 
+                      user.address.state && 
+                      user.address.zip
+    
+    // Check bank connection
+    const hasBankConnection = user.bankAccounts && 
+                             user.bankAccounts.length > 0
+    
+    return hasPersonalDetails && hasAddress && hasBankConnection
+  }
+
   // Investment operations
   const approveInvestment = async (userId, investmentId) => {
     try {
@@ -391,6 +416,11 @@ export default function AdminPage() {
                         <div className={styles.investmentStatus} data-status={inv.status}>
                           {inv.status}
                         </div>
+                        {!isProfileComplete(inv.user) && (
+                          <span className={styles.warningBadge} title="Profile incomplete: Personal details and bank connection required">
+                            ⚠ Profile Incomplete
+                          </span>
+                        )}
                         {inv.user.accountType === 'joint' && <span className={styles.jointBadge}>Joint</span>}
                         {inv.user.accountType === 'individual' && <span className={styles.individualBadge}>Individual</span>}
                         {inv.user.accountType === 'entity' && <span className={styles.entityBadge}>Entity</span>}
@@ -399,10 +429,10 @@ export default function AdminPage() {
                     </div>
 
                     <div className={styles.accountCardBody}>
+                      <div className={styles.accountEmail}>{inv.user.email || '-'}</div>
                       <div className={styles.accountName}>
                         {inv.user.firstName || '-'} {inv.user.lastName || ''}
                       </div>
-                      <div className={styles.accountEmail}>{inv.user.email || '-'}</div>
                       {inv.user.accountType === 'joint' && inv.user.jointHolder?.email && (
                         <div className={styles.accountJointEmail}>Joint: {inv.user.jointHolder.email}</div>
                       )}
@@ -431,16 +461,33 @@ export default function AdminPage() {
                     </div>
 
                     <div className={styles.accountCardActions} onClick={(e) => e.stopPropagation()}>
-                      <button
-                        className={styles.approveButton}
-                        disabled={savingId === inv.id || inv.status === 'active' || inv.status === 'withdrawn' || inv.status === 'rejected'}
-                        onClick={(e) => { e.stopPropagation(); approveInvestment(inv.user.id, inv.id); }}
-                      >
-                        {inv.status === 'active' ? 'Active' :
-                          inv.status === 'withdrawn' ? 'Withdrawn' :
-                          inv.status === 'rejected' ? 'Rejected' :
-                          (savingId === inv.id ? 'Approving...' : 'Approve')}
-                      </button>
+                      {(() => {
+                        const profileComplete = isProfileComplete(inv.user)
+                        const canApprove = profileComplete && 
+                                          inv.status !== 'active' && 
+                                          inv.status !== 'withdrawn' && 
+                                          inv.status !== 'rejected'
+                        const disableReason = !profileComplete 
+                          ? 'Complete profile & bank connection required'
+                          : inv.status === 'active' ? 'Already active'
+                          : inv.status === 'withdrawn' ? 'Already withdrawn'
+                          : inv.status === 'rejected' ? 'Already rejected'
+                          : ''
+                        
+                        return (
+                          <button
+                            className={styles.approveButton}
+                            disabled={savingId === inv.id || !canApprove}
+                            onClick={(e) => { e.stopPropagation(); approveInvestment(inv.user.id, inv.id); }}
+                            title={!canApprove ? disableReason : ''}
+                          >
+                            {inv.status === 'active' ? 'Active' :
+                              inv.status === 'withdrawn' ? 'Withdrawn' :
+                              inv.status === 'rejected' ? 'Rejected' :
+                              (savingId === inv.id ? 'Approving...' : 'Approve')}
+                          </button>
+                        )
+                      })()}
                       {inv.status !== 'active' && inv.status !== 'withdrawn' && (
                         <button
                           className={styles.dangerButton}
@@ -497,8 +544,8 @@ export default function AdminPage() {
                         </div>
                       </div>
                       <div className={styles.accountCardBody}>
-                        <div className={styles.accountName}>{user.firstName || '-'} {user.lastName || ''}</div>
                         <div className={styles.accountEmail}>{user.email || '-'}</div>
+                        <div className={styles.accountName}>{user.firstName || '-'} {user.lastName || ''}</div>
                         {user.accountType === 'joint' && user.jointHolder?.email && (
                           <div className={styles.accountJointEmail}>Joint: {user.jointHolder.email}</div>
                         )}
