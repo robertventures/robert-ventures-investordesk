@@ -15,13 +15,14 @@ const addDaysUtc = (date, days) => {
   return new Date(date.getTime() + days * MS_PER_DAY)
 }
 
-// Convert a JS Date into a Date representing noon Eastern Time on the same calendar day.
-const toEasternTimeNoon = (date) => {
+// Convert a JS Date into a Date representing 9:00 AM Eastern Time on the same calendar day.
+// All distributions happen at 9:00 AM EST regardless of investor time zones.
+const toEasternTime9AM = (date) => {
   const easternString = new Date(date).toLocaleString('en-US', {
     timeZone: 'America/New_York'
   })
   const easternDate = new Date(easternString)
-  easternDate.setHours(12, 0, 0, 0)
+  easternDate.setHours(9, 0, 0, 0)
   return easternDate
 }
 
@@ -242,27 +243,28 @@ export async function POST() {
               distributionAmount = prorated
             }
             
-            // Distribution date is explicitly set to the 1st of the NEXT month at noon Eastern Time
+            // Distribution date is explicitly set to the 1st of the NEXT month at 9:00 AM EST
+            // This ensures consistency across all time zones - all distributions happen at 9:00 AM EST
             const segmentEndDate = new Date(segment.end)
             const distributionDateUtc = new Date(Date.UTC(
               segmentEndDate.getUTCFullYear(),
               segmentEndDate.getUTCMonth() + 1,
               1,
-              12, 0, 0, 0
+              9, 0, 0, 0
             ))
-            const distributionDateEastern = toEasternTimeNoon(distributionDateUtc)
+            const distributionDateEastern = toEasternTime9AM(distributionDateUtc)
             const eventId = generateTransactionId('INV', invId, 'monthly_distribution', { date: distributionDateUtc })
             
-            // Determine payout status based on bank connection
-            let payoutStatus = 'completed'
-            let failureReason = null
+            // TESTING MODE: All payouts require admin approval
+            // In production, admin must manually approve all monthly payouts
+            // This ensures proper oversight and compliance
+            let payoutStatus = 'pending'
+            let failureReason = 'Awaiting admin approval'
             
-            if (!bankConnectionActive) {
-              payoutStatus = 'pending'
-              failureReason = 'Bank account connection lost or misconfigured'
-            } else if (!payoutBankId) {
-              payoutStatus = 'pending'
-              failureReason = 'No payout bank account configured'
+            // For testing: Use mock bank details if no real bank is configured
+            if (!payoutBankId) {
+              payoutBankId = 'MOCK-BANK-001'
+              payoutBankNickname = 'Test Bank Account (Mock)'
             }
             
             ensureEvent({
@@ -328,15 +330,16 @@ export async function POST() {
               interest = balance * dailyRate * segment.days
             }
             
-            // Compounding date is explicitly set to the 1st of the NEXT month at noon Eastern Time
+            // Compounding date is explicitly set to the 1st of the NEXT month at 9:00 AM EST
+            // This ensures consistency across all time zones - all compounding happens at 9:00 AM EST
             const segmentEndDate = new Date(segment.end)
             const compoundingDateUtc = new Date(Date.UTC(
               segmentEndDate.getUTCFullYear(),
               segmentEndDate.getUTCMonth() + 1,
               1,
-              12, 0, 0, 0
+              9, 0, 0, 0
             ))
-            const compoundingDateEastern = toEasternTimeNoon(compoundingDateUtc)
+            const compoundingDateEastern = toEasternTime9AM(compoundingDateUtc)
             const eventId = generateTransactionId('INV', invId, 'monthly_compounded', { date: compoundingDateUtc })
             ensureEvent({
               id: eventId,

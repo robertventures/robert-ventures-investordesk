@@ -723,7 +723,7 @@ User Submits → pending (bank auto-approved ✓) → Admin Reviews → active
 **Required Address Information:**
 - ✅ Street Address (`address.street1`)
 - ✅ City (`address.city`)
-- ✅ State (`address.state`)
+- ✅ State (`address.state`) - **REQUIRED** (full state name, not abbreviation)
 - ✅ ZIP Code (`address.zip`)
 
 **Required Banking Connection:**
@@ -2095,9 +2095,10 @@ days_accrued = 16  # Jan 16-31 (inclusive)
 interest = principal * monthly_rate * (days_accrued / days_in_month)
 # = 10000 * 0.00667 * (16/31) = $34.45
 
-# ⚠️ CRITICAL: This $34.45 is paid/compounded on Feb 1 (1st of NEXT month)
+# ⚠️ CRITICAL: This $34.45 is paid/compounded on Feb 1 at 9:00 AM EST (1st of NEXT month)
 # NOT on Jan 31 (last day of accrual period)
-# Distribution/compounding events are ALWAYS dated on the 1st of the following month
+# Distribution/compounding events are ALWAYS dated on the 1st of the following month at 9:00 AM EST
+# This ensures consistency across all investor time zones
 ```
 
 #### Scenario 2: Full Months (Middle Period)
@@ -2163,8 +2164,8 @@ total_payout = current_balance + final_month_interest
 | **Mar 1-20** | Partial | 10000 × 0.00667 × (20/31) | $43.01 | $144.09 |
 
 **Payout Events:**
-- Feb 1: Pay $34.41 (for Jan 16-31)
-- Mar 1: Pay $66.67 (for February)
+- Feb 1 at 9:00 AM EST: Pay $34.41 (for Jan 16-31)
+- Mar 1 at 9:00 AM EST: Pay $66.67 (for February)
 - Mar 20 (withdrawal): Pay $10,000 principal + $43.01 (for Mar 1-20) = **$10,043.01**
 
 **Total Interest Earned:** $144.09 (for 64 days)
@@ -2365,37 +2366,38 @@ Difference is negligible, and monthly is standard practice.
 ## Pending Payouts System
 
 ### Problem
-Monthly payouts can fail if:
-- Bank account disconnected
-- User changed password
-- Bank misconfigured
+All monthly payouts require admin approval to ensure proper oversight and compliance.
 
 ### Solution
-Store failed payouts in a **pending queue** instead of losing them.
+Store all payouts with **pending status** and require admin approval before sending.
 
 ### Implementation
 
 **When generating monthly payouts:**
 ```python
 def create_monthly_payout(user, investment, amount, date):
-    # Check bank connection status
-    bank_connected = check_bank_connection(user, investment)
+    """
+    All monthly payouts start as 'pending' and require admin approval.
+    This enforces manual oversight of all financial distributions.
+    """
+    # TESTING MODE: All payouts require admin approval
+    status = 'pending'
+    failure_reason = 'Awaiting admin approval'
     
-    if bank_connected:
-        status = 'completed'
-        send_to_bank(user.bank_account, amount)
-    else:
-        status = 'pending'
-        failure_reason = 'Bank account connection lost'
+    # Use mock bank details for testing if no real bank configured
+    bank_id = user.bank_account.id if user.bank_account else 'MOCK-BANK-001'
+    bank_nickname = user.bank_account.nickname if user.bank_account else 'Test Bank Account (Mock)'
     
     # Store transaction
     transaction = {
         'type': 'monthly_distribution',
         'amount': amount,
         'date': date,
-        'status': status,
-        'failure_reason': failure_reason if not bank_connected else None,
-        'retry_count': 0
+        'payoutStatus': status,
+        'payoutBankId': bank_id,
+        'payoutBankNickname': bank_nickname,
+        'failureReason': failure_reason,
+        'retryCount': 0
     }
     
     save_transaction(transaction)
@@ -2403,9 +2405,11 @@ def create_monthly_payout(user, investment, amount, date):
 
 **Admin can:**
 - View all pending payouts
-- Retry sending payout
+- Approve individual payouts
+- Batch approve multiple payouts
+- Retry failed payouts
 - Manually mark as completed
-- Mark as failed with reason
+- Mark as failed with custom reason
 
 ---
 
@@ -2600,7 +2604,7 @@ def calculate_total_earnings(investments, transactions, app_time):
   "address": {
     "street1": "string",
     "city": "string",
-    "state": "string",
+    "state": "string",  // REQUIRED: Full state name (e.g., "California", not "CA")
     "zip": "string",
     "country": "string"
   },
@@ -2834,12 +2838,30 @@ The platform automatically generates distribution events for active investments 
 
 ### ⚠️ CRITICAL EVENT TIMING RULE
 
-**Distribution and compounding events are ALWAYS dated on the 1st of the month FOLLOWING the accrual period.**
+**Distribution and compounding events are ALWAYS dated on the 1st of the month FOLLOWING the accrual period at 9:00 AM EST.**
 
-- ✅ Accrual period: Jan 16-31 → Event date: Feb 1
-- ✅ Accrual period: Feb 1-28 → Event date: Mar 1
-- ✅ Accrual period: Mar 1-31 → Event date: Apr 1
+**Why 9:00 AM EST?** This ensures consistency across all investor time zones. Regardless of whether an investor is in California (PST), New York (EST), or Tokyo (JST), their distributions are always processed at the same absolute time: 9:00 AM Eastern Time.
+
+- ✅ Accrual period: Jan 16-31 → Event date: Feb 1 at 9:00 AM EST
+- ✅ Accrual period: Feb 1-28 → Event date: Mar 1 at 9:00 AM EST
+- ✅ Accrual period: Mar 1-31 → Event date: Apr 1 at 9:00 AM EST
 - ❌ NEVER: Accrual period: Jan 16-31 → Event date: Jan 31
+- ❌ NEVER: Different times for different investors
+
+### Distribution Timing Requirements
+
+**⚠️ CRITICAL BUSINESS RULE:** All distributions (both monthly payouts and compounding) must occur on the **1st day of each month at 9:00 AM Eastern Time (EST/EDT)**.
+
+**Why this matters:**
+- **Time zone consistency**: Investors are located in different time zones, and we want to ensure all distributions happen at the same absolute moment
+- **Operational consistency**: Makes it clear when transfers will occur, regardless of where investors are located
+- **No confusion**: A distribution scheduled for "the 1st" won't accidentally happen on the 31st or 2nd in some time zones
+
+**Implementation Requirements:**
+- All `monthly_distribution` events must be timestamped at 9:00 AM EST on the 1st of each month
+- All `monthly_compounded` events must be timestamped at 9:00 AM EST on the 1st of each month
+- The backend must convert this to UTC appropriately (accounting for EST vs EDT)
+- Frontend should display this time in the investor's local timezone, but the actual event always happens at 9:00 AM Eastern
 
 ### Generation Mechanism
 
@@ -2921,12 +2943,13 @@ For a $10,000 investment at 10% APY:
 - Full month interest: $10,000 × (0.10 / 12) = $83.33
 - Prorated (16 days): $83.33 × (16/31) = $43.01
 
-**⚠️ CRITICAL - Distribution Date:**
+**⚠️ CRITICAL - Distribution Date and Time:**
 - **Accrual Period:** January 16-31, 2025
-- **Distribution/Compounding Date:** **February 1, 2025** (1st of FOLLOWING month)
+- **Distribution/Compounding Date:** **February 1, 2025 at 9:00 AM EST** (1st of FOLLOWING month)
 - **NOT:** January 31, 2025 (last day of accrual period)
+- **NOT:** Any other time of day besides 9:00 AM EST
 
-Events are ALWAYS dated on the 1st of the month AFTER the accrual period ends.
+Events are ALWAYS dated on the 1st of the month AFTER the accrual period ends, at exactly 9:00 AM Eastern Time. This ensures all distributions happen at the same moment regardless of investor time zones.
 
 ### Compounding Mechanics
 
@@ -2958,8 +2981,8 @@ For compounding investments, each month's interest is added to the principal:
   "amount": 83.33,
   "lockupPeriod": "3-year",
   "paymentFrequency": "monthly",
-  "date": "2025-02-01T17:00:00.000Z",
-  "displayDate": "2025-02-01T12:00:00-05:00",
+  "date": "2025-02-01T14:00:00.000Z",
+  "displayDate": "2025-02-01T09:00:00-05:00",
   "monthIndex": 1,
   "payoutMethod": "bank-account",
   "payoutBankId": "BANK-001",
@@ -2970,6 +2993,8 @@ For compounding investments, each month's interest is added to the principal:
 }
 ```
 
+**Note:** All distributions are timestamped at 9:00 AM Eastern Time (14:00 UTC during standard time, 13:00 UTC during daylight saving time). This ensures consistency across all investor time zones.
+
 **Monthly Compounded Event:**
 ```json
 {
@@ -2979,12 +3004,14 @@ For compounding investments, each month's interest is added to the principal:
   "amount": 83.33,
   "lockupPeriod": "3-year",
   "paymentFrequency": "compounding",
-  "date": "2025-02-01T17:00:00.000Z",
-  "displayDate": "2025-02-01T12:00:00-05:00",
+  "date": "2025-02-01T14:00:00.000Z",
+  "displayDate": "2025-02-01T09:00:00-05:00",
   "monthIndex": 1,
   "principal": 10000.00
 }
 ```
+
+**Note:** All compounding events are timestamped at 9:00 AM Eastern Time, consistent with distribution events.
 
 ### Critical Implementation Notes
 
@@ -3366,6 +3393,13 @@ def create_withdrawal(user_id, investment_id):
 ---
 
 ## Validation Rules
+
+### Address Validation
+- **Street1:** Required, non-empty
+- **City:** Required, no numbers allowed
+- **State:** **REQUIRED**, must be full state name (e.g., "California", not "CA")
+- **ZIP:** Required, must be exactly 5 digits
+- **Country:** Defaults to "United States"
 
 ### Email
 - Must be valid email format
@@ -4612,6 +4646,13 @@ Good luck, and welcome to the team! 🚀
 
 ---
 
-**Document Version:** 2.0  
+**Document Version:** 2.1  
 **Last Updated:** October 2025  
 **Maintained By:** Robert Ventures Development Team
+
+**Version 2.1 Changes:**
+- Clarified that all monthly payouts require admin approval (not bank connection-dependent)
+- Added mock bank account details for testing purposes
+- Documented state field as REQUIRED in address validation
+- Removed fix-payout-reasons script (no longer needed)
+- Updated seed accounts script to include state information

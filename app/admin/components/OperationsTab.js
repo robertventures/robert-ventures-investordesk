@@ -43,7 +43,7 @@ export default function OperationsTab({
       <SectionCard title="Pending Payouts">
         <div className={styles.sectionHeader}>
           <p className={styles.sectionDescription}>
-            Manage monthly interest payments that could not be sent due to bank connection issues
+            Manage monthly interest payments that require admin approval
           </p>
           <button 
             className={styles.refreshButton} 
@@ -58,8 +58,8 @@ export default function OperationsTab({
           <div className={styles.alertBox}>
             <strong>⚠️ {pendingPayouts.length} Payout{pendingPayouts.length !== 1 ? 's' : ''} Pending</strong>
             <p>
-              These monthly interest payments could not be sent due to bank connection issues.
-              You can retry the payouts or manually mark them as completed once the bank connection is restored.
+              These monthly interest payments require manual approval from admin.
+              You can retry the payouts or manually mark them as completed once approved.
             </p>
           </div>
         )}

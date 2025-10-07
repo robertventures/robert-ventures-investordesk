@@ -420,7 +420,12 @@ export async function GET(request, { params }) {
     const user = usersData.users.find(user => user.id === id)
     
     if (user) {
-      return NextResponse.json({ success: true, user })
+      // Include app time for calculations (Time Machine support)
+      return NextResponse.json({ 
+        success: true, 
+        user,
+        appTime: usersData.appTime || null
+      })
     } else {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 })
     }

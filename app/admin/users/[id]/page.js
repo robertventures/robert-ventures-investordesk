@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import AdminHeader from '../../../components/AdminHeader'
+import { calculateInvestmentValue } from '../../../../lib/investmentCalculations'
 import styles from './page.module.css'
 
 export default function AdminUserDetailsPage({ params }) {
@@ -12,6 +13,8 @@ export default function AdminUserDetailsPage({ params }) {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [isVerifying, setIsVerifying] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [appTime, setAppTime] = useState(null)
 
   const MIN_DOB = '1900-01-01'
 
@@ -113,6 +116,10 @@ export default function AdminUserDetailsPage({ params }) {
         const data = await res.json()
         if (data.success) {
           setUser(data.user)
+          // Store app time if available
+          if (data.appTime) {
+            setAppTime(data.appTime)
+          }
           const u = data.user
           setForm({
             accountType: u.accountType || 'individual',
@@ -305,6 +312,62 @@ export default function AdminUserDetailsPage({ params }) {
     }
   }
 
+  const handleEdit = () => {
+    setIsEditing(true)
+  }
+
+  const handleCancel = () => {
+    // Reset form to original user data
+    const u = user
+    setForm({
+      accountType: u.accountType || 'individual',
+      firstName: u.firstName || '',
+      lastName: u.lastName || '',
+      email: u.email || '',
+      phone: u.phone || u.phoneNumber || '',
+      street1: u.address?.street1 || '',
+      street2: u.address?.street2 || '',
+      city: u.address?.city || '',
+      state: u.address?.state || '',
+      zip: u.address?.zip || '',
+      country: u.address?.country || 'United States',
+      dob: u.dob || '',
+      ssn: u.ssn || '',
+      entityName: u.entity?.name || u.entityName || '',
+      entityTaxId: u.entity?.taxId || '',
+      entityRegistrationDate: u.entity?.registrationDate || '',
+      jointHoldingType: u.jointHoldingType || '',
+      jointHolder: {
+        firstName: u.jointHolder?.firstName || '',
+        lastName: u.jointHolder?.lastName || '',
+        email: u.jointHolder?.email || '',
+        phone: u.jointHolder?.phone || '',
+        dob: u.jointHolder?.dob || '',
+        ssn: u.jointHolder?.ssn || '',
+        street1: u.jointHolder?.address?.street1 || '',
+        street2: u.jointHolder?.address?.street2 || '',
+        city: u.jointHolder?.address?.city || '',
+        state: u.jointHolder?.address?.state || '',
+        zip: u.jointHolder?.address?.zip || '',
+        country: u.jointHolder?.address?.country || 'United States'
+      },
+      authorizedRep: {
+        firstName: u.authorizedRepresentative?.firstName || '',
+        lastName: u.authorizedRepresentative?.lastName || '',
+        dob: u.authorizedRepresentative?.dob || '',
+        ssn: u.authorizedRepresentative?.ssn || '',
+        street1: u.authorizedRepresentative?.address?.street1 || '',
+        street2: u.authorizedRepresentative?.address?.street2 || '',
+        city: u.authorizedRepresentative?.address?.city || '',
+        state: u.authorizedRepresentative?.address?.state || '',
+        zip: u.authorizedRepresentative?.address?.zip || '',
+        country: u.authorizedRepresentative?.address?.country || 'United States'
+      }
+    })
+    setErrors({})
+    setIsEditing(false)
+  }
+
   const handleSave = async () => {
     if (!validate()) return
     setIsSaving(true)
@@ -382,6 +445,7 @@ export default function AdminUserDetailsPage({ params }) {
         return
       }
       setUser(data.user)
+      setIsEditing(false)
       alert('User updated successfully')
     } catch (e) {
       console.error('Failed to save user', e)
@@ -391,8 +455,26 @@ export default function AdminUserDetailsPage({ params }) {
     }
   }
 
-  const investedTotal = (user.investments || []).filter(inv => inv.status === 'active').reduce((sum, inv) => sum + (inv.amount || 0), 0)
+  // Calculate investment metrics using app time if available
+  const activeInvestments = (user.investments || []).filter(inv => inv.status === 'active' || inv.status === 'withdrawal_notice')
   const pendingTotal = (user.investments || []).filter(inv => inv.status === 'pending' || inv.status === 'draft').reduce((sum, inv) => sum + (inv.amount || 0), 0)
+  
+  // Calculate pending payouts (monthly distributions awaiting admin approval)
+  const pendingPayouts = (user.activity || [])
+    .filter(tx => tx.type === 'monthly_distribution' && (tx.payoutStatus === 'pending' || tx.payoutStatus === 'failed'))
+    .reduce((sum, tx) => sum + (tx.amount || 0), 0)
+  
+  // Calculate original investment value (sum of all active investment principals)
+  const originalInvestmentValue = activeInvestments.reduce((sum, inv) => sum + (inv.amount || 0), 0)
+  
+  // Calculate current account value (sum of all active investments with compounding)
+  // Use app time from Time Machine if available
+  const currentAccountValue = activeInvestments.reduce((sum, inv) => {
+    const calculation = calculateInvestmentValue(inv, appTime)
+    return sum + calculation.currentValue
+  }, 0)
+  
+  const totalEarnings = currentAccountValue - originalInvestmentValue
 
   return (
     <div className={styles.main}>
@@ -418,208 +500,41 @@ export default function AdminUserDetailsPage({ params }) {
             </div>
           </div>
 
-          {/* Metrics Cards */}
+          {/* Primary Value Metrics - Featured at Top */}
+          <div className={styles.primaryMetricsGrid}>
+            <div className={styles.primaryMetricCard}>
+              <div className={styles.primaryMetricLabel}>Original Investment Value</div>
+              <div className={styles.primaryMetricValue}>${originalInvestmentValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              <div className={styles.primaryMetricSubtext}>Total principal invested</div>
+            </div>
+            <div className={styles.primaryMetricCard}>
+              <div className={styles.primaryMetricLabel}>Current Account Value</div>
+              <div className={styles.primaryMetricValue}>${currentAccountValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              <div className={styles.primaryMetricSubtext}>
+                {totalEarnings >= 0 ? '+' : ''} ${totalEarnings.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} total earnings
+              </div>
+            </div>
+          </div>
+
+          {/* Secondary Metrics Cards */}
           <div className={styles.metricsGrid}>
             <div className={styles.metricCard}>
               <div className={styles.metricLabel}>Total Investments</div>
               <div className={styles.metricValue}>{(user.investments || []).length}</div>
             </div>
             <div className={styles.metricCard}>
-              <div className={styles.metricLabel}>Pending Amount</div>
+              <div className={styles.metricLabel}>Active Investments</div>
+              <div className={styles.metricValue}>{activeInvestments.length}</div>
+            </div>
+            <div className={styles.metricCard}>
+              <div className={styles.metricLabel}>Pending Investments</div>
               <div className={styles.metricValue}>${pendingTotal.toLocaleString()}</div>
             </div>
             <div className={styles.metricCard}>
-              <div className={styles.metricLabel}>Approved Amount</div>
-              <div className={styles.metricValue}>${investedTotal.toLocaleString()}</div>
+              <div className={styles.metricLabel}>Pending Payouts</div>
+              <div className={styles.metricValue}>${pendingPayouts.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
             </div>
           </div>
-
-          {/* Account Profile Section */}
-          <div className={styles.sectionCard}>
-            <div className={styles.sectionHeader}>
-              <h2 className={styles.sectionTitle}>Account Profile</h2>
-            </div>
-            <div className={styles.grid}>
-              <div><b>Account Type:</b> {form.accountType || '-'}</div>
-              <div>
-                <b>Verified:</b> {user.isVerified ? 'Yes' : 'No'}
-                {!user.isVerified && (
-                  <button 
-                    onClick={handleVerifyAccount} 
-                    disabled={isVerifying}
-                    className={styles.verifyButton}
-                    style={{ marginLeft: '12px' }}
-                  >
-                    {isVerifying ? 'Verifying...' : 'Verify Account'}
-                  </button>
-                )}
-              </div>
-              <div>
-                <label><b>Email</b></label>
-                <input name="email" value={form.email} onChange={handleChange} />
-                {errors.email && <div className={styles.muted}>{errors.email}</div>}
-              </div>
-              {form.accountType !== 'entity' && (
-                <>
-                  <div>
-                    <label><b>First Name</b></label>
-                    <input name="firstName" value={form.firstName} onChange={handleChange} />
-                    {errors.firstName && <div className={styles.muted}>{errors.firstName}</div>}
-                  </div>
-                  <div>
-                    <label><b>Last Name</b></label>
-                    <input name="lastName" value={form.lastName} onChange={handleChange} />
-                    {errors.lastName && <div className={styles.muted}>{errors.lastName}</div>}
-                  </div>
-                </>
-              )}
-              <div>
-                <label><b>Phone</b></label>
-                <input name="phone" value={form.phone} onChange={handleChange} placeholder="(555) 555-5555" />
-                {errors.phone && <div className={styles.muted}>{errors.phone}</div>}
-              </div>
-              {form.accountType !== 'entity' && (
-                <>
-                  <div>
-                    <label><b>Date of Birth</b></label>
-                    <input type="date" name="dob" value={form.dob} onChange={handleChange} min={MIN_DOB} max={maxAdultDob} />
-                    {errors.dob && <div className={styles.muted}>{errors.dob}</div>}
-                  </div>
-                  <div>
-                    <label><b>SSN</b></label>
-                    <input name="ssn" value={form.ssn} onChange={handleChange} placeholder="123-45-6789" />
-                    {errors.ssn && <div className={styles.muted}>{errors.ssn}</div>}
-                  </div>
-                </>
-              )}
-              <div>
-                <label><b>Street Address</b></label>
-                <input name="street1" value={form.street1} onChange={handleChange} />
-                {errors.street1 && <div className={styles.muted}>{errors.street1}</div>}
-              </div>
-              <div>
-                <label><b>Apt or Unit</b></label>
-                <input name="street2" value={form.street2} onChange={handleChange} />
-              </div>
-              <div>
-                <label><b>City</b></label>
-                <input name="city" value={form.city} onChange={handleChange} />
-                {errors.city && <div className={styles.muted}>{errors.city}</div>}
-              </div>
-              <div>
-                <label><b>Zip</b></label>
-                <input name="zip" value={form.zip} onChange={handleChange} />
-                {errors.zip && <div className={styles.muted}>{errors.zip}</div>}
-              </div>
-              <div>
-                <label><b>State</b></label>
-                <select name="state" value={form.state} onChange={handleChange}>
-                  <option value="">Select state</option>
-                  {US_STATES.map(s => (<option key={s} value={s}>{s}</option>))}
-                </select>
-                {errors.state && <div className={styles.muted}>{errors.state}</div>}
-              </div>
-              <div>
-                <label><b>Country</b></label>
-                <input name="country" value={form.country} readOnly disabled />
-              </div>
-            </div>
-            <div className={styles.sectionActions}>
-              <button className={styles.saveButton} onClick={() => handleSave()} disabled={isSaving}>
-                {isSaving ? 'Saving Changes...' : 'Save Changes'}
-              </button>
-            </div>
-          </div>
-
-          {/* Joint Holder Section */}
-          {form.accountType === 'joint' && (
-            <div className={styles.sectionCard}>
-              <div className={styles.sectionHeader}>
-                <h2 className={styles.sectionTitle}>Joint Holder Information</h2>
-              </div>
-              <div className={styles.grid}>
-                <div>
-                  <label><b>Joint Holding Type</b></label>
-                  <select name="jointHoldingType" value={form.jointHoldingType} onChange={handleChange}>
-                    <option value="">Select joint holding type</option>
-                    <option value="spouse">Spouse</option>
-                    <option value="sibling">Sibling</option>
-                    <option value="domestic_partner">Domestic Partner</option>
-                    <option value="business_partner">Business Partner</option>
-                    <option value="other">Other</option>
-                  </select>
-                  {errors.jointHoldingType && <div className={styles.muted}>{errors.jointHoldingType}</div>}
-                </div>
-                <div />
-                <div>
-                  <label><b>First Name</b></label>
-                  <input name="jointHolder.firstName" value={form.jointHolder.firstName} onChange={handleChange} />
-                  {errors['jointHolder.firstName'] && <div className={styles.muted}>{errors['jointHolder.firstName']}</div>}
-                </div>
-                <div>
-                  <label><b>Last Name</b></label>
-                  <input name="jointHolder.lastName" value={form.jointHolder.lastName} onChange={handleChange} />
-                  {errors['jointHolder.lastName'] && <div className={styles.muted}>{errors['jointHolder.lastName']}</div>}
-                </div>
-                <div>
-                  <label><b>Email</b></label>
-                  <input name="jointHolder.email" value={form.jointHolder.email} onChange={handleChange} />
-                  {errors['jointHolder.email'] && <div className={styles.muted}>{errors['jointHolder.email']}</div>}
-                </div>
-                <div>
-                  <label><b>Phone</b></label>
-                  <input name="jointHolder.phone" value={form.jointHolder.phone} onChange={handleChange} placeholder="(555) 555-5555" />
-                  {errors['jointHolder.phone'] && <div className={styles.muted}>{errors['jointHolder.phone']}</div>}
-                </div>
-                <div>
-                  <label><b>Date of Birth</b></label>
-                  <input type="date" name="jointHolder.dob" value={form.jointHolder.dob} onChange={handleChange} min={MIN_DOB} max={maxAdultDob} />
-                  {errors['jointHolder.dob'] && <div className={styles.muted}>{errors['jointHolder.dob']}</div>}
-                </div>
-                <div>
-                  <label><b>SSN</b></label>
-                  <input name="jointHolder.ssn" value={form.jointHolder.ssn} onChange={handleChange} placeholder="123-45-6789" />
-                  {errors['jointHolder.ssn'] && <div className={styles.muted}>{errors['jointHolder.ssn']}</div>}
-                </div>
-                <div>
-                  <label><b>Street Address</b></label>
-                  <input name="jointHolder.street1" value={form.jointHolder.street1} onChange={handleChange} />
-                  {errors['jointHolder.street1'] && <div className={styles.muted}>{errors['jointHolder.street1']}</div>}
-                </div>
-                <div>
-                  <label><b>Apt or Unit</b></label>
-                  <input name="jointHolder.street2" value={form.jointHolder.street2} onChange={handleChange} />
-                </div>
-                <div>
-                  <label><b>City</b></label>
-                  <input name="jointHolder.city" value={form.jointHolder.city} onChange={handleChange} />
-                  {errors['jointHolder.city'] && <div className={styles.muted}>{errors['jointHolder.city']}</div>}
-                </div>
-                <div>
-                  <label><b>Zip</b></label>
-                  <input name="jointHolder.zip" value={form.jointHolder.zip} onChange={handleChange} />
-                  {errors['jointHolder.zip'] && <div className={styles.muted}>{errors['jointHolder.zip']}</div>}
-                </div>
-                <div>
-                  <label><b>State</b></label>
-                  <select name="jointHolder.state" value={form.jointHolder.state} onChange={handleChange}>
-                    <option value="">Select state</option>
-                    {US_STATES.map(s => (<option key={s} value={s}>{s}</option>))}
-                  </select>
-                  {errors['jointHolder.state'] && <div className={styles.muted}>{errors['jointHolder.state']}</div>}
-                </div>
-                <div>
-                  <label><b>Country</b></label>
-                  <input name="jointHolder.country" value={form.jointHolder.country} readOnly disabled />
-                </div>
-              </div>
-              <div className={styles.sectionActions}>
-                <button className={styles.saveButton} onClick={() => handleSave()} disabled={isSaving}>
-                  {isSaving ? 'Saving Changes...' : 'Save Changes'}
-                </button>
-              </div>
-            </div>
-          )}
 
           {/* Investments Section */}
           <div className={styles.sectionCard}>
@@ -713,6 +628,200 @@ export default function AdminUserDetailsPage({ params }) {
               <div className={styles.muted}>No investments</div>
             )}
           </div>
+
+          {/* Account Profile Section */}
+          <div className={styles.sectionCard}>
+            <div className={styles.sectionHeader}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h2 className={styles.sectionTitle}>Account Profile</h2>
+                {!isEditing && (
+                  <button className={styles.editButton} onClick={handleEdit}>
+                    Edit Profile
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className={styles.grid}>
+              <div><b>Account Type:</b> {form.accountType || '-'}</div>
+              <div>
+                <b>Verified:</b> {user.isVerified ? 'Yes' : 'No'}
+                {!user.isVerified && (
+                  <button 
+                    onClick={handleVerifyAccount} 
+                    disabled={isVerifying}
+                    className={styles.verifyButton}
+                    style={{ marginLeft: '12px' }}
+                  >
+                    {isVerifying ? 'Verifying...' : 'Verify Account'}
+                  </button>
+                )}
+              </div>
+              <div>
+                <label><b>Email</b></label>
+                <input name="email" value={form.email} onChange={handleChange} disabled={!isEditing} />
+                {errors.email && <div className={styles.muted}>{errors.email}</div>}
+              </div>
+              {form.accountType !== 'entity' && (
+                <>
+                  <div>
+                    <label><b>First Name</b></label>
+                    <input name="firstName" value={form.firstName} onChange={handleChange} disabled={!isEditing} />
+                    {errors.firstName && <div className={styles.muted}>{errors.firstName}</div>}
+                  </div>
+                  <div>
+                    <label><b>Last Name</b></label>
+                    <input name="lastName" value={form.lastName} onChange={handleChange} disabled={!isEditing} />
+                    {errors.lastName && <div className={styles.muted}>{errors.lastName}</div>}
+                  </div>
+                </>
+              )}
+              <div>
+                <label><b>Phone</b></label>
+                <input name="phone" value={form.phone} onChange={handleChange} placeholder="(555) 555-5555" disabled={!isEditing} />
+                {errors.phone && <div className={styles.muted}>{errors.phone}</div>}
+              </div>
+              {form.accountType !== 'entity' && (
+                <>
+                  <div>
+                    <label><b>Date of Birth</b></label>
+                    <input type="date" name="dob" value={form.dob} onChange={handleChange} min={MIN_DOB} max={maxAdultDob} disabled={!isEditing} />
+                    {errors.dob && <div className={styles.muted}>{errors.dob}</div>}
+                  </div>
+                  <div>
+                    <label><b>SSN</b></label>
+                    <input name="ssn" value={form.ssn} onChange={handleChange} placeholder="123-45-6789" disabled={!isEditing} />
+                    {errors.ssn && <div className={styles.muted}>{errors.ssn}</div>}
+                  </div>
+                </>
+              )}
+              <div>
+                <label><b>Street Address</b></label>
+                <input name="street1" value={form.street1} onChange={handleChange} disabled={!isEditing} />
+                {errors.street1 && <div className={styles.muted}>{errors.street1}</div>}
+              </div>
+              <div>
+                <label><b>Apt or Unit</b></label>
+                <input name="street2" value={form.street2} onChange={handleChange} disabled={!isEditing} />
+              </div>
+              <div>
+                <label><b>City</b></label>
+                <input name="city" value={form.city} onChange={handleChange} disabled={!isEditing} />
+                {errors.city && <div className={styles.muted}>{errors.city}</div>}
+              </div>
+              <div>
+                <label><b>Zip</b></label>
+                <input name="zip" value={form.zip} onChange={handleChange} disabled={!isEditing} />
+                {errors.zip && <div className={styles.muted}>{errors.zip}</div>}
+              </div>
+              <div>
+                <label><b>State</b></label>
+                <select name="state" value={form.state} onChange={handleChange} disabled={!isEditing}>
+                  <option value="">Select state</option>
+                  {US_STATES.map(s => (<option key={s} value={s}>{s}</option>))}
+                </select>
+                {errors.state && <div className={styles.muted}>{errors.state}</div>}
+              </div>
+              <div>
+                <label><b>Country</b></label>
+                <input name="country" value={form.country} readOnly disabled />
+              </div>
+            </div>
+            {isEditing && (
+              <div className={styles.sectionActions}>
+                <button className={styles.saveButton} onClick={handleSave} disabled={isSaving}>
+                  {isSaving ? 'Saving Changes...' : 'Save Changes'}
+                </button>
+                <button className={styles.cancelButton} onClick={handleCancel} disabled={isSaving}>
+                  Cancel
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Joint Holder Section */}
+          {form.accountType === 'joint' && (
+            <div className={styles.sectionCard}>
+              <div className={styles.sectionHeader}>
+                <h2 className={styles.sectionTitle}>Joint Holder Information</h2>
+              </div>
+              <div className={styles.grid}>
+                <div>
+                  <label><b>Joint Holding Type</b></label>
+                  <select name="jointHoldingType" value={form.jointHoldingType} onChange={handleChange} disabled={!isEditing}>
+                    <option value="">Select joint holding type</option>
+                    <option value="spouse">Spouse</option>
+                    <option value="sibling">Sibling</option>
+                    <option value="domestic_partner">Domestic Partner</option>
+                    <option value="business_partner">Business Partner</option>
+                    <option value="other">Other</option>
+                  </select>
+                  {errors.jointHoldingType && <div className={styles.muted}>{errors.jointHoldingType}</div>}
+                </div>
+                <div />
+                <div>
+                  <label><b>First Name</b></label>
+                  <input name="jointHolder.firstName" value={form.jointHolder.firstName} onChange={handleChange} disabled={!isEditing} />
+                  {errors['jointHolder.firstName'] && <div className={styles.muted}>{errors['jointHolder.firstName']}</div>}
+                </div>
+                <div>
+                  <label><b>Last Name</b></label>
+                  <input name="jointHolder.lastName" value={form.jointHolder.lastName} onChange={handleChange} disabled={!isEditing} />
+                  {errors['jointHolder.lastName'] && <div className={styles.muted}>{errors['jointHolder.lastName']}</div>}
+                </div>
+                <div>
+                  <label><b>Email</b></label>
+                  <input name="jointHolder.email" value={form.jointHolder.email} onChange={handleChange} disabled={!isEditing} />
+                  {errors['jointHolder.email'] && <div className={styles.muted}>{errors['jointHolder.email']}</div>}
+                </div>
+                <div>
+                  <label><b>Phone</b></label>
+                  <input name="jointHolder.phone" value={form.jointHolder.phone} onChange={handleChange} placeholder="(555) 555-5555" disabled={!isEditing} />
+                  {errors['jointHolder.phone'] && <div className={styles.muted}>{errors['jointHolder.phone']}</div>}
+                </div>
+                <div>
+                  <label><b>Date of Birth</b></label>
+                  <input type="date" name="jointHolder.dob" value={form.jointHolder.dob} onChange={handleChange} min={MIN_DOB} max={maxAdultDob} disabled={!isEditing} />
+                  {errors['jointHolder.dob'] && <div className={styles.muted}>{errors['jointHolder.dob']}</div>}
+                </div>
+                <div>
+                  <label><b>SSN</b></label>
+                  <input name="jointHolder.ssn" value={form.jointHolder.ssn} onChange={handleChange} placeholder="123-45-6789" disabled={!isEditing} />
+                  {errors['jointHolder.ssn'] && <div className={styles.muted}>{errors['jointHolder.ssn']}</div>}
+                </div>
+                <div>
+                  <label><b>Street Address</b></label>
+                  <input name="jointHolder.street1" value={form.jointHolder.street1} onChange={handleChange} disabled={!isEditing} />
+                  {errors['jointHolder.street1'] && <div className={styles.muted}>{errors['jointHolder.street1']}</div>}
+                </div>
+                <div>
+                  <label><b>Apt or Unit</b></label>
+                  <input name="jointHolder.street2" value={form.jointHolder.street2} onChange={handleChange} disabled={!isEditing} />
+                </div>
+                <div>
+                  <label><b>City</b></label>
+                  <input name="jointHolder.city" value={form.jointHolder.city} onChange={handleChange} disabled={!isEditing} />
+                  {errors['jointHolder.city'] && <div className={styles.muted}>{errors['jointHolder.city']}</div>}
+                </div>
+                <div>
+                  <label><b>Zip</b></label>
+                  <input name="jointHolder.zip" value={form.jointHolder.zip} onChange={handleChange} disabled={!isEditing} />
+                  {errors['jointHolder.zip'] && <div className={styles.muted}>{errors['jointHolder.zip']}</div>}
+                </div>
+                <div>
+                  <label><b>State</b></label>
+                  <select name="jointHolder.state" value={form.jointHolder.state} onChange={handleChange} disabled={!isEditing}>
+                    <option value="">Select state</option>
+                    {US_STATES.map(s => (<option key={s} value={s}>{s}</option>))}
+                  </select>
+                  {errors['jointHolder.state'] && <div className={styles.muted}>{errors['jointHolder.state']}</div>}
+                </div>
+                <div>
+                  <label><b>Country</b></label>
+                  <input name="jointHolder.country" value={form.jointHolder.country} readOnly disabled />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

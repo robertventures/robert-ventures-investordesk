@@ -109,9 +109,9 @@ export async function POST(request) {
     const now = new Date().toISOString()
 
     if (action === 'retry') {
-      // Simulate retry logic - in production, this would call the bank API
-      // For now, we'll mark it as completed if retry is successful
-      // You can add real bank transfer logic here
+      // TESTING MODE: Simulate retry logic with mock bank transfer
+      // In production, this would call the actual bank API
+      // For testing, we simulate an 80% success rate
       
       const retryCount = (transaction.retryCount || 0) + 1
       
@@ -128,7 +128,7 @@ export async function POST(request) {
         transaction.payoutStatus = 'failed'
         transaction.retryCount = retryCount
         transaction.lastRetryAt = now
-        transaction.failureReason = failureReason || 'Bank connection failed during retry'
+        transaction.failureReason = failureReason || 'Mock bank transfer failed during retry'
       }
 
     } else if (action === 'complete') {
