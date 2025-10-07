@@ -15,6 +15,16 @@ const addDaysUtc = (date, days) => {
   return new Date(date.getTime() + days * MS_PER_DAY)
 }
 
+// Convert a JS Date into a Date representing noon Eastern Time on the same calendar day.
+const toEasternTimeNoon = (date) => {
+  const easternString = new Date(date).toLocaleString('en-US', {
+    timeZone: 'America/New_York'
+  })
+  const easternDate = new Date(easternString)
+  easternDate.setHours(12, 0, 0, 0)
+  return easternDate
+}
+
 const getDaysInMonthUtc = (date) => {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate()
 }
@@ -219,7 +229,7 @@ export async function POST() {
           const segments = buildAccrualSegments(accrualStartDate, lastCompletedMonthEnd)
           
           // Generate distribution events for each segment
-          // Distributions are paid on the 1st of the following month
+          // CRITICAL: Distributions are paid on the 1st of the NEXT month after accrual period ends
           let monthIndex = 1
           segments.forEach(segment => {
             const monthlyInterest = (inv.amount || 0) * monthlyRate
@@ -232,9 +242,16 @@ export async function POST() {
               distributionAmount = prorated
             }
             
-            // Distribution date is the 1st of the month AFTER the segment ends
-            const distributionDate = addDaysUtc(segment.end, 1)
-            const eventId = generateTransactionId('INV', invId, 'monthly_distribution', { date: distributionDate })
+            // Distribution date is explicitly set to the 1st of the NEXT month at noon Eastern Time
+            const segmentEndDate = new Date(segment.end)
+            const distributionDateUtc = new Date(Date.UTC(
+              segmentEndDate.getUTCFullYear(),
+              segmentEndDate.getUTCMonth() + 1,
+              1,
+              12, 0, 0, 0
+            ))
+            const distributionDateEastern = toEasternTimeNoon(distributionDateUtc)
+            const eventId = generateTransactionId('INV', invId, 'monthly_distribution', { date: distributionDateUtc })
             
             // Determine payout status based on bank connection
             let payoutStatus = 'completed'
@@ -255,7 +272,8 @@ export async function POST() {
               amount: Math.round(distributionAmount * 100) / 100,
               lockupPeriod: lockup,
               paymentFrequency: payFreq,
-              date: distributionDate.toISOString(),
+              date: distributionDateEastern.toISOString(),
+              displayDate: distributionDateEastern.toISOString(),
               monthIndex,
               payoutMethod,
               payoutBankId,
@@ -296,7 +314,7 @@ export async function POST() {
           const segments = buildAccrualSegments(accrualStartDate, lastCompletedMonthEnd)
           
           // Generate compounding events for each segment
-          // Compounding happens on the 1st of the following month
+          // CRITICAL: Compounding happens on the 1st of the NEXT month after accrual period ends
           let monthIndex = 1
           let balance = amount
           
@@ -310,9 +328,16 @@ export async function POST() {
               interest = balance * dailyRate * segment.days
             }
             
-            // Compounding date is the 1st of the month AFTER the segment ends
-            const compoundingDate = addDaysUtc(segment.end, 1)
-            const eventId = generateTransactionId('INV', invId, 'monthly_compounded', { date: compoundingDate })
+            // Compounding date is explicitly set to the 1st of the NEXT month at noon Eastern Time
+            const segmentEndDate = new Date(segment.end)
+            const compoundingDateUtc = new Date(Date.UTC(
+              segmentEndDate.getUTCFullYear(),
+              segmentEndDate.getUTCMonth() + 1,
+              1,
+              12, 0, 0, 0
+            ))
+            const compoundingDateEastern = toEasternTimeNoon(compoundingDateUtc)
+            const eventId = generateTransactionId('INV', invId, 'monthly_compounded', { date: compoundingDateUtc })
             ensureEvent({
               id: eventId,
               type: 'monthly_compounded',
@@ -320,7 +345,8 @@ export async function POST() {
               amount: Math.round(interest * 100) / 100,
               lockupPeriod: lockup,
               paymentFrequency: payFreq,
-              date: compoundingDate.toISOString(),
+              date: compoundingDateEastern.toISOString(),
+              displayDate: compoundingDateEastern.toISOString(),
               monthIndex,
               principal: Math.round(balance * 100) / 100
             })

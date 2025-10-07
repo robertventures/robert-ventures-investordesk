@@ -8,6 +8,7 @@ import DashboardTab from './components/DashboardTab'
 import OperationsTab from './components/OperationsTab'
 import ActivityTab from './components/ActivityTab'
 import DistributionsTab from './components/DistributionsTab'
+import { calculateInvestmentValue } from '../../lib/investmentCalculations'
 import styles from './page.module.css'
 
 /**
@@ -48,6 +49,22 @@ export default function AdminPage() {
   const [savingId, setSavingId] = useState(null)
   const [investmentsSearch, setInvestmentsSearch] = useState('')
   const [accountsSearch, setAccountsSearch] = useState('')
+  const [isDeletingAccounts, setIsDeletingAccounts] = useState(false)
+  const [isSeedingAccounts, setIsSeedingAccounts] = useState(false)
+  
+  // State for account filters
+  const [showFilters, setShowFilters] = useState(false)
+  const [accountFilters, setAccountFilters] = useState({
+    hasInvestments: 'all', // 'all', 'with', 'without'
+    investmentAmountMin: '',
+    investmentAmountMax: '',
+    investmentValueMin: '',
+    investmentValueMax: '',
+    createdDateStart: '',
+    createdDateEnd: '',
+    numInvestmentsMin: '',
+    numInvestmentsMax: ''
+  })
 
   // Keep tab in sync with URL
   useEffect(() => {
@@ -124,19 +141,68 @@ export default function AdminPage() {
   }, [nonAdminUsers])
 
   const filteredAccountUsers = useMemo(() => {
-    if (!accountsSearch.trim()) return sortedAccountUsers
-    const term = accountsSearch.toLowerCase()
-    return sortedAccountUsers.filter(user => {
-      const accountId = (user.id || '').toString().toLowerCase()
-      const fullName = `${user.firstName || ''} ${user.lastName || ''}`.toLowerCase()
-      const email = (user.email || '').toLowerCase()
-      const jointEmail = (user.jointHolder?.email || '').toLowerCase()
-      const jointName = `${user.jointHolder?.firstName || ''} ${user.jointHolder?.lastName || ''}`.toLowerCase()
-      return accountId.includes(term) || fullName.includes(term) || 
-             email.includes(term) || jointEmail.includes(term) || 
-             jointName.includes(term)
+    let filtered = sortedAccountUsers
+    
+    // Apply search filter
+    if (accountsSearch.trim()) {
+      const term = accountsSearch.toLowerCase()
+      filtered = filtered.filter(user => {
+        const accountId = (user.id || '').toString().toLowerCase()
+        const fullName = `${user.firstName || ''} ${user.lastName || ''}`.toLowerCase()
+        const email = (user.email || '').toLowerCase()
+        const jointEmail = (user.jointHolder?.email || '').toLowerCase()
+        const jointName = `${user.jointHolder?.firstName || ''} ${user.jointHolder?.lastName || ''}`.toLowerCase()
+        return accountId.includes(term) || fullName.includes(term) || 
+               email.includes(term) || jointEmail.includes(term) || 
+               jointName.includes(term)
+      })
+    }
+    
+    // Apply account filters
+    filtered = filtered.filter(user => {
+      const activeInvestments = (user.investments || []).filter(inv => 
+        inv.status === 'active' || inv.status === 'approved' || inv.status === 'invested'
+      )
+      const numInvestments = activeInvestments.length
+      const investedAmount = activeInvestments.reduce((sum, inv) => sum + (inv.amount || 0), 0)
+      const accountValue = activeInvestments.reduce((sum, inv) => {
+        const calculation = calculateInvestmentValue(inv, timeMachineData.appTime)
+        return sum + calculation.currentValue
+      }, 0)
+      
+      // Filter by has investments
+      if (accountFilters.hasInvestments === 'with' && numInvestments === 0) return false
+      if (accountFilters.hasInvestments === 'without' && numInvestments > 0) return false
+      
+      // Filter by investment amount (original principal)
+      if (accountFilters.investmentAmountMin && investedAmount < Number(accountFilters.investmentAmountMin)) return false
+      if (accountFilters.investmentAmountMax && investedAmount > Number(accountFilters.investmentAmountMax)) return false
+      
+      // Filter by account value (current value with compound interest)
+      if (accountFilters.investmentValueMin && accountValue < Number(accountFilters.investmentValueMin)) return false
+      if (accountFilters.investmentValueMax && accountValue > Number(accountFilters.investmentValueMax)) return false
+      
+      // Filter by number of investments
+      if (accountFilters.numInvestmentsMin && numInvestments < Number(accountFilters.numInvestmentsMin)) return false
+      if (accountFilters.numInvestmentsMax && numInvestments > Number(accountFilters.numInvestmentsMax)) return false
+      
+      // Filter by created date
+      if (accountFilters.createdDateStart && user.createdAt) {
+        const userDate = new Date(user.createdAt).setHours(0,0,0,0)
+        const filterDate = new Date(accountFilters.createdDateStart).setHours(0,0,0,0)
+        if (userDate < filterDate) return false
+      }
+      if (accountFilters.createdDateEnd && user.createdAt) {
+        const userDate = new Date(user.createdAt).setHours(0,0,0,0)
+        const filterDate = new Date(accountFilters.createdDateEnd).setHours(0,0,0,0)
+        if (userDate > filterDate) return false
+      }
+      
+      return true
     })
-  }, [sortedAccountUsers, accountsSearch])
+    
+    return filtered
+  }, [sortedAccountUsers, accountsSearch, accountFilters, timeMachineData.appTime])
 
   // Helper function to check if user profile is complete for investment approval
   const isProfileComplete = (user) => {
@@ -319,6 +385,54 @@ export default function AdminPage() {
     return null
   }
 
+  const deleteAllAccounts = async () => {
+    if (!confirm('Delete ALL accounts? This will remove every non-admin user.')) return
+    setIsDeletingAccounts(true)
+    try {
+      const res = await fetch('/api/admin/accounts', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminUserId: currentUser.id })
+      })
+      const data = await res.json()
+      if (!data.success) {
+        alert(data.error || 'Failed to delete accounts')
+        return
+      }
+      alert('All non-admin accounts deleted. Reloading users...')
+      await refreshUsers()
+    } catch (error) {
+      console.error('Failed to delete accounts', error)
+      alert('An error occurred while deleting accounts')
+    } finally {
+      setIsDeletingAccounts(false)
+    }
+  }
+
+  const seedTestAccounts = async () => {
+    if (!confirm('Seed test accounts? This will create the full local dataset.')) return
+    setIsSeedingAccounts(true)
+    try {
+      const res = await fetch('/api/admin/seed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminUserId: currentUser.id })
+      })
+      const data = await res.json()
+      if (!data.success) {
+        alert(data.error || 'Failed to seed accounts')
+        return
+      }
+      alert('Test accounts seeded successfully! Reloading users...')
+      await refreshUsers()
+    } catch (error) {
+      console.error('Failed to seed accounts', error)
+      alert('An error occurred while seeding accounts')
+    } finally {
+      setIsSeedingAccounts(false)
+    }
+  }
+
   // Loading state
   if (isLoading) {
     return (
@@ -374,8 +488,12 @@ export default function AdminPage() {
               currentUser={currentUser}
               onWithdrawalAction={actOnWithdrawal}
               onPayoutAction={handlePayoutAction}
-              onTimeMachineUpdate={updateAppTime}
-              onTimeMachineReset={resetAppTime}
+          onTimeMachineUpdate={updateAppTime}
+          onTimeMachineReset={resetAppTime}
+          onDeleteAccounts={deleteAllAccounts}
+          onSeedTestAccounts={seedTestAccounts}
+          isDeletingAccounts={isDeletingAccounts}
+          isSeedingAccounts={isSeedingAccounts}
               onRefreshWithdrawals={refreshWithdrawals}
               onRefreshPayouts={refreshPayouts}
             />
@@ -526,12 +644,178 @@ export default function AdminPage() {
                   onChange={(e) => setAccountsSearch(e.target.value)}
                   className={styles.searchInput}
                 />
+                <div style={{ position: 'relative', display: 'inline-block', marginLeft: '12px' }}>
+                  <button
+                    className={styles.filterButton}
+                    onClick={() => setShowFilters(!showFilters)}
+                  >
+                    🔍 Filters
+                    {(accountFilters.hasInvestments !== 'all' || 
+                      accountFilters.investmentAmountMin || 
+                      accountFilters.investmentAmountMax || 
+                      accountFilters.investmentValueMin || 
+                      accountFilters.investmentValueMax || 
+                      accountFilters.createdDateStart || 
+                      accountFilters.createdDateEnd || 
+                      accountFilters.numInvestmentsMin || 
+                      accountFilters.numInvestmentsMax) && 
+                      <span className={styles.activeFilterBadge}>●</span>
+                    }
+                  </button>
+                  
+                  {showFilters && (
+                    <>
+                      <div 
+                        className={styles.filterOverlay}
+                        onClick={() => setShowFilters(false)}
+                      />
+                      <div className={styles.filterDropdown}>
+                        <div className={styles.filterHeader}>
+                          <h3>Filter Accounts</h3>
+                          <button
+                            className={styles.clearFiltersButton}
+                            onClick={() => {
+                              setAccountFilters({
+                                hasInvestments: 'all',
+                                investmentAmountMin: '',
+                                investmentAmountMax: '',
+                                investmentValueMin: '',
+                                investmentValueMax: '',
+                                createdDateStart: '',
+                                createdDateEnd: '',
+                                numInvestmentsMin: '',
+                                numInvestmentsMax: ''
+                              })
+                            }}
+                          >
+                            Clear All
+                          </button>
+                        </div>
+                        
+                        <div className={styles.filterSection}>
+                          <label className={styles.filterLabel}>Has Investments</label>
+                          <select
+                            className={styles.filterSelect}
+                            value={accountFilters.hasInvestments}
+                            onChange={(e) => setAccountFilters({...accountFilters, hasInvestments: e.target.value})}
+                          >
+                            <option value="all">All Accounts</option>
+                            <option value="with">With Investments</option>
+                            <option value="without">Without Investments</option>
+                          </select>
+                        </div>
+                        
+                        <div className={styles.filterSection}>
+                          <label className={styles.filterLabel}>Investment Amount (Principal)</label>
+                          <div className={styles.filterRange}>
+                            <input
+                              type="number"
+                              placeholder="Min"
+                              className={styles.filterInput}
+                              value={accountFilters.investmentAmountMin}
+                              onChange={(e) => setAccountFilters({...accountFilters, investmentAmountMin: e.target.value})}
+                            />
+                            <span>to</span>
+                            <input
+                              type="number"
+                              placeholder="Max"
+                              className={styles.filterInput}
+                              value={accountFilters.investmentAmountMax}
+                              onChange={(e) => setAccountFilters({...accountFilters, investmentAmountMax: e.target.value})}
+                            />
+                          </div>
+                        </div>
+                        
+                        <div className={styles.filterSection}>
+                          <label className={styles.filterLabel}>Account Value (with Interest)</label>
+                          <div className={styles.filterRange}>
+                            <input
+                              type="number"
+                              placeholder="Min"
+                              className={styles.filterInput}
+                              value={accountFilters.investmentValueMin}
+                              onChange={(e) => setAccountFilters({...accountFilters, investmentValueMin: e.target.value})}
+                            />
+                            <span>to</span>
+                            <input
+                              type="number"
+                              placeholder="Max"
+                              className={styles.filterInput}
+                              value={accountFilters.investmentValueMax}
+                              onChange={(e) => setAccountFilters({...accountFilters, investmentValueMax: e.target.value})}
+                            />
+                          </div>
+                        </div>
+                        
+                        <div className={styles.filterSection}>
+                          <label className={styles.filterLabel}>Number of Investments</label>
+                          <div className={styles.filterRange}>
+                            <input
+                              type="number"
+                              placeholder="Min"
+                              className={styles.filterInput}
+                              value={accountFilters.numInvestmentsMin}
+                              onChange={(e) => setAccountFilters({...accountFilters, numInvestmentsMin: e.target.value})}
+                            />
+                            <span>to</span>
+                            <input
+                              type="number"
+                              placeholder="Max"
+                              className={styles.filterInput}
+                              value={accountFilters.numInvestmentsMax}
+                              onChange={(e) => setAccountFilters({...accountFilters, numInvestmentsMax: e.target.value})}
+                            />
+                          </div>
+                        </div>
+                        
+                        <div className={styles.filterSection}>
+                          <label className={styles.filterLabel}>Created Date Range</label>
+                          <div className={styles.filterRange}>
+                            <input
+                              type="date"
+                              className={styles.filterInput}
+                              value={accountFilters.createdDateStart}
+                              onChange={(e) => setAccountFilters({...accountFilters, createdDateStart: e.target.value})}
+                            />
+                            <span>to</span>
+                            <input
+                              type="date"
+                              className={styles.filterInput}
+                              value={accountFilters.createdDateEnd}
+                              onChange={(e) => setAccountFilters({...accountFilters, createdDateEnd: e.target.value})}
+                            />
+                          </div>
+                        </div>
+                        
+                        <div className={styles.filterFooter}>
+                          <button
+                            className={styles.applyFiltersButton}
+                            onClick={() => setShowFilters(false)}
+                          >
+                            Apply Filters
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
               <div className={styles.accountsGrid}>
                 {filteredAccountUsers.map(user => {
-                  const investedAmount = (user.investments || [])
+                  const activeInvestments = (user.investments || [])
                     .filter(inv => inv.status === 'active' || inv.status === 'approved' || inv.status === 'invested')
+                  
+                  const investedAmount = activeInvestments
                     .reduce((sum, inv) => sum + (inv.amount || 0), 0)
+                  
+                  // Calculate total account value (including compounding interest)
+                  // Use app time from time machine if available
+                  const accountValue = activeInvestments
+                    .reduce((sum, inv) => {
+                      const calculation = calculateInvestmentValue(inv, timeMachineData.appTime)
+                      return sum + calculation.currentValue
+                    }, 0)
+                  
                   return (
                     <div
                       key={user.id}
@@ -569,6 +853,10 @@ export default function AdminPage() {
                         <div className={styles.accountStat}>
                           <div className={styles.statLabel}>Invested</div>
                           <div className={styles.statValue}>${investedAmount.toLocaleString()}</div>
+                        </div>
+                        <div className={styles.accountStat}>
+                          <div className={styles.statLabel}>Account Value</div>
+                          <div className={styles.statValue}>${accountValue.toLocaleString()}</div>
                         </div>
                         <div className={styles.accountStat}>
                           <div className={styles.statLabel}>Created</div>

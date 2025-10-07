@@ -1,35 +1,32 @@
-.timeMachineTab {
-  /* Container for time machine */
-}
+.quickActions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.seedAccountsButton { margin-right: 4px; }
+.timeMachineTab { display: flex; flex-direction: column; gap: 16px; }
 
-.titleWithBadge {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
+.headerRow { display: flex; align-items: center; justify-content: space-between; }
+.headerLeft { display: flex; flex-direction: column; gap: 6px; }
+.titleLine { display: flex; align-items: center; gap: 10px; }
+.titleIcon { font-size: 18px; }
+.title { margin: 0; font-size: 18px; color: var(--color-accent); }
 
-.activeIndicator {
-  color: #dc2626;
-  font-weight: 700;
-  font-size: 12px;
-  background: #fee2e2;
-  padding: 4px 10px;
-  border-radius: 4px;
-}
+.activeIndicator { background: #fee2e2; color: #dc2626; font-size: 12px; padding: 2px 8px; border-radius: 999px; font-weight: 700; }
+.subtitle { margin: 0; color: #6b7280; font-size: 13px; }
 
-.description {
-  color: #6b7280;
-  margin-bottom: 24px;
-  font-size: 14px;
-  line-height: 1.5;
-}
+.statsRow { display: flex; gap: 12px; flex-wrap: wrap; }
+.statChip, .statChipAlt { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--color-border); }
+.statChip { background: var(--color-bg); }
+.statChipAlt { background: #f8fafc; }
+.statLabel { font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: .08em; }
+.statValue { font-weight: 700; color: var(--color-accent); }
 
-.timeMachineControls {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-5);
-  align-items: start;
-}
+.contentGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.cardBlock { border: 1px solid var(--color-border); border-radius: 12px; overflow: hidden; background: var(--color-surface); }
+.blockHeader { padding: 12px 14px; font-weight: 700; color: var(--color-accent); border-bottom: 1px solid var(--color-border); }
+.blockBody { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.helperText { color: #6b7280; font-size: 13px; margin: 0 0 4px 0; }
+.presetsRow { display: flex; gap: 8px; flex-wrap: wrap; }
+.presetBtn { border: 1px solid var(--color-border); background: white; padding: 6px 10px; border-radius: 8px; font-size: 12px; cursor: pointer; }
+.presetBtn:hover { background: #f9fafb; }
+.primaryActions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 .timeDisplaySection {
   /* Left column */
@@ -93,10 +90,45 @@
   cursor: not-allowed;
 }
 
-.buttonGroup {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+.buttonGroup { display: flex; flex-direction: column; gap: 10px; }
+
+.deleteAccountsButton,
+.seedAccountsButton {
+  border: none;
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.deleteAccountsButton {
+  background: #ef4444;
+  color: white;
+}
+
+.deleteAccountsButton:hover:not(:disabled) {
+  background: #dc2626;
+}
+
+.deleteAccountsButton:disabled {
+  background: #fca5a5;
+  cursor: not-allowed;
+}
+
+.seedAccountsButton {
+  background: #10b981;
+  color: white;
+}
+
+.seedAccountsButton:hover:not(:disabled) {
+  background: #059669;
+}
+
+.seedAccountsButton:disabled {
+  background: #6ee7b7;
+  cursor: not-allowed;
 }
 
 .setTimeButton {
@@ -142,9 +174,6 @@
 }
 
 @media (max-width: 768px) {
-  .timeMachineControls {
-    grid-template-columns: 1fr;
-    gap: var(--space-3);
-  }
+  .contentGrid { grid-template-columns: 1fr; }
 }
 

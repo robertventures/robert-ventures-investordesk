@@ -153,6 +153,10 @@
 
 .searchContainer {
   margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .searchInput {
@@ -170,6 +174,173 @@
   outline: none;
   border-color: var(--color-info);
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+/* ============================================
+   FILTERS
+   ============================================ */
+
+.filterButton {
+  padding: 12px 20px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: white;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+  white-space: nowrap;
+}
+
+.filterButton:hover {
+  border-color: var(--color-info);
+  background: #f9fafb;
+}
+
+.activeFilterBadge {
+  color: var(--color-info);
+  font-size: 18px;
+  line-height: 1;
+  margin-left: 4px;
+}
+
+.filterOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: transparent;
+  z-index: 999;
+}
+
+.filterDropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: white;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+  padding: 20px;
+  min-width: 400px;
+  z-index: 1000;
+}
+
+.filterHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.filterHeader h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-accent);
+}
+
+.clearFiltersButton {
+  padding: 6px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: white;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.clearFiltersButton:hover {
+  background: #fee2e2;
+  border-color: #ef4444;
+  color: #dc2626;
+}
+
+.filterSection {
+  margin-bottom: 16px;
+}
+
+.filterLabel {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 8px;
+}
+
+.filterSelect {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.filterSelect:focus {
+  outline: none;
+  border-color: var(--color-info);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.filterRange {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filterRange span {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.filterInput {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  background: white;
+  transition: all 0.2s ease;
+}
+
+.filterInput:focus {
+  outline: none;
+  border-color: var(--color-info);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.filterFooter {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+}
+
+.applyFiltersButton {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--color-info);
+  border-radius: var(--radius-sm);
+  background: var(--color-info);
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.applyFiltersButton:hover {
+  background: #1e40af;
+  border-color: #1e40af;
 }
 
 /* ============================================
@@ -553,6 +724,11 @@
   .searchInput {
     max-width: 100%;
   }
+  
+  .filterDropdown {
+    min-width: 320px;
+    right: -10px;
+  }
 }
 
 @media (max-width: 480px) {
@@ -633,6 +809,8 @@
   .searchContainer {
     padding: 0;
     width: 100%;
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .table {
@@ -649,5 +827,19 @@
   .dangerButton {
     font-size: 13px;
     padding: 6px 10px;
+  }
+  
+  .filterButton {
+    width: 100%;
+    justify-content: center;
+    padding: 10px 16px;
+  }
+  
+  .filterDropdown {
+    min-width: calc(100vw - 40px);
+    max-width: calc(100vw - 40px);
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
   }
 }

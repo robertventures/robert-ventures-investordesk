@@ -94,13 +94,22 @@ export default function DistributionsTab({ users }) {
     filteredDistributions.forEach(event => {
       if (!event.date) return
       
-      const date = new Date(event.date)
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+      const displayDateValue = event.displayDate || event.date
+      const date = new Date(displayDateValue)
+      const monthKey = date.toLocaleString('en-US', {
+        timeZone: 'America/New_York',
+        year: 'numeric',
+        month: '2-digit'
+      })
       
       if (!groups[monthKey]) {
         groups[monthKey] = {
           monthKey,
-          displayMonth: date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+          displayMonth: new Date(displayDateValue).toLocaleDateString('en-US', {
+            month: 'long',
+            year: 'numeric',
+            timeZone: 'America/New_York'
+          }),
           events: [],
           totalAmount: 0,
           payoutAmount: 0,
@@ -250,10 +259,12 @@ export default function DistributionsTab({ users }) {
                   </thead>
                   <tbody>
                     {monthGroup.events.map(event => {
-                      const date = event.date ? new Date(event.date).toLocaleDateString('en-US', { 
-                        month: 'short', 
-                        day: 'numeric', 
-                        year: 'numeric'
+                      const dateValue = event.displayDate || event.date
+                      const date = dateValue ? new Date(dateValue).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                        timeZone: 'America/New_York'
                       }) : '-'
                       
                       return (

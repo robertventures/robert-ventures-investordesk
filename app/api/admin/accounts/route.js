@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server'
-import { getUsers } from '../../../../lib/database'
-import seedTestAccounts from '../../../../scripts/seed-test-accounts.js'
+import { getUsers, saveUsers } from '../../../../lib/database'
 
-export async function POST(request) {
+export async function DELETE(request) {
   try {
     const body = await request.json()
     const { adminUserId } = body || {}
@@ -17,12 +16,19 @@ export async function POST(request) {
       return NextResponse.json({ success: false, error: 'Admin access required' }, { status: 403 })
     }
 
-    await seedTestAccounts()
-    const refreshed = await getUsers()
+    const beforeCount = usersData.users?.length || 0
+    usersData.users = (usersData.users || []).filter(user => user.isAdmin)
 
-    return NextResponse.json({ success: true, totalUsers: refreshed.users?.length || 0 })
+    const afterCount = usersData.users.length
+    const deletedCount = beforeCount - afterCount
+
+    if (!await saveUsers(usersData)) {
+      return NextResponse.json({ success: false, error: 'Failed to delete accounts' }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true, deletedCount })
   } catch (error) {
-    console.error('Failed to seed accounts', error)
+    console.error('Failed to delete accounts', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
 }

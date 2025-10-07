@@ -16,6 +16,10 @@ export default function OperationsTab({
   onPayoutAction,
   onTimeMachineUpdate,
   onTimeMachineReset,
+  onDeleteAccounts,
+  onSeedTestAccounts,
+  isDeletingAccounts,
+  isSeedingAccounts,
   onRefreshWithdrawals,
   onRefreshPayouts
 }) {
@@ -28,6 +32,10 @@ export default function OperationsTab({
           onUpdate={onTimeMachineUpdate}
           onReset={onTimeMachineReset}
           currentUser={currentUser}
+          onDeleteAccounts={onDeleteAccounts}
+          onSeedTestAccounts={onSeedTestAccounts}
+          isDeletingAccounts={isDeletingAccounts}
+          isSeedingAccounts={isSeedingAccounts}
         />
       </SectionCard>
 

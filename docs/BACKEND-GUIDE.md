@@ -2095,8 +2095,9 @@ days_accrued = 16  # Jan 16-31 (inclusive)
 interest = principal * monthly_rate * (days_accrued / days_in_month)
 # = 10000 * 0.00667 * (16/31) = $34.45
 
-# This $34.45 is paid on Feb 1 (for monthly payout)
-# or added to balance on Feb 1 (for compounding)
+# ⚠️ CRITICAL: This $34.45 is paid/compounded on Feb 1 (1st of NEXT month)
+# NOT on Jan 31 (last day of accrual period)
+# Distribution/compounding events are ALWAYS dated on the 1st of the following month
 ```
 
 #### Scenario 2: Full Months (Middle Period)
@@ -2820,14 +2821,25 @@ The platform automatically generates distribution events for active investments 
 
 1. **Monthly Distribution** (`monthly_distribution`) - For monthly payout investments
    - Interest is calculated and paid out monthly
-   - Creates a payout event on the 1st of each month following a completed accrual period
+   - ⚠️ **CRITICAL:** Events are dated on the **1st of the NEXT month** after accrual period ends
+   - Example: Interest accrued Jan 16-31 → Event dated Feb 1 (NOT Jan 31)
    - First month is prorated based on confirmation date
 
 2. **Monthly Compounded** (`monthly_compounded`) - For compounding investments
    - Interest is calculated and added to principal monthly
-   - Creates a compounding event on the 1st of each month following a completed accrual period
+   - ⚠️ **CRITICAL:** Events are dated on the **1st of the NEXT month** after accrual period ends
+   - Example: Interest accrued Jan 1-31 → Event dated Feb 1 (NOT Jan 31)
    - First month is prorated based on confirmation date
    - Each month compounds on the increased balance
+
+### ⚠️ CRITICAL EVENT TIMING RULE
+
+**Distribution and compounding events are ALWAYS dated on the 1st of the month FOLLOWING the accrual period.**
+
+- ✅ Accrual period: Jan 16-31 → Event date: Feb 1
+- ✅ Accrual period: Feb 1-28 → Event date: Mar 1
+- ✅ Accrual period: Mar 1-31 → Event date: Apr 1
+- ❌ NEVER: Accrual period: Jan 16-31 → Event date: Jan 31
 
 ### Generation Mechanism
 
@@ -2895,8 +2907,7 @@ The first month's interest is prorated based on actual days:
 **Example:**
 - Investment confirmed: January 15, 2025
 - Accrual starts: January 16, 2025 (day after confirmation)
-- First month end: January 31, 2025
-- Days accrued: 16 days (Jan 16-31 inclusive)
+- Accrual period: January 16-31, 2025 (16 days)
 - Days in month: 31 days
 - Proration factor: 16/31 = 0.516
 
@@ -2910,7 +2921,12 @@ For a $10,000 investment at 10% APY:
 - Full month interest: $10,000 × (0.10 / 12) = $83.33
 - Prorated (16 days): $83.33 × (16/31) = $43.01
 
-**Distribution Date:** February 1, 2025 (first day of following month)
+**⚠️ CRITICAL - Distribution Date:**
+- **Accrual Period:** January 16-31, 2025
+- **Distribution/Compounding Date:** **February 1, 2025** (1st of FOLLOWING month)
+- **NOT:** January 31, 2025 (last day of accrual period)
+
+Events are ALWAYS dated on the 1st of the month AFTER the accrual period ends.
 
 ### Compounding Mechanics
 
@@ -2942,7 +2958,8 @@ For compounding investments, each month's interest is added to the principal:
   "amount": 83.33,
   "lockupPeriod": "3-year",
   "paymentFrequency": "monthly",
-  "date": "2025-02-01T00:00:00.000Z",
+  "date": "2025-02-01T17:00:00.000Z",
+  "displayDate": "2025-02-01T12:00:00-05:00",
   "monthIndex": 1,
   "payoutMethod": "bank-account",
   "payoutBankId": "BANK-001",
@@ -2962,7 +2979,8 @@ For compounding investments, each month's interest is added to the principal:
   "amount": 83.33,
   "lockupPeriod": "3-year",
   "paymentFrequency": "compounding",
-  "date": "2025-02-01T00:00:00.000Z",
+  "date": "2025-02-01T17:00:00.000Z",
+  "displayDate": "2025-02-01T12:00:00-05:00",
   "monthIndex": 1,
   "principal": 10000.00
 }

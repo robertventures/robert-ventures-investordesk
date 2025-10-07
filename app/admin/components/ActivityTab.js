@@ -140,13 +140,17 @@ export default function ActivityTab({ users }) {
             ) : (
               filteredActivity.map(event => {
                 const meta = getEventMeta(event.type)
-                const date = event.date ? new Date(event.date).toLocaleString('en-US', { 
-                  month: 'short', 
-                  day: 'numeric', 
-                  year: 'numeric',
-                  hour: 'numeric',
-                  minute: '2-digit'
-                }) : '-'
+                const dateValue = event.displayDate || event.date
+                const date = dateValue
+                  ? new Date(dateValue).toLocaleString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                      hour: 'numeric',
+                      minute: '2-digit',
+                      timeZone: 'America/New_York'
+                    })
+                  : '-'
                 
                 return (
                   <tr key={event.id} className={styles.eventRow}>
