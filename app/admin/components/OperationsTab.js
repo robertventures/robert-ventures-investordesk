@@ -1,3 +1,4 @@
+import { useState, useCallback } from 'react'
 import SectionCard from './SectionCard'
 import TimeMachineTab from './TimeMachineTab'
 import styles from './OperationsTab.module.css'
@@ -23,6 +24,77 @@ export default function OperationsTab({
   onRefreshWithdrawals,
   onRefreshPayouts
 }) {
+  // Selection state for bulk actions
+  const [selectedPayouts, setSelectedPayouts] = useState(new Set())
+  const [isProcessingBulk, setIsProcessingBulk] = useState(false)
+
+  // Toggle single payout selection
+  const togglePayoutSelection = useCallback((payoutId) => {
+    setSelectedPayouts(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(payoutId)) {
+        newSet.delete(payoutId)
+      } else {
+        newSet.add(payoutId)
+      }
+      return newSet
+    })
+  }, [])
+
+  // Toggle all payouts selection
+  const toggleSelectAll = useCallback(() => {
+    if (selectedPayouts.size === pendingPayouts.length) {
+      setSelectedPayouts(new Set())
+    } else {
+      setSelectedPayouts(new Set(pendingPayouts.map(p => p.id)))
+    }
+  }, [pendingPayouts, selectedPayouts.size])
+
+  // Bulk complete selected payouts
+  const handleBulkComplete = useCallback(async () => {
+    if (selectedPayouts.size === 0) return
+    
+    if (!confirm(`Mark ${selectedPayouts.size} payout(s) as completed? This will bypass bank transfers.`)) {
+      return
+    }
+
+    setIsProcessingBulk(true)
+    try {
+      for (const payoutId of selectedPayouts) {
+        const payout = pendingPayouts.find(p => p.id === payoutId)
+        if (payout) {
+          await onPayoutAction('complete', payout.userId, payout.id)
+        }
+      }
+      setSelectedPayouts(new Set())
+    } finally {
+      setIsProcessingBulk(false)
+    }
+  }, [selectedPayouts, pendingPayouts, onPayoutAction])
+
+  // Bulk fail selected payouts
+  const handleBulkFail = useCallback(async () => {
+    if (selectedPayouts.size === 0) return
+    
+    const reason = prompt(`Enter failure reason for ${selectedPayouts.size} payout(s):`)
+    if (!reason) return
+
+    setIsProcessingBulk(true)
+    try {
+      for (const payoutId of selectedPayouts) {
+        const payout = pendingPayouts.find(p => p.id === payoutId)
+        if (payout) {
+          await onPayoutAction('fail', payout.userId, payout.id, reason)
+        }
+      }
+      setSelectedPayouts(new Set())
+    } finally {
+      setIsProcessingBulk(false)
+    }
+  }, [selectedPayouts, pendingPayouts, onPayoutAction])
+
+  const allSelected = pendingPayouts.length > 0 && selectedPayouts.size === pendingPayouts.length
+  const someSelected = selectedPayouts.size > 0
   return (
     <div className={styles.operationsTab}>
       {/* Time Machine Section */}
@@ -43,7 +115,7 @@ export default function OperationsTab({
       <SectionCard title="Pending Payouts">
         <div className={styles.sectionHeader}>
           <p className={styles.sectionDescription}>
-            Manage monthly interest payments that require admin approval
+            Monthly interest payments requiring admin approval
           </p>
           <button 
             className={styles.refreshButton} 
@@ -64,26 +136,66 @@ export default function OperationsTab({
           </div>
         )}
 
+        {/* Bulk Actions Bar */}
+        {someSelected && (
+          <div className={styles.bulkActionsBar}>
+            <div className={styles.bulkActionsLeft}>
+              <span className={styles.selectionCount}>
+                {selectedPayouts.size} selected
+              </span>
+              <button
+                className={styles.clearSelectionButton}
+                onClick={() => setSelectedPayouts(new Set())}
+              >
+                Clear
+              </button>
+            </div>
+            <div className={styles.bulkActionsRight}>
+              <button
+                className={styles.bulkCompleteButton}
+                onClick={handleBulkComplete}
+                disabled={isProcessingBulk}
+              >
+                ✓ Complete Selected
+              </button>
+              <button
+                className={styles.bulkFailButton}
+                onClick={handleBulkFail}
+                disabled={isProcessingBulk}
+              >
+                ✗ Fail Selected
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className={styles.tableContainer}>
           <table className={styles.table}>
             <thead>
               <tr>
+                <th className={styles.checkboxCell}>
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={toggleSelectAll}
+                    disabled={pendingPayouts.length === 0}
+                    className={styles.checkbox}
+                  />
+                </th>
                 <th>User</th>
-                <th>Email</th>
                 <th>Investment ID</th>
-                <th>Payout Amount</th>
+                <th>Amount</th>
                 <th>Scheduled Date</th>
                 <th>Bank Account</th>
                 <th>Status</th>
                 <th>Failure Reason</th>
-                <th>Retry Count</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {pendingPayouts.length === 0 ? (
                 <tr>
-                  <td colSpan="10" className={styles.emptyState}>
+                  <td colSpan="9" className={styles.emptyState}>
                     ✅ No pending payouts - all monthly payments have been successfully processed!
                   </td>
                 </tr>
@@ -91,26 +203,38 @@ export default function OperationsTab({
                 pendingPayouts.map(payout => (
                   <tr 
                     key={payout.id} 
-                    className={payout.payoutStatus === 'failed' ? styles.failedRow : styles.pendingRow}
+                    className={`${payout.payoutStatus === 'failed' ? styles.failedRow : styles.pendingRow} ${selectedPayouts.has(payout.id) ? styles.selectedRow : ''}`}
                   >
-                    <td>{payout.userName || payout.userId}</td>
-                    <td>{payout.userEmail}</td>
+                    <td className={styles.checkboxCell}>
+                      <input
+                        type="checkbox"
+                        checked={selectedPayouts.has(payout.id)}
+                        onChange={() => togglePayoutSelection(payout.id)}
+                        className={styles.checkbox}
+                      />
+                    </td>
+                    <td>
+                      <div className={styles.userCell}>
+                        <div className={styles.userName}>{payout.userName || payout.userId}</div>
+                        <div className={styles.userEmail}>{payout.userEmail}</div>
+                      </div>
+                    </td>
                     <td className={styles.monospaceCell}>{payout.investmentId}</td>
                     <td><strong>${(payout.amount || 0).toFixed(2)}</strong></td>
-                    <td>{new Date(payout.date).toLocaleDateString()}</td>
-                    <td>{payout.payoutBankNickname || 'Not configured'}</td>
+                    <td className={styles.dateCell}>{new Date(payout.date).toLocaleDateString()}</td>
+                    <td className={styles.bankCell}>{payout.payoutBankNickname || 'Not configured'}</td>
                     <td>
                       <span className={`${styles.badge} ${styles[payout.payoutStatus]}`}>
                         {payout.payoutStatus.toUpperCase()}
                       </span>
                     </td>
                     <td className={styles.reasonCell}>{payout.failureReason || '-'}</td>
-                    <td>{payout.retryCount || 0}</td>
                     <td>
                       <div className={styles.actionButtonGroup}>
                         <button
                           className={styles.retryButton}
                           onClick={() => onPayoutAction('retry', payout.userId, payout.id)}
+                          title="Retry payout"
                         >
                           🔄 Retry
                         </button>
@@ -121,6 +245,7 @@ export default function OperationsTab({
                               onPayoutAction('complete', payout.userId, payout.id)
                             }
                           }}
+                          title="Mark as completed"
                         >
                           ✓ Complete
                         </button>
@@ -132,6 +257,7 @@ export default function OperationsTab({
                               onPayoutAction('fail', payout.userId, payout.id, reason)
                             }
                           }}
+                          title="Mark as failed"
                         >
                           ✗ Fail
                         </button>

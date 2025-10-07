@@ -2856,12 +2856,193 @@ The platform automatically generates distribution events for active investments 
 - **Time zone consistency**: Investors are located in different time zones, and we want to ensure all distributions happen at the same absolute moment
 - **Operational consistency**: Makes it clear when transfers will occur, regardless of where investors are located
 - **No confusion**: A distribution scheduled for "the 1st" won't accidentally happen on the 31st or 2nd in some time zones
+- **Data integrity**: Having a consistent timestamp prevents timezone-related calculation errors and data inconsistencies
 
 **Implementation Requirements:**
-- All `monthly_distribution` events must be timestamped at 9:00 AM EST on the 1st of each month
-- All `monthly_compounded` events must be timestamped at 9:00 AM EST on the 1st of each month
-- The backend must convert this to UTC appropriately (accounting for EST vs EDT)
+- All `monthly_distribution` events must be timestamped at 9:00 AM Eastern Time on the 1st of each month
+- All `monthly_compounded` events must be timestamped at 9:00 AM Eastern Time on the 1st of each month
+- The backend properly converts Eastern Time to UTC, accounting for:
+  - **EST (Eastern Standard Time, winter)**: UTC-5 → 9:00 AM EST = 14:00 UTC (2 PM)
+  - **EDT (Eastern Daylight Time, summer)**: UTC-4 → 9:00 AM EDT = 13:00 UTC (1 PM)
+- The `createEasternTime9AM(year, month, day)` function in `migrate-transactions/route.js` handles this conversion automatically
 - Frontend should display this time in the investor's local timezone, but the actual event always happens at 9:00 AM Eastern
+
+**Example Timestamps by Month:**
+```
+January   → T14:00:00.000Z (9 AM EST = 2 PM UTC, winter)
+February  → T14:00:00.000Z (9 AM EST = 2 PM UTC, winter)
+March     → T14:00:00.000Z (9 AM EST = 2 PM UTC, before DST)
+April     → T13:00:00.000Z (9 AM EDT = 1 PM UTC, summer)
+May       → T13:00:00.000Z (9 AM EDT = 1 PM UTC, summer)
+June      → T13:00:00.000Z (9 AM EDT = 1 PM UTC, summer)
+July      → T13:00:00.000Z (9 AM EDT = 1 PM UTC, summer)
+August    → T13:00:00.000Z (9 AM EDT = 1 PM UTC, summer)
+September → T13:00:00.000Z (9 AM EDT = 1 PM UTC, summer)
+October   → T13:00:00.000Z (9 AM EDT = 1 PM UTC, summer)
+November  → T13:00:00.000Z (9 AM EDT = 1 PM UTC, before DST ends)
+December  → T14:00:00.000Z (9 AM EST = 2 PM UTC, winter)
+```
+
+**Implementation Details:**
+
+The `createEasternTime9AM(year, month, day)` function in `/app/api/migrate-transactions/route.js` handles timezone conversion:
+
+```javascript
+const createEasternTime9AM = (year, month, day) => {
+  // Create reference date at noon UTC
+  const refDate = new Date(Date.UTC(year, month - 1, day, 12, 0, 0, 0))
+  
+  // Use Intl.DateTimeFormat to determine Eastern Time offset
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false
+  })
+  
+  const easternString = formatter.format(refDate)
+  const match = easternString.match(/(\d+)\/(\d+)\/(\d+), (\d+):(\d+)/)
+  
+  // Calculate UTC offset (5 for EST, 4 for EDT)
+  const utcHour = 12
+  const easternHour = parseInt(match[4])
+  const offsetHours = utcHour - easternHour
+  
+  // Return date at 9 AM Eastern = (9 + offset) UTC
+  return new Date(Date.UTC(year, month - 1, day, 9 + offsetHours, 0, 0, 0))
+}
+```
+
+**Verification Commands:**
+```bash
+# Check all distribution timestamps in data
+grep -A 5 '"type": "monthly_distribution"' data/users.json | grep '"date"'
+
+# Verify winter months show 14:00 UTC (EST)
+grep '"date": "2025-01-01T14:00:00.000Z"' data/users.json
+
+# Verify summer months show 13:00 UTC (EDT)
+grep '"date": "2025-07-01T13:00:00.000Z"' data/users.json
+```
+
+**Common Mistakes to Avoid:**
+- ❌ Using 9:00 AM UTC instead of 9:00 AM Eastern
+- ❌ Hardcoding offset without checking DST
+- ❌ Setting distributions at midnight
+- ❌ Using server's local timezone
+- ✅ Always use `createEasternTime9AM()` function
+
+**Python Backend Implementation:**
+
+When implementing the Python/FastAPI backend, use this pattern for timezone handling:
+
+```python
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+def create_distribution_date(year: int, month: int, day: int = 1) -> datetime:
+    """
+    Create a datetime for the 1st of the month at 9:00 AM Eastern Time.
+    Automatically handles EST/EDT transitions based on the specific date.
+    
+    Args:
+        year: Year (e.g., 2025)
+        month: Month (1-12)
+        day: Day of month (default: 1)
+    
+    Returns:
+        datetime object in UTC representing 9:00 AM Eastern on that date
+    
+    Examples:
+        >>> create_distribution_date(2025, 1, 1)
+        datetime(2025, 1, 1, 14, 0, tzinfo=zoneinfo.ZoneInfo(key='UTC'))  # EST
+        >>> create_distribution_date(2025, 7, 1)
+        datetime(2025, 7, 1, 13, 0, tzinfo=zoneinfo.ZoneInfo(key='UTC'))  # EDT
+    """
+    eastern = ZoneInfo('America/New_York')
+    
+    # Create datetime at 9:00 AM Eastern on the specified date
+    dt_eastern = datetime(year, month, day, 9, 0, 0, tzinfo=eastern)
+    
+    # Convert to UTC for storage
+    dt_utc = dt_eastern.astimezone(ZoneInfo('UTC'))
+    
+    return dt_utc
+
+
+def generate_monthly_distribution_events(
+    investment: dict, 
+    user: dict, 
+    app_time: datetime
+) -> list[dict]:
+    """
+    Generate monthly distribution events for an investment.
+    All distributions are timestamped at 9:00 AM Eastern on the 1st of each month.
+    """
+    if investment['status'] != 'active' or investment['paymentFrequency'] != 'monthly':
+        return []
+    
+    confirmed_at = datetime.fromisoformat(investment['confirmedAt'])
+    # Accrual starts day after confirmation
+    accrual_start = confirmed_at + timedelta(days=1)
+    
+    # Build segments for completed months
+    segments = build_accrual_segments(accrual_start, app_time)
+    
+    events = []
+    for month_index, segment in enumerate(segments, start=1):
+        # Distribution happens on 1st of NEXT month
+        segment_end = segment['end']
+        next_year = segment_end.year + 1 if segment_end.month == 12 else segment_end.year
+        next_month = 1 if segment_end.month == 12 else segment_end.month + 1
+        
+        # Create distribution date at 9:00 AM Eastern
+        distribution_date = create_distribution_date(next_year, next_month, 1)
+        
+        # Calculate amount (with proration for partial months)
+        amount = calculate_distribution_amount(investment, segment)
+        
+        event = {
+            'id': generate_event_id(investment['id'], 'monthly_distribution', distribution_date),
+            'type': 'monthly_distribution',
+            'investmentId': investment['id'],
+            'amount': round(amount, 2),
+            'date': distribution_date.isoformat(),
+            'monthIndex': month_index,
+            # ... other fields
+        }
+        events.append(event)
+    
+    return events
+```
+
+**Testing Your Python Implementation:**
+
+```python
+import unittest
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+class TestTimezoneConversion(unittest.TestCase):
+    def test_january_est(self):
+        """January should use EST (UTC-5)"""
+        dt = create_distribution_date(2025, 1, 1)
+        self.assertEqual(dt.hour, 14)  # 9 AM EST = 14:00 UTC
+        self.assertEqual(dt.minute, 0)
+    
+    def test_july_edt(self):
+        """July should use EDT (UTC-4)"""
+        dt = create_distribution_date(2025, 7, 1)
+        self.assertEqual(dt.hour, 13)  # 9 AM EDT = 13:00 UTC
+        self.assertEqual(dt.minute, 0)
+    
+    def test_always_9am_eastern(self):
+        """Verify time is always 9:00 AM when viewed in Eastern"""
+        for month in range(1, 13):
+            dt = create_distribution_date(2025, month, 1)
+            eastern_time = dt.astimezone(ZoneInfo('America/New_York'))
+            self.assertEqual(eastern_time.hour, 9)
+            self.assertEqual(eastern_time.minute, 0)
+```
 
 ### Generation Mechanism
 

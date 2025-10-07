@@ -15,15 +15,47 @@ const addDaysUtc = (date, days) => {
   return new Date(date.getTime() + days * MS_PER_DAY)
 }
 
-// Convert a JS Date into a Date representing 9:00 AM Eastern Time on the same calendar day.
-// All distributions happen at 9:00 AM EST regardless of investor time zones.
-const toEasternTime9AM = (date) => {
-  const easternString = new Date(date).toLocaleString('en-US', {
-    timeZone: 'America/New_York'
+// Create a Date object representing 9:00 AM Eastern Time on a specific calendar date
+// All distributions happen at 9:00 AM Eastern Time (EST/EDT) regardless of investor time zones
+// This function properly handles the UTC offset for Eastern Time
+const createEasternTime9AM = (year, month, day) => {
+  // Strategy: Create a date at noon UTC on the target date, then use Intl to find 
+  // what time it is in Eastern. Calculate the offset, then adjust to get 9 AM Eastern.
+  
+  // Create a reference time on the target date (using noon to avoid date boundary issues)
+  const refDate = new Date(Date.UTC(year, month - 1, day, 12, 0, 0, 0))
+  
+  // Format it in Eastern Time to determine the UTC offset on this date
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
   })
-  const easternDate = new Date(easternString)
-  easternDate.setHours(9, 0, 0, 0)
-  return easternDate
+  
+  const easternString = formatter.format(refDate)
+  // Format is "MM/DD/YYYY, HH:MM"
+  const match = easternString.match(/(\d+)\/(\d+)\/(\d+), (\d+):(\d+)/)
+  if (!match) {
+    // Fallback: assume EST (UTC-5)
+    return new Date(Date.UTC(year, month - 1, day, 14, 0, 0, 0))
+  }
+  
+  const [_, monthET, dayET, yearET, hourET, minET] = match
+  
+  // refDate is at 12:00 UTC, which appears as hourET:minET in Eastern
+  // Calculate offset in hours
+  const utcHour = 12
+  const easternHour = parseInt(hourET)
+  const offsetHours = utcHour - easternHour
+  
+  // 9 AM Eastern = (9 + offsetHours) UTC
+  // EST: offset = 5, so 9 AM EST = 14:00 UTC
+  // EDT: offset = 4, so 9 AM EDT = 13:00 UTC
+  return new Date(Date.UTC(year, month - 1, day, 9 + offsetHours, 0, 0, 0))
 }
 
 const getDaysInMonthUtc = (date) => {
@@ -243,17 +275,18 @@ export async function POST() {
               distributionAmount = prorated
             }
             
-            // Distribution date is explicitly set to the 1st of the NEXT month at 9:00 AM EST
-            // This ensures consistency across all time zones - all distributions happen at 9:00 AM EST
+            // Distribution date is explicitly set to the 1st of the NEXT month at 9:00 AM Eastern Time
+            // This ensures consistency across all time zones - all distributions happen at 9:00 AM EST/EDT
             const segmentEndDate = new Date(segment.end)
-            const distributionDateUtc = new Date(Date.UTC(
-              segmentEndDate.getUTCFullYear(),
-              segmentEndDate.getUTCMonth() + 1,
-              1,
-              9, 0, 0, 0
-            ))
-            const distributionDateEastern = toEasternTime9AM(distributionDateUtc)
-            const eventId = generateTransactionId('INV', invId, 'monthly_distribution', { date: distributionDateUtc })
+            // Calculate the year and month for the 1st of the NEXT month
+            const nextYear = segmentEndDate.getUTCMonth() === 11 ? 
+              segmentEndDate.getUTCFullYear() + 1 : 
+              segmentEndDate.getUTCFullYear()
+            const nextMonth = segmentEndDate.getUTCMonth() === 11 ? 1 : segmentEndDate.getUTCMonth() + 2
+            
+            // Create the distribution date at 9:00 AM Eastern Time on the 1st
+            const distributionDate = createEasternTime9AM(nextYear, nextMonth, 1)
+            const eventId = generateTransactionId('INV', invId, 'monthly_distribution', { date: distributionDate })
             
             // TESTING MODE: All payouts require admin approval
             // In production, admin must manually approve all monthly payouts
@@ -274,8 +307,8 @@ export async function POST() {
               amount: Math.round(distributionAmount * 100) / 100,
               lockupPeriod: lockup,
               paymentFrequency: payFreq,
-              date: distributionDateEastern.toISOString(),
-              displayDate: distributionDateEastern.toISOString(),
+              date: distributionDate.toISOString(),
+              displayDate: distributionDate.toISOString(),
               monthIndex,
               payoutMethod,
               payoutBankId,
@@ -330,17 +363,18 @@ export async function POST() {
               interest = balance * dailyRate * segment.days
             }
             
-            // Compounding date is explicitly set to the 1st of the NEXT month at 9:00 AM EST
-            // This ensures consistency across all time zones - all compounding happens at 9:00 AM EST
+            // Compounding date is explicitly set to the 1st of the NEXT month at 9:00 AM Eastern Time
+            // This ensures consistency across all time zones - all compounding happens at 9:00 AM EST/EDT
             const segmentEndDate = new Date(segment.end)
-            const compoundingDateUtc = new Date(Date.UTC(
-              segmentEndDate.getUTCFullYear(),
-              segmentEndDate.getUTCMonth() + 1,
-              1,
-              9, 0, 0, 0
-            ))
-            const compoundingDateEastern = toEasternTime9AM(compoundingDateUtc)
-            const eventId = generateTransactionId('INV', invId, 'monthly_compounded', { date: compoundingDateUtc })
+            // Calculate the year and month for the 1st of the NEXT month
+            const nextYear = segmentEndDate.getUTCMonth() === 11 ? 
+              segmentEndDate.getUTCFullYear() + 1 : 
+              segmentEndDate.getUTCFullYear()
+            const nextMonth = segmentEndDate.getUTCMonth() === 11 ? 1 : segmentEndDate.getUTCMonth() + 2
+            
+            // Create the compounding date at 9:00 AM Eastern Time on the 1st
+            const compoundingDate = createEasternTime9AM(nextYear, nextMonth, 1)
+            const eventId = generateTransactionId('INV', invId, 'monthly_compounded', { date: compoundingDate })
             ensureEvent({
               id: eventId,
               type: 'monthly_compounded',
@@ -348,8 +382,8 @@ export async function POST() {
               amount: Math.round(interest * 100) / 100,
               lockupPeriod: lockup,
               paymentFrequency: payFreq,
-              date: compoundingDateEastern.toISOString(),
-              displayDate: compoundingDateEastern.toISOString(),
+              date: compoundingDate.toISOString(),
+              displayDate: compoundingDate.toISOString(),
               monthIndex,
               principal: Math.round(balance * 100) / 100
             })
