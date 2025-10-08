@@ -232,6 +232,20 @@ export async function POST() {
 
         const findTransaction = (id) => inv.transactions.find(tx => tx.id === id)
         const ensureTransaction = (tx) => {
+          // VALIDATION: Contributions must have a distributionTxId and the distribution must exist
+          if (tx.type === 'contribution') {
+            if (!tx.distributionTxId) {
+              throw new Error(`Contribution transaction ${tx.id} must have a distributionTxId`)
+            }
+            const distribution = findTransaction(tx.distributionTxId)
+            if (!distribution) {
+              throw new Error(`Contribution ${tx.id} references non-existent distribution ${tx.distributionTxId}`)
+            }
+            if (distribution.type !== 'distribution') {
+              throw new Error(`Contribution ${tx.id} references transaction ${tx.distributionTxId} which is not a distribution`)
+            }
+          }
+
           const existingIndex = inv.transactions.findIndex(existing => existing.id === tx.id)
           const createdAt = tx.createdAt || tx.date || now.toISOString()
           if (existingIndex === -1) {

@@ -3771,6 +3771,36 @@ if body.jointHolder:
     # ... validate other fields
 ```
 
+### Contribution Transaction Validation
+**CRITICAL RULE:** Contribution transactions can ONLY exist if there is a corresponding distribution first.
+
+**When creating/updating a contribution transaction:**
+- `distributionTxId` - **REQUIRED** - Must reference an existing distribution transaction
+- The referenced distribution transaction must:
+  - Already exist in the same investment's transactions array
+  - Have `type = 'distribution'`
+  - Be created BEFORE the contribution
+
+**Backend validation:**
+```python
+if transaction.type == 'contribution':
+    # Must have distributionTxId
+    if not transaction.distributionTxId:
+        raise ValueError(f"Contribution transaction {transaction.id} must have a distributionTxId")
+    
+    # Distribution must exist
+    distribution = find_transaction(transaction.distributionTxId)
+    if not distribution:
+        raise ValueError(f"Contribution {transaction.id} references non-existent distribution {transaction.distributionTxId}")
+    
+    # Distribution must be correct type
+    if distribution.type != 'distribution':
+        raise ValueError(f"Contribution {transaction.id} references transaction {transaction.distributionTxId} which is not a distribution")
+```
+
+**Why this rule?**
+Contributions represent distributions being reinvested. You cannot reinvest something that hasn't been distributed yet. This maintains data integrity and creates a proper audit trail for compounding investments.
+
 ### Investment Status Transitions
 - **CRITICAL:** Active investments (`status = 'active'`) cannot be rejected
 - Once an investment is active, it can only transition to `withdrawal_notice` or remain `active`
@@ -4566,6 +4596,8 @@ Expected:
 - Profile must include: name, phone, DOB, SSN, address, bank connection
 - **Joint account validation:** All joint holder fields required (name, email, phone, DOB, SSN, and complete address)
 - **Backend must reject** requests with incomplete joint holder data (return HTTP 400)
+- **Contribution transaction validation:** Contributions can ONLY exist if there is a corresponding distribution first
+- Every contribution must have `distributionTxId` linking to an existing distribution transaction
 
 ### Test Data Requirements
 
@@ -4834,6 +4866,8 @@ Withdrawal Processed → Investment status: withdrawn (FINAL)
 - Delete withdrawn investments from database
 - Store `anticipatedEarnings` in database (calculate dynamically)
 - Accept joint accounts without complete address information
+- Create contribution transactions without a distributionTxId
+- Allow contributions to exist without a corresponding distribution first
 
 ✅ **DO:**
 - Match calculations to the penny
@@ -4844,6 +4878,7 @@ Withdrawal Processed → Investment status: withdrawn (FINAL)
 - Validate all state transitions
 - Log all approval actions for audit trail
 - **Validate joint holder address fields** (street1, city, state, zip all required)
+- **Validate contribution transactions** always have distributionTxId linking to existing distribution
 
 ---
 
@@ -4867,6 +4902,8 @@ Before deploying, verify:
 - [ ] Withdrawn investments remain visible
 - [ ] **Joint holder validation enforced** (all fields including address required)
 - [ ] Backend rejects incomplete joint holder data (HTTP 400)
+- [ ] **Contribution transaction validation enforced** (must have distributionTxId, distribution must exist first)
+- [ ] Backend rejects contributions without valid distribution link
 - [ ] API responses match expected JSON structure
 
 ---
