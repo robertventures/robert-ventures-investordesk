@@ -12,6 +12,7 @@ export default function AdminInvestmentDetailsPage({ params }) {
   const [user, setUser] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
   const [form, setForm] = useState({
     amount: '',
     status: '',
@@ -85,6 +86,23 @@ export default function AdminInvestmentDetailsPage({ params }) {
     setForm(prev => ({ ...prev, [name]: value }))
   }
 
+  const handleEdit = () => {
+    setIsEditing(true)
+  }
+
+  const handleCancel = () => {
+    // Reset form to original investment data
+    const inv = investment
+    setForm({
+      amount: inv.amount || '',
+      status: inv.status || '',
+      paymentFrequency: inv.paymentFrequency || '',
+      lockupPeriod: inv.lockupPeriod || '',
+      accountType: inv.accountType || ''
+    })
+    setIsEditing(false)
+  }
+
   const handleSave = async () => {
     if (!user || !investment) return
     setIsSaving(true)
@@ -117,6 +135,7 @@ export default function AdminInvestmentDetailsPage({ params }) {
         setInvestment(updatedInv)
         setUser(data.user)
       }
+      setIsEditing(false)
     } catch (e) {
       console.error('Failed to save', e)
       alert('An error occurred. Please try again.')
@@ -229,7 +248,14 @@ export default function AdminInvestmentDetailsPage({ params }) {
           {/* Investment Details Section */}
           <div className={styles.sectionCard}>
             <div className={styles.sectionHeader}>
-              <h2 className={styles.sectionTitle}>Investment Details</h2>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h2 className={styles.sectionTitle}>Investment Details</h2>
+                {!isEditing && (
+                  <button className={styles.editButton} onClick={handleEdit}>
+                    Edit Investment
+                  </button>
+                )}
+              </div>
             </div>
             <div className={styles.grid}>
               <div>
@@ -242,11 +268,12 @@ export default function AdminInvestmentDetailsPage({ params }) {
                   className={styles.input}
                   min="1000"
                   step="10"
+                  disabled={!isEditing}
                 />
               </div>
               <div>
                 <label>Status</label>
-                <select name="status" value={form.status} onChange={handleChange} className={styles.input}>
+                <select name="status" value={form.status} onChange={handleChange} className={styles.input} disabled={!isEditing}>
                   <option value="draft">Draft</option>
                   <option value="pending">Pending</option>
                   <option value="active">Active</option>
@@ -257,21 +284,21 @@ export default function AdminInvestmentDetailsPage({ params }) {
               </div>
               <div>
                 <label>Payment Frequency</label>
-                <select name="paymentFrequency" value={form.paymentFrequency} onChange={handleChange} className={styles.input}>
+                <select name="paymentFrequency" value={form.paymentFrequency} onChange={handleChange} className={styles.input} disabled={!isEditing}>
                   <option value="monthly">Monthly</option>
                   <option value="compounding">Compounding</option>
                 </select>
               </div>
               <div>
                 <label>Lockup Period</label>
-                <select name="lockupPeriod" value={form.lockupPeriod} onChange={handleChange} className={styles.input}>
+                <select name="lockupPeriod" value={form.lockupPeriod} onChange={handleChange} className={styles.input} disabled={!isEditing}>
                   <option value="1-year">1 Year</option>
                   <option value="3-year">3 Years</option>
                 </select>
               </div>
               <div>
                 <label>Account Type</label>
-                <select name="accountType" value={form.accountType} onChange={handleChange} className={styles.input}>
+                <select name="accountType" value={form.accountType} onChange={handleChange} className={styles.input} disabled={!isEditing}>
                   <option value="individual">Individual</option>
                   <option value="joint">Joint</option>
                   <option value="entity">Entity</option>
@@ -280,15 +307,24 @@ export default function AdminInvestmentDetailsPage({ params }) {
               </div>
             </div>
 
-            <div className={styles.sectionActions}>
-              <button
-                className={styles.saveButton}
-                onClick={handleSave}
-                disabled={isSaving}
-              >
-                {isSaving ? 'Saving Changes...' : 'Save Changes'}
-              </button>
-            </div>
+            {isEditing && (
+              <div className={styles.sectionActions}>
+                <button
+                  className={styles.saveButton}
+                  onClick={handleSave}
+                  disabled={isSaving}
+                >
+                  {isSaving ? 'Saving Changes...' : 'Save Changes'}
+                </button>
+                <button
+                  className={styles.cancelButton}
+                  onClick={handleCancel}
+                  disabled={isSaving}
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Dates & Timeline Section */}
@@ -418,9 +454,105 @@ export default function AdminInvestmentDetailsPage({ params }) {
               </div>
             </div>
           )}
+
+          {/* Activity Section */}
+          <div className={styles.sectionCard}>
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.sectionTitle}>Activity & Transactions</h2>
+              <p className={styles.subtitle}>
+                All events and transactions for this investment ({(investment.transactions || []).length} total)
+              </p>
+            </div>
+            
+            {(!investment.transactions || investment.transactions.length === 0) ? (
+              <div className={styles.emptyActivity}>
+                No activity events yet for this investment
+              </div>
+            ) : (
+              <div className={styles.activityTable}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>Event</th>
+                      <th>Amount</th>
+                      <th>Date</th>
+                      <th>Event ID</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {investment.transactions
+                      .sort((a, b) => {
+                        // Sort by actual date to maintain chronological order (distribution before contribution)
+                        const dateA = a.date ? new Date(a.date).getTime() : 0
+                        const dateB = b.date ? new Date(b.date).getTime() : 0
+                        return dateB - dateA
+                      })
+                      .map(event => {
+                        const meta = getEventMeta(event.type)
+                        const dateValue = event.displayDate || event.date
+                        const date = dateValue
+                          ? new Date(dateValue).toLocaleString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                              hour: 'numeric',
+                              minute: '2-digit',
+                              timeZone: 'America/New_York'
+                            })
+                          : '-'
+                        
+                        return (
+                          <tr key={event.id} className={styles.activityRow}>
+                            <td>
+                              <div className={styles.eventCell}>
+                                <span className={styles.eventIcon} style={{ color: meta.color }}>
+                                  {meta.icon}
+                                </span>
+                                <span className={styles.eventTitle}>{meta.title}</span>
+                              </div>
+                            </td>
+                            <td>
+                              {event.amount != null ? (
+                                <strong className={styles.amount}>
+                                  ${event.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </strong>
+                              ) : (
+                                <span className={styles.naText}>-</span>
+                              )}
+                            </td>
+                            <td className={styles.dateCell}>{date}</td>
+                            <td className={styles.eventIdCell}>{event.id}</td>
+                          </tr>
+                        )
+                      })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
   )
+}
+
+// Get event metadata (icon, title, color)
+function getEventMeta(eventType) {
+  switch (eventType) {
+    case 'investment':
+      return { icon: '🧾', title: 'Investment Transaction', color: '#0369a1' }
+    case 'distribution':
+      return { icon: '💸', title: 'Distribution', color: '#5b21b6' }
+    case 'monthly_distribution':
+      return { icon: '💸', title: 'Monthly Payout', color: '#5b21b6' }
+    case 'contribution':
+      return { icon: '📈', title: 'Contribution', color: '#5b21b6' }
+    case 'monthly_compounded':
+      return { icon: '📈', title: 'Monthly Compounded', color: '#5b21b6' }
+    case 'redemption':
+      return { icon: '🏦', title: 'Redemption', color: '#ca8a04' }
+    default:
+      return { icon: '•', title: eventType || 'Unknown Event', color: '#6b7280' }
+  }
 }
 

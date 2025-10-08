@@ -470,6 +470,7 @@ export async function POST() {
                 amount: Math.round(interest * 100) / 100,
                 status: 'approved',
                 date: compoundingDateIso,
+                displayDate: compoundingDateIso,
                 monthIndex,
                 lockupPeriod: lockup,
                 paymentFrequency: payFreq,
@@ -478,13 +479,17 @@ export async function POST() {
               })
 
               // 2. Then, create the CONTRIBUTION (distribution reinvested)
+              // Contribution happens 1 second after distribution to maintain correct chronological order
+              const contributionDate = new Date(compoundingDate.getTime() + 1000)
+              const contributionDateIso = contributionDate.toISOString()
               const contributionTxId = generateTransactionId('INV', inv.id, 'contribution', { date: compoundingDate })
               ensureTransaction({
                 id: contributionTxId,
                 type: 'contribution',
                 amount: Math.round(interest * 100) / 100,
                 status: 'approved',
-                date: compoundingDateIso,
+                date: contributionDateIso,
+                displayDate: compoundingDateIso,  // Show same display date as distribution
                 monthIndex,
                 lockupPeriod: lockup,
                 paymentFrequency: payFreq,
