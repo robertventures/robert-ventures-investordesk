@@ -2652,6 +2652,43 @@ def calculate_total_earnings(investments, transactions, app_time):
   "resetToken": "string or null",
   "resetTokenExpiry": "ISO8601 or null",
   "isAdmin": boolean,
+  "accountType": "individual|joint|entity|IRA",  // Set when first investment submitted
+  "jointHoldingType": "spouse|sibling|domestic_partner|business_partner|other",  // Required for joint accounts
+  "jointHolder": {  // Required for joint accounts
+    "firstName": "string",
+    "lastName": "string",
+    "email": "string",
+    "phone": "string",
+    "dob": "YYYY-MM-DD",
+    "ssn": "string",
+    "address": {
+      "street1": "string",
+      "street2": "string",
+      "city": "string",
+      "state": "string",  // Full state name
+      "zip": "string",
+      "country": "string"
+    }
+  },
+  "entity": {  // Required for entity accounts
+    "name": "string",
+    "entityType": "LLC|Corporation|Trust|Partnership",
+    "taxId": "string",
+    "registrationDate": "YYYY-MM-DD",
+    "address": {...}
+  },
+  "authorizedRepresentative": {  // Required for entity accounts
+    "firstName": "string",
+    "lastName": "string",
+    "dob": "YYYY-MM-DD",
+    "ssn": "string",
+    "address": {...}
+  },
+  "ira": {  // Required for IRA accounts
+    "accountType": "traditional|roth",
+    "custodian": "string",
+    "accountNumber": "string"
+  },
   "trustedContact": {
     "firstName": "string",
     "lastName": "string",
@@ -3703,6 +3740,37 @@ def create_withdrawal(user_id, investment_id):
 ### Date of Birth
 - Must be 18+ years old
 
+### Joint Account Validation
+**When `accountType = 'joint'`, all these fields are REQUIRED:**
+- `jointHoldingType` - Must be one of: spouse, sibling, domestic_partner, business_partner, other
+- `jointHolder.firstName` - Non-empty string
+- `jointHolder.lastName` - Non-empty string
+- `jointHolder.email` - Valid email format
+- `jointHolder.phone` - Valid 10-digit phone number
+- `jointHolder.dob` - Valid date, holder must be 18+
+- `jointHolder.ssn` - Valid SSN format (XXX-XX-XXXX)
+- `jointHolder.address.street1` - Non-empty string
+- `jointHolder.address.city` - Non-empty string, no numbers
+- `jointHolder.address.state` - Full state name (required)
+- `jointHolder.address.zip` - Exactly 5 digits
+
+**Backend validation:**
+```python
+if body.jointHolder:
+    # Validate all required fields
+    if not body.jointHolder.firstName or not body.jointHolder.lastName:
+        return error("Joint holder name is required")
+    if not body.jointHolder.email or not valid_email(body.jointHolder.email):
+        return error("Valid joint holder email is required")
+    if not body.jointHolder.address or not body.jointHolder.address.street1:
+        return error("Joint holder address is required")
+    if not body.jointHolder.address.city or not body.jointHolder.address.state:
+        return error("Joint holder city and state are required")
+    if not body.jointHolder.address.zip or len(body.jointHolder.address.zip) != 5:
+        return error("Joint holder zip code must be 5 digits")
+    # ... validate other fields
+```
+
 ### Investment Status Transitions
 - **CRITICAL:** Active investments (`status = 'active'`) cannot be rejected
 - Once an investment is active, it can only transition to `withdrawal_notice` or remain `active`
@@ -4423,12 +4491,13 @@ Test all investment states and transitions:
 #### 3. **Account Type Combinations**
 Test all valid account type + payment frequency + lockup combinations:
 - **Individual:** All combinations valid (8 total)
-- **Joint:** All combinations valid (8 total)
+- **Joint:** All combinations valid (8 total) - **MUST validate all joint holder fields including address**
 - **Entity:** All combinations valid (8 total)
 - **IRA:** Only compounding valid (2 total: 1-year, 3-year compounding)
 
 **Invalid combinations to reject:**
 - IRA + Monthly payout (must be compounding)
+- Joint account without complete joint holder information (name, email, phone, DOB, SSN, address)
 
 #### 4. **Interest Calculations**
 Verify penny-perfect accuracy for:
@@ -4495,6 +4564,8 @@ Expected:
 - Cannot withdraw before lockup ends
 - **Cannot approve investment with incomplete profile**
 - Profile must include: name, phone, DOB, SSN, address, bank connection
+- **Joint account validation:** All joint holder fields required (name, email, phone, DOB, SSN, and complete address)
+- **Backend must reject** requests with incomplete joint holder data (return HTTP 400)
 
 ### Test Data Requirements
 
@@ -4762,6 +4833,7 @@ Withdrawal Processed → Investment status: withdrawn (FINAL)
 - Use real time instead of app time
 - Delete withdrawn investments from database
 - Store `anticipatedEarnings` in database (calculate dynamically)
+- Accept joint accounts without complete address information
 
 ✅ **DO:**
 - Match calculations to the penny
@@ -4771,6 +4843,7 @@ Withdrawal Processed → Investment status: withdrawn (FINAL)
 - Use app time for all calculations
 - Validate all state transitions
 - Log all approval actions for audit trail
+- **Validate joint holder address fields** (street1, city, state, zip all required)
 
 ---
 
@@ -4792,6 +4865,8 @@ Before deploying, verify:
 - [ ] All activity events use UPPERCASE format
 - [ ] Account type locking works correctly
 - [ ] Withdrawn investments remain visible
+- [ ] **Joint holder validation enforced** (all fields including address required)
+- [ ] Backend rejects incomplete joint holder data (HTTP 400)
 - [ ] API responses match expected JSON structure
 
 ---
