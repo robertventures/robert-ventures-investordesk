@@ -403,7 +403,10 @@ export async function POST() {
           }
         }
 
-        // Contributions for compounding investments
+        // Distributions and Contributions for compounding investments
+        // Compounding investments generate TWO transactions per month:
+        // 1. Distribution (earnings generated)
+        // 2. Contribution (distribution reinvested back into the investment)
         if ((inv.status === 'active' || inv.status === 'withdrawal_notice') && payFreq === 'compounding' && inv.confirmedAt) {
           const confirmedDate = new Date(inv.confirmedAt)
           const accrualStartDate = addDaysUtc(toUtcStartOfDay(confirmedDate), 1)
@@ -440,12 +443,30 @@ export async function POST() {
                 : segmentEndDate.getUTCMonth() + 2
               const compoundingDate = createEasternTime9AM(nextYear, nextMonth, 1)
               const compoundingDateIso = compoundingDate.toISOString()
-              const txId = generateTransactionId('INV', inv.id, 'contribution', { date: compoundingDate })
+              
               const legacyKey = `${inv.id}-${compoundingDateIso}`
-              const legacyEvent = legacyContributionEvents.get(legacyKey)
+              const legacyDistributionEvent = legacyDistributionEvents.get(legacyKey)
+              const legacyContributionEvent = legacyContributionEvents.get(legacyKey)
 
+              // 1. First, create the DISTRIBUTION (earnings generated)
+              const distributionTxId = generateTransactionId('INV', inv.id, 'distribution', { date: compoundingDate })
               ensureTransaction({
-                id: txId,
+                id: distributionTxId,
+                type: 'distribution',
+                amount: Math.round(interest * 100) / 100,
+                status: 'approved',
+                date: compoundingDateIso,
+                monthIndex,
+                lockupPeriod: lockup,
+                paymentFrequency: payFreq,
+                principal: Math.round(balance * 100) / 100,
+                legacyReferenceId: legacyDistributionEvent?.id || null
+              })
+
+              // 2. Then, create the CONTRIBUTION (distribution reinvested)
+              const contributionTxId = generateTransactionId('INV', inv.id, 'contribution', { date: compoundingDate })
+              ensureTransaction({
+                id: contributionTxId,
                 type: 'contribution',
                 amount: Math.round(interest * 100) / 100,
                 status: 'approved',
@@ -454,13 +475,17 @@ export async function POST() {
                 lockupPeriod: lockup,
                 paymentFrequency: payFreq,
                 principal: Math.round(balance * 100) / 100,
-                legacyReferenceId: legacyEvent?.id || null
+                distributionTxId,  // Link to the distribution that was reinvested
+                legacyReferenceId: legacyContributionEvent?.id || null
               })
 
               balance += interest
               monthIndex += 1
             })
           }
+          
+          // Force re-sort for compounding investments to ensure correct order
+          investmentTouched = true
         }
 
         // Redemptions for withdrawals
@@ -517,10 +542,19 @@ export async function POST() {
         }
 
         if (investmentTouched) {
+          // Sort transactions by date, then by type order (for same-date transactions)
+          // Type order: investment -> distribution -> contribution -> redemption
+          const typeOrder = { investment: 1, distribution: 2, contribution: 3, redemption: 4 }
           inv.transactions.sort((a, b) => {
             const dateA = new Date(a.date || a.createdAt || 0).getTime()
             const dateB = new Date(b.date || b.createdAt || 0).getTime()
-            return dateA - dateB
+            if (dateA !== dateB) {
+              return dateA - dateB
+            }
+            // Same date: sort by type order
+            const orderA = typeOrder[a.type] || 99
+            const orderB = typeOrder[b.type] || 99
+            return orderA - orderB
           })
           inv.updatedAt = now.toISOString()
           userTouched = true

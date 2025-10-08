@@ -21,7 +21,7 @@ export default function AdminPage() {
   // Tab management
   const initialTab = useMemo(() => {
     const t = searchParams?.get('tab') || 'dashboard'
-    const allowed = ['dashboard', 'transactions', 'accounts', 'distributions', 'activity', 'operations']
+    const allowed = ['dashboard', 'investments', 'accounts', 'distributions', 'activity', 'operations']
     return allowed.includes(t) ? t : 'dashboard'
   }, [searchParams])
   const [activeTab, setActiveTab] = useState(initialTab)
@@ -455,10 +455,17 @@ export default function AdminPage() {
           {/* Header */}
           <div className={styles.headerRow}>
             <div>
-              <h1 className={styles.title}>Admin Dashboard</h1>
+              <h1 className={styles.title}>
+                {activeTab === 'dashboard' && 'Admin Dashboard'}
+                {activeTab === 'investments' && 'Investments'}
+                {activeTab === 'accounts' && 'Accounts'}
+                {activeTab === 'activity' && 'Activity'}
+                {activeTab === 'distributions' && 'Distributions'}
+                {activeTab === 'operations' && 'Operations'}
+              </h1>
               <p className={styles.subtitle}>
                 {activeTab === 'dashboard' && 'Overview of platform metrics and recent activity'}
-                {activeTab === 'transactions' && 'Manage and approve investment transactions'}
+                {activeTab === 'investments' && 'Manage and approve investment transactions'}
                 {activeTab === 'accounts' && 'View and manage user accounts'}
                 {activeTab === 'activity' && 'View all activity events across the platform'}
                 {activeTab === 'distributions' && 'Track monthly payments and compounding interest calculations'}
@@ -509,8 +516,8 @@ export default function AdminPage() {
             <DistributionsTab users={users || []} />
           )}
 
-          {/* Transactions Tab */}
-          {activeTab === 'transactions' && (
+          {/* Investments Tab */}
+          {activeTab === 'investments' && (
             <div>
               <div className={styles.searchContainer}>
                 <input

@@ -6,6 +6,31 @@ This guide is your complete technical reference for implementing a Python backen
 
 ---
 
+## ⚠️ IMPORTANT: Recent Changes (v2.2)
+
+**Breaking Change - Compounding Transaction Structure:**
+
+Compounding investments now generate **TWO transactions per month** instead of one:
+1. **Distribution** - Records the interest earned by the investment
+2. **Contribution** - Records the distribution being reinvested into the principal
+
+Both transactions:
+- Have the same date, time (9:00 AM ET), and monthIndex
+- Are linked via `distributionTxId` field in the contribution
+- Are sorted by type so distribution always appears first
+- Both have status `approved` (automatic for compounding)
+
+This creates a proper audit trail: earn → reinvest → compound.
+
+**Example:** A $10,000 compounding investment in Month 1 creates:
+- Distribution: $83.33 (earnings)
+- Contribution: $83.33 (reinvested)
+- New balance: $10,083.33
+
+See [Distribution Events System](#distribution-events-system) for complete details.
+
+---
+
 ## 📋 About This Platform
 
 Robert Ventures Investment Platform enables investors to purchase bonds with flexible terms:
@@ -2732,48 +2757,42 @@ def calculate_total_earnings(investments, transactions, app_time):
 
 ### Investment Transaction Entry (Per-Investment Ledger)
 
-Each investment now owns its own immutable transaction ledger under `investment.transactions`. The ledger powers earnings calculations, investor dashboards, and admin payout workflows.
+Each investment maintains its own transaction ledger under `investment.transactions`.
 
 ```json
 {
-  "id": "TX-INV-10000-DIST-2025-11",     // TX-{INV}-{numericId}-{CONTR|DIST|REDEEM}
+  "id": "TX-INV-10000-DIST-2025-11",
   "type": "investment|distribution|contribution|redemption",
   "status": "pending|approved|received|rejected",
   "amount": 66.67,
   "date": "2025-11-01T13:00:00.000Z",
-  "createdAt": "2025-11-01T13:00:00.000Z",
-  "updatedAt": "2025-11-01T13:00:00.000Z",
-
-  // Distribution-specific metadata
   "monthIndex": 1,
+  
+  // Distribution-specific (for monthly payouts)
   "payoutMethod": "bank-account",
   "payoutBankId": "BANK-USR-1001-1",
-  "payoutBankNickname": "Primary Account",
   "retryCount": 0,
-  "failureReason": null,
-  "lastRetryAt": null,
-  "completedAt": null,
-
-  // Redemption-specific metadata
-  "withdrawalId": "WDL-10001",
-  "payoutDueBy": "2026-01-30T00:00:00.000Z",
-  "approvedAt": null,
-  "paidAt": null,
-  "rejectedAt": null
+  
+  // Contribution-specific (for compounding)
+  "distributionTxId": "TX-INV-10000-DIST-2025-11",  // Links to distribution
+  "principal": 10000.00,
+  
+  // Redemption-specific
+  "withdrawalId": "WDL-10001"
 }
 ```
 
-**Investment Transaction Field Rules**
-- `type` meanings:
-  - `investment`: Principal allocation when an investment leaves draft status.
-  - `distribution`: Monthly interest payouts for monthly-frequency investments.
-  - `contribution`: Compounded interest that is retained in the investment balance.
-  - `redemption`: Withdrawal lifecycle entries (pending/processed/failed).
-- `status`: Normalized across all transaction types. `pending` represents scheduled actions, `approved` marks items awaiting funds movement, `received` indicates completion, and `rejected` captures failures/cancellations.
-- Distribution transactions may include bank routing metadata, retry counters, and completion timestamps.
-- Contribution transactions store the compounded amount (and optionally the principal snapshot) and are always `approved` autonomously.
-- Redemption transactions reference the corresponding withdrawal (`withdrawalId`) and inherit payout deadlines and timestamps as they move through the lifecycle.
-- Transaction arrays are ordered chronologically by `date`. Future-dated scheduled entries are pruned whenever the admin time machine is rolled back.
+**Transaction Types:**
+- `investment`: Initial principal allocation
+- `distribution`: Monthly interest (for monthly payout) OR earnings generated (for compounding)
+- `contribution`: Distribution reinvested (compounding only) - links to distribution via `distributionTxId`
+- `redemption`: Withdrawal processing
+
+**⚠️ CRITICAL:** Compounding investments create TWO transactions per month with the SAME date and monthIndex:
+1. Distribution (earnings generated)
+2. Contribution (earnings reinvested)
+
+Both transactions are sorted by type to ensure distribution appears before contribution.
 
 ### Withdrawal
 ```json
@@ -2871,26 +2890,29 @@ Without calling this endpoint, the Distributions tab will be empty even when inv
 
 ### Overview
 
-The platform automatically maintains each investment's transaction ledger based on the current app time. Two recurring transaction types are produced:
+The platform maintains each investment's transaction ledger. Three transaction types are generated monthly:
 
-1. **Distribution** (`distribution`) - For monthly payout investments
-   - Interest is calculated and paid out monthly.
-   - ⚠️ **CRITICAL:** Transactions are dated on the **1st of the NEXT month** at 9:00 AM ET after the accrual period ends.
-   - Example: Interest accrued Jan 16-31 → Transaction dated Feb 1 (NOT Jan 31).
-   - First month is prorated based on confirmation date.
-   - Transactions default to `status = pending` with admin-managed settlement fields (`payoutBankId`, `retryCount`, etc.).
+**1. For Monthly Payout Investments:**
+- **Distribution** (`distribution`) - Interest paid out to investor's bank account
+  - Transactions dated on **1st of NEXT month at 9:00 AM ET** after accrual period
+  - Example: Interest accrued Jan 16-31 → Transaction dated Feb 1
+  - Status: `pending` (requires admin approval before payout)
+  - First month is prorated based on confirmation date
 
-2. **Contribution** (`contribution`) - For compounding investments
-   - Interest is calculated monthly and automatically added to principal.
-   - Transactions are created on the 1st of the following month (9:00 AM ET) and stored with `status = approved`.
-   - Each entry preserves the compounded amount and the principal snapshot used for the next period's calculation.
+**2. For Compounding Investments (TWO transactions per month):**
+- **Distribution** (`distribution`) - Interest earned by the investment
+  - Dated on **1st of NEXT month at 9:00 AM ET**
+  - Status: `approved` (automatic for compounding)
+  - First transaction in the sequence
+  
+- **Contribution** (`contribution`) - Distribution amount reinvested into principal
+  - Dated on **1st of NEXT month at 9:00 AM ET** (same time as distribution)
+  - Status: `approved` (automatic)
+  - Links back to distribution via `distributionTxId`
+  - Second transaction in the sequence
 
-2. **Monthly Compounded** (`monthly_compounded`) - For compounding investments
-   - Interest is calculated and added to principal monthly
-   - ⚠️ **CRITICAL:** Events are dated on the **1st of the NEXT month** after accrual period ends
-   - Example: Interest accrued Jan 1-31 → Event dated Feb 1 (NOT Jan 31)
-   - First month is prorated based on confirmation date
-   - Each month compounds on the increased balance
+**Why Two Transactions for Compounding?**
+Creates proper audit trail: investment earns distribution → distribution is reinvested as contribution → principal grows. Both transactions happen at the same moment but represent distinct events.
 
 ### ⚠️ CRITICAL EVENT TIMING RULE
 
@@ -3143,8 +3165,8 @@ def generate_distribution_events(users, app_time):
                         investment.amount, 
                         segment
                     )
-                    create_monthly_distribution_event(
-                        user, investment, amount, event_date, month_index
+                    create_distribution_transaction(
+                        investment, amount, event_date, month_index, status='pending'
                     )
                 
                 elif investment.payment_frequency == 'compounding':
@@ -3154,8 +3176,17 @@ def generate_distribution_events(users, app_time):
                         segments[:month_index]
                     )
                     interest = calculate_compound_interest(balance, segment)
-                    create_monthly_compounded_event(
-                        user, investment, interest, balance, event_date, month_index
+                    
+                    # Create TWO transactions for compounding
+                    # 1. Distribution (earnings generated)
+                    dist_id = create_distribution_transaction(
+                        investment, interest, event_date, month_index, status='approved'
+                    )
+                    
+                    # 2. Contribution (distribution reinvested)
+                    create_contribution_transaction(
+                        investment, interest, event_date, month_index, 
+                        distribution_tx_id=dist_id, principal=balance
                     )
 ```
 
@@ -3190,65 +3221,64 @@ Events are ALWAYS dated on the 1st of the month AFTER the accrual period ends, a
 
 ### Compounding Mechanics
 
-For compounding investments, each month's interest is added to the principal:
+For compounding investments, TWO transactions are created each month:
 
 **Example - $10,000 at 10% APY (3-year, compounding):**
 
-| Month | Start Balance | Interest | End Balance | Event Date |
-|-------|--------------|----------|-------------|------------|
-| 1 (prorated, 16 days) | $10,000.00 | $43.01 | $10,043.01 | Feb 1 |
-| 2 (full) | $10,043.01 | $83.69 | $10,126.70 | Mar 1 |
-| 3 (full) | $10,126.70 | $84.39 | $10,211.09 | Apr 1 |
-| ... | ... | ... | ... | ... |
+| Month | Start Balance | Interest | Transactions Created | End Balance |
+|-------|--------------|----------|---------------------|-------------|
+| 1 (prorated, 16 days) | $10,000.00 | $43.01 | Distribution + Contribution (Feb 1) | $10,043.01 |
+| 2 (full) | $10,043.01 | $83.69 | Distribution + Contribution (Mar 1) | $10,126.70 |
+| 3 (full) | $10,126.70 | $84.39 | Distribution + Contribution (Apr 1) | $10,211.09 |
 
-**Key Points:**
-- Each month compounds on the **new balance** (not original principal)
-- Interest is calculated but not paid out - it's added to investment value
-- Events track the interest amount and the principal at that time
-- At maturity, total value = principal + all compounded interest
+**Transaction Sequence Each Month:**
+1. **Distribution** created ($43.01) - Shows earnings generated
+2. **Contribution** created ($43.01) - Shows earnings reinvested
+3. Balance increases by $43.01
+4. Next month calculates interest on new balance ($10,043.01)
 
-### Event Structure
+### Transaction Structure Examples
 
-**Monthly Distribution Event:**
+**Monthly Payout - Distribution:**
 ```json
 {
-  "id": "TX-INV-10001-MONTHLY-DISTRIBUTION-2025-02-01",
-  "type": "monthly_distribution",
-  "investmentId": "INV-10001",
+  "id": "TX-INV-10001-DIST-2025-02",
+  "type": "distribution",
   "amount": 83.33,
-  "lockupPeriod": "3-year",
-  "paymentFrequency": "monthly",
+  "status": "pending",
   "date": "2025-02-01T14:00:00.000Z",
-  "displayDate": "2025-02-01T09:00:00-05:00",
   "monthIndex": 1,
-  "payoutMethod": "bank-account",
   "payoutBankId": "BANK-001",
-  "payoutBankNickname": "Primary Checking",
-  "payoutStatus": "completed",
-  "failureReason": null,
-  "retryCount": 0
+  "payoutBankNickname": "Primary Checking"
 }
 ```
 
-**Note:** All distributions are timestamped at 9:00 AM Eastern Time (14:00 UTC during standard time, 13:00 UTC during daylight saving time). This ensures consistency across all investor time zones.
-
-**Monthly Compounded Event:**
+**Compounding - Distribution + Contribution (same month):**
 ```json
+// 1. Distribution (earnings generated)
 {
-  "id": "TX-INV-10001-MONTHLY-COMPOUNDED-2025-02-01",
-  "type": "monthly_compounded",
-  "investmentId": "INV-10001",
+  "id": "TX-INV-10002-DIST-2025-02",
+  "type": "distribution",
   "amount": 83.33,
-  "lockupPeriod": "3-year",
-  "paymentFrequency": "compounding",
+  "status": "approved",
   "date": "2025-02-01T14:00:00.000Z",
-  "displayDate": "2025-02-01T09:00:00-05:00",
+  "monthIndex": 1
+}
+
+// 2. Contribution (distribution reinvested)
+{
+  "id": "TX-INV-10002-CONTR-2025-02",
+  "type": "contribution",
+  "amount": 83.33,
+  "status": "approved",
+  "date": "2025-02-01T14:00:00.000Z",
   "monthIndex": 1,
+  "distributionTxId": "TX-INV-10002-DIST-2025-02",
   "principal": 10000.00
 }
 ```
 
-**Note:** All compounding events are timestamped at 9:00 AM Eastern Time, consistent with distribution events.
+**Note:** All transactions timestamped at 9:00 AM Eastern (14:00 UTC winter, 13:00 UTC summer) for consistency.
 
 ### Critical Implementation Notes
 
@@ -3332,14 +3362,15 @@ async function loadAdminData() {
 2. Admin approves (status → active, confirmedAt set)
 3. Use time machine to advance 3 months
 4. Call `/api/migrate-transactions`
-5. Check user.activity for 3 `monthly_compounded` events
+5. Check investment.transactions for 6 transactions (2 per month)
 
 **Expected Results:**
-- Month 1: Prorated interest (depends on confirmation date)
-- Month 2: Full month interest on new balance
-- Month 3: Full month interest on further increased balance
-- Each event has incrementing monthIndex (1, 2, 3)
-- Events dated on 1st of each month following accrual period
+- Month 1: Distribution + Contribution (prorated)
+- Month 2: Distribution + Contribution (full month, compounded on new balance)
+- Month 3: Distribution + Contribution (full month, compounded on further increased balance)
+- Each pair has same monthIndex and date
+- Distribution always appears before contribution (sorted by type)
+- Contribution links back to distribution via `distributionTxId`
 
 ---
 
@@ -4883,13 +4914,12 @@ Good luck, and welcome to the team! 🚀
 
 ---
 
-**Document Version:** 2.1  
+**Document Version:** 2.2  
 **Last Updated:** October 2025  
 **Maintained By:** Robert Ventures Development Team
 
-**Version 2.1 Changes:**
-- Clarified that all monthly payouts require admin approval (not bank connection-dependent)
-- Added mock bank account details for testing purposes
-- Documented state field as REQUIRED in address validation
-- Removed fix-payout-reasons script (no longer needed)
-- Updated seed accounts script to include state information
+**Version 2.2 Changes:**
+- **BREAKING CHANGE:** Compounding investments now generate TWO transactions per month (distribution + contribution)
+- Updated all examples and documentation to reflect new transaction structure
+- Condensed guide for better readability while maintaining technical accuracy
+- Added `distributionTxId` link from contribution to distribution transactions

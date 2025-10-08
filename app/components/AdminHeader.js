@@ -85,10 +85,10 @@ export default function AdminHeader({ onTabChange, activeTab }) {
             Accounts
           </button>
           <button
-            onClick={() => handleNavSelect('transactions')}
-            className={`${styles.navItem} ${activeTab === 'transactions' ? styles.active : ''}`}
+            onClick={() => handleNavSelect('investments')}
+            className={`${styles.navItem} ${activeTab === 'investments' ? styles.active : ''}`}
           >
-            Transactions
+            Investments
           </button>
           <button
             onClick={() => handleNavSelect('distributions')}
@@ -127,7 +127,7 @@ export default function AdminHeader({ onTabChange, activeTab }) {
             </div>
             <button className={styles.mobileNavItem} onClick={() => handleNavSelect('dashboard')}>Dashboard</button>
             <button className={styles.mobileNavItem} onClick={() => handleNavSelect('accounts')}>Accounts</button>
-            <button className={styles.mobileNavItem} onClick={() => handleNavSelect('transactions')}>Transactions</button>
+            <button className={styles.mobileNavItem} onClick={() => handleNavSelect('investments')}>Investments</button>
             <button className={styles.mobileNavItem} onClick={() => handleNavSelect('distributions')}>Distributions</button>
             <button className={styles.mobileNavItem} onClick={() => handleNavSelect('activity')}>Activity</button>
             <button className={styles.mobileNavItem} onClick={() => handleNavSelect('operations')}>Operations</button>

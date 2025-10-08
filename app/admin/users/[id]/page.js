@@ -84,7 +84,6 @@ export default function AdminUserDetailsPage({ params }) {
     }
   })
   const [errors, setErrors] = useState({})
-  const [expandedInvestments, setExpandedInvestments] = useState({})
   // Precompute date boundaries without hooks to avoid hook order issues
   const maxAdultDob = (() => {
     const now = new Date()
@@ -537,6 +536,155 @@ export default function AdminUserDetailsPage({ params }) {
             </div>
           </div>
 
+          {/* Distributions Section */}
+          <div className={styles.sectionCard}>
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.sectionTitle}>Distributions</h2>
+            </div>
+            {(() => {
+              // Collect all distribution transactions from user's investments
+              const allDistributions = []
+              if (user.investments && user.investments.length > 0) {
+                user.investments.forEach(inv => {
+                  if (inv.transactions && Array.isArray(inv.transactions)) {
+                    inv.transactions.forEach(tx => {
+                      if (tx.type === 'distribution' || tx.type === 'contribution') {
+                        allDistributions.push({
+                          ...tx,
+                          investmentId: inv.id,
+                          lockupPeriod: inv.lockupPeriod,
+                          paymentFrequency: inv.paymentFrequency
+                        })
+                      }
+                    })
+                  }
+                })
+              }
+
+              // Sort by date (most recent first)
+              allDistributions.sort((a, b) => {
+                const dateA = a.date ? new Date(a.date).getTime() : 0
+                const dateB = b.date ? new Date(b.date).getTime() : 0
+                return dateB - dateA
+              })
+
+              // Calculate summary stats
+              const payouts = allDistributions.filter(tx => tx.type === 'distribution')
+              const contributions = allDistributions.filter(tx => tx.type === 'contribution')
+              const totalAmount = allDistributions.reduce((sum, tx) => sum + (tx.amount || 0), 0)
+              const pendingCount = allDistributions.filter(tx => tx.status === 'pending').length
+
+              return allDistributions.length > 0 ? (
+                <>
+                  {/* Distribution Summary */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '20px' }}>
+                    <div style={{ padding: '16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                      <div style={{ fontSize: '14px', color: '#64748b', marginBottom: '4px' }}>Total Distributions</div>
+                      <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#1f2937' }}>
+                        ${totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#64748b' }}>{allDistributions.length} transactions</div>
+                    </div>
+                    <div style={{ padding: '16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                      <div style={{ fontSize: '14px', color: '#64748b', marginBottom: '4px' }}>💸 Monthly Payouts</div>
+                      <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#7c3aed' }}>
+                        ${payouts.reduce((sum, tx) => sum + (tx.amount || 0), 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#64748b' }}>{payouts.length} payouts</div>
+                    </div>
+                    <div style={{ padding: '16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                      <div style={{ fontSize: '14px', color: '#64748b', marginBottom: '4px' }}>📈 Compounded Interest</div>
+                      <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#0369a1' }}>
+                        ${contributions.reduce((sum, tx) => sum + (tx.amount || 0), 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#64748b' }}>{contributions.length} calculations</div>
+                    </div>
+                    {pendingCount > 0 && (
+                      <div style={{ padding: '16px', background: '#fef3c7', borderRadius: '8px', border: '1px solid #f59e0b' }}>
+                        <div style={{ fontSize: '14px', color: '#92400e', marginBottom: '4px' }}>⏳ Pending Approval</div>
+                        <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#92400e' }}>{pendingCount}</div>
+                        <div style={{ fontSize: '12px', color: '#92400e' }}>distributions</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Distribution List */}
+                  <div className={styles.list}>
+                    {allDistributions.map(tx => (
+                      <div key={tx.id} style={{
+                        padding: '16px',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '8px',
+                        marginBottom: '12px',
+                        background: 'white'
+                      }}>
+                        <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          marginBottom: '12px'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{
+                              fontSize: '18px',
+                              color: tx.type === 'distribution' ? '#7c3aed' : '#0369a1'
+                            }}>
+                              {tx.type === 'distribution' ? '💸' : '📈'}
+                            </span>
+                            <span style={{ fontWeight: 'bold' }}>
+                              {tx.type === 'distribution' ? 
+                                (tx.paymentFrequency === 'compounding' ? 'Distribution (To Be Compounded)' : 'Distribution') 
+                                : 'Contribution (Compounded)'}
+                            </span>
+                            <span style={{
+                              padding: '2px 8px',
+                              borderRadius: '12px',
+                              fontSize: '12px',
+                              fontWeight: 'bold',
+                              background: tx.status === 'completed' ? '#dcfce7' :
+                                        tx.status === 'pending' ? '#fef3c7' :
+                                        '#fee2e2',
+                              color: tx.status === 'completed' ? '#166534' :
+                                    tx.status === 'pending' ? '#92400e' :
+                                    '#991b1b'
+                            }}>
+                              {tx.status || 'completed'}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#1f2937' }}>
+                            ${(tx.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                        </div>
+
+                        <div style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+                          gap: '12px',
+                          fontSize: '14px',
+                          color: '#64748b'
+                        }}>
+                          <div><b>Investment ID:</b> {tx.investmentId}</div>
+                          <div><b>Date:</b> {tx.date ? new Date(tx.date).toLocaleDateString('en-US', {
+                            timeZone: 'America/New_York',
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric'
+                          }) : '-'}</div>
+                          <div><b>Month Index:</b> {tx.monthIndex != null ? `Month ${tx.monthIndex}` : '-'}</div>
+                          <div><b>Lockup Period:</b> {tx.lockupPeriod || '-'}</div>
+                          <div><b>Payment Frequency:</b> {tx.paymentFrequency || '-'}</div>
+                          <div><b>Transaction ID:</b> {tx.id}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className={styles.muted}>No distributions</div>
+              )
+            })()}
+          </div>
+
           {/* Investments Section */}
           <div className={styles.sectionCard}>
             <div className={styles.sectionHeader}>
@@ -544,86 +692,210 @@ export default function AdminUserDetailsPage({ params }) {
             </div>
             {(user.investments && user.investments.length > 0) ? (
               <div className={styles.list}>
-                {user.investments.map(inv => {
-                  const isExpanded = expandedInvestments[inv.id]
-                  return (
-                    <div key={inv.id} className={styles.invCard}>
-                      <div 
-                        className={styles.invHeader} 
-                        onClick={() => setExpandedInvestments(prev => ({ ...prev, [inv.id]: !prev[inv.id] }))}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        <div className={styles.invHeaderContent}>
-                          <div><b>ID:</b> {inv.id}</div>
-                          <div><b>Amount:</b> ${inv.amount?.toLocaleString() || 0}</div>
-                          <div><b>Status:</b> {inv.status}</div>
-                          <div><b>Created:</b> {inv.createdAt ? new Date(inv.createdAt).toLocaleDateString() : '-'}</div>
-                        </div>
-                        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                          <button 
-                            className={styles.secondaryButton}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              router.push(`/admin/investments/${inv.id}`);
-                            }}
-                            style={{ fontSize: '13px', padding: '6px 10px' }}
-                            title="View full investment details"
-                          >
-                            View Details
-                          </button>
-                          <div className={styles.expandIcon}>{isExpanded ? '▼' : '▶'}</div>
+                {user.investments.map(inv => (
+                  <div key={inv.id} style={{
+                    padding: '16px',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '8px',
+                    marginBottom: '12px',
+                    background: 'white'
+                  }}>
+                    {/* Investment Header - Compact */}
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '12px'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{
+                          fontSize: '16px',
+                          fontWeight: '600',
+                          color: '#111827'
+                        }}>
+                          Investment #{inv.id}
+                        </span>
+                        <span style={{
+                          padding: '2px 8px',
+                          borderRadius: '12px',
+                          fontSize: '10px',
+                          fontWeight: '600',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.025em',
+                          background: inv.status === 'active' ? '#dcfce7' :
+                                    inv.status === 'pending' ? '#fef3c7' :
+                                    inv.status === 'approved' ? '#dbeafe' :
+                                    inv.status === 'invested' ? '#f0fdf4' :
+                                    '#fee2e2',
+                          color: inv.status === 'active' ? '#166534' :
+                                inv.status === 'pending' ? '#92400e' :
+                                inv.status === 'approved' ? '#1e40af' :
+                                inv.status === 'invested' ? '#166534' :
+                                '#991b1b'
+                        }}>
+                          {inv.status}
+                        </span>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: '18px', fontWeight: '700', color: '#111827' }}>
+                          ${inv.amount?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
                         </div>
                       </div>
-                      {isExpanded && (
-                        <div className={styles.invDetails}>
-                          <div className={styles.detailsGrid}>
-                            <div><b>Account Type:</b> {inv.accountType || '-'}</div>
-                            <div><b>Lockup Period:</b> {inv.lockupPeriod || '-'}</div>
-                            <div><b>Payment Frequency:</b> {inv.paymentFrequency || '-'}</div>
-                            <div><b>Bonds:</b> {inv.bonds?.toLocaleString() || '-'}</div>
-                            <div><b>Updated:</b> {inv.updatedAt ? new Date(inv.updatedAt).toLocaleDateString() : '-'}</div>
-                            <div><b>Confirmed At:</b> {inv.confirmedAt ? new Date(inv.confirmedAt).toLocaleDateString() : '-'}</div>
-                            {inv.lockupEndDate && <div><b>Lockup Ends:</b> {new Date(inv.lockupEndDate).toLocaleDateString()}</div>}
-                            {inv.compliance && (
-                              <>
-                                <div><b>Accredited:</b> {inv.compliance.accredited || '-'}</div>
-                                {inv.compliance.accreditedType && <div><b>Accredited Type:</b> {inv.compliance.accreditedType}</div>}
-                                {inv.compliance.tenPercentLimitConfirmed && <div><b>10% Limit:</b> Confirmed</div>}
-                              </>
-                            )}
-                            {inv.banking && (
-                              <>
-                                {inv.banking.fundingMethod && <div><b>Funding Method:</b> {inv.banking.fundingMethod}</div>}
-                                {inv.banking.payoutMethod && <div><b>Payout Method:</b> {inv.banking.payoutMethod}</div>}
-                              </>
-                            )}
-                            {inv.entity && (
-                              <>
-                                <div><b>Entity Name:</b> {inv.entity.name || '-'}</div>
-                                <div><b>Entity TIN:</b> {inv.entity.taxId || '-'}</div>
-                              </>
-                            )}
-                            {inv.jointHoldingType && (
-                              <div><b>Joint Holding Type:</b> {inv.jointHoldingType}</div>
-                            )}
-                          </div>
-                          <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #e2e8f0' }}>
-                            <button 
-                              className={styles.secondaryButton}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                router.push(`/admin/investments/${inv.id}`);
-                              }}
-                              style={{ width: '100%' }}
-                            >
-                              View Full Investment Details →
-                            </button>
-                          </div>
+                    </div>
+
+                    {/* Compact Details Row */}
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+                      gap: '12px',
+                      marginBottom: '12px'
+                    }}>
+                      <div style={{ fontSize: '13px' }}>
+                        <span style={{ color: '#6b7280', fontWeight: '500' }}>Type:</span>
+                        <span style={{ color: '#111827', marginLeft: '4px', fontWeight: '500' }}>
+                          {inv.accountType || '-'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '13px' }}>
+                        <span style={{ color: '#6b7280', fontWeight: '500' }}>Lockup:</span>
+                        <span style={{ color: '#111827', marginLeft: '4px', fontWeight: '500' }}>
+                          {inv.lockupPeriod || '-'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '13px' }}>
+                        <span style={{ color: '#6b7280', fontWeight: '500' }}>Frequency:</span>
+                        <span style={{ color: '#111827', marginLeft: '4px', fontWeight: '500' }}>
+                          {inv.paymentFrequency || '-'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '13px' }}>
+                        <span style={{ color: '#6b7280', fontWeight: '500' }}>Bonds:</span>
+                        <span style={{ color: '#111827', marginLeft: '4px', fontWeight: '500' }}>
+                          {inv.bonds?.toLocaleString() || '-'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '13px' }}>
+                        <span style={{ color: '#6b7280', fontWeight: '500' }}>Created:</span>
+                        <span style={{ color: '#111827', marginLeft: '4px', fontWeight: '500' }}>
+                          {inv.createdAt ? new Date(inv.createdAt).toLocaleDateString('en-US', {
+                            timeZone: 'America/New_York',
+                            month: 'short',
+                            day: 'numeric'
+                          }) : '-'}
+                        </span>
+                      </div>
+                      {inv.confirmedAt && (
+                        <div style={{ fontSize: '13px' }}>
+                          <span style={{ color: '#6b7280', fontWeight: '500' }}>Confirmed:</span>
+                          <span style={{ color: '#111827', marginLeft: '4px', fontWeight: '500' }}>
+                            {new Date(inv.confirmedAt).toLocaleDateString('en-US', {
+                              timeZone: 'America/New_York',
+                              month: 'short',
+                              day: 'numeric'
+                            })}
+                          </span>
                         </div>
                       )}
                     </div>
-                  )
-                })}
+
+                    {/* Specialized Info - Inline */}
+                    <div style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: '8px',
+                      marginBottom: '12px'
+                    }}>
+                      {inv.compliance && (
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '2px 6px',
+                          background: '#f0f9ff',
+                          border: '1px solid #e0f2fe',
+                          borderRadius: '4px',
+                          fontSize: '11px',
+                          color: '#0369a1',
+                          fontWeight: '500'
+                        }}>
+                          ✓ {inv.compliance.accredited || 'Accredited'}
+                        </span>
+                      )}
+
+                      {inv.banking && inv.banking.fundingMethod && (
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '2px 6px',
+                          background: '#f0fdf4',
+                          border: '1px solid #dcfce7',
+                          borderRadius: '4px',
+                          fontSize: '11px',
+                          color: '#166534',
+                          fontWeight: '500'
+                        }}>
+                          🏦 {inv.banking.fundingMethod}
+                        </span>
+                      )}
+
+                      {inv.entity && (
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '2px 6px',
+                          background: '#fefce8',
+                          border: '1px solid #fef3c7',
+                          borderRadius: '4px',
+                          fontSize: '11px',
+                          color: '#92400e',
+                          fontWeight: '500'
+                        }}>
+                          🏢 {inv.entity.name || 'Entity'}
+                        </span>
+                      )}
+
+                      {inv.jointHoldingType && (
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '2px 6px',
+                          background: '#fdf4ff',
+                          border: '1px solid #f3e8ff',
+                          borderRadius: '4px',
+                          fontSize: '11px',
+                          color: '#6b21a8',
+                          fontWeight: '500'
+                        }}>
+                          👥 {inv.jointHoldingType}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Actions - Compact */}
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'flex-end',
+                      paddingTop: '12px',
+                      borderTop: '1px solid #f3f4f6'
+                    }}>
+                      <button
+                        className={styles.secondaryButton}
+                        onClick={() => router.push(`/admin/investments/${inv.id}`)}
+                        style={{
+                          padding: '6px 12px',
+                          borderRadius: '6px',
+                          fontSize: '12px',
+                          fontWeight: '500'
+                        }}
+                      >
+                        Details →
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : (
               <div className={styles.muted}>No investments</div>
