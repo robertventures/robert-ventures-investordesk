@@ -219,6 +219,47 @@ export async function PUT(request, { params }) {
         return NextResponse.json({ success: false, error: `Account type must be ${userAccountType} for this user.` }, { status: 400 })
       }
 
+      // VALIDATION: If updating joint holder information in investment, validate required fields
+      if (body.fields.jointHolder) {
+        if (!body.fields.jointHolder.firstName?.trim()) {
+          return NextResponse.json({ success: false, error: 'Joint holder first name is required' }, { status: 400 })
+        }
+        if (!body.fields.jointHolder.lastName?.trim()) {
+          return NextResponse.json({ success: false, error: 'Joint holder last name is required' }, { status: 400 })
+        }
+        if (!body.fields.jointHolder.email || !/\S+@\S+\.\S+/.test(body.fields.jointHolder.email)) {
+          return NextResponse.json({ success: false, error: 'Valid joint holder email is required' }, { status: 400 })
+        }
+        if (!body.fields.jointHolder.phone?.trim()) {
+          return NextResponse.json({ success: false, error: 'Joint holder phone is required' }, { status: 400 })
+        }
+        if (!body.fields.jointHolder.dob) {
+          return NextResponse.json({ success: false, error: 'Joint holder date of birth is required' }, { status: 400 })
+        }
+        if (!body.fields.jointHolder.ssn?.trim()) {
+          return NextResponse.json({ success: false, error: 'Joint holder SSN is required' }, { status: 400 })
+        }
+        // Validate joint holder address fields
+        if (!body.fields.jointHolder.address) {
+          return NextResponse.json({ success: false, error: 'Joint holder address is required' }, { status: 400 })
+        }
+        if (!body.fields.jointHolder.address.street1?.trim()) {
+          return NextResponse.json({ success: false, error: 'Joint holder street address is required' }, { status: 400 })
+        }
+        if (!body.fields.jointHolder.address.city?.trim()) {
+          return NextResponse.json({ success: false, error: 'Joint holder city is required' }, { status: 400 })
+        }
+        if (!body.fields.jointHolder.address.state?.trim()) {
+          return NextResponse.json({ success: false, error: 'Joint holder state is required' }, { status: 400 })
+        }
+        if (!body.fields.jointHolder.address.zip?.trim()) {
+          return NextResponse.json({ success: false, error: 'Joint holder zip code is required' }, { status: 400 })
+        }
+        if (body.fields.jointHolder.address.zip.length !== 5) {
+          return NextResponse.json({ success: false, error: 'Joint holder zip code must be 5 digits' }, { status: 400 })
+        }
+      }
+
       let updatedInvestment = {
         ...investments[invIndex],
         ...body.fields,
@@ -393,6 +434,53 @@ export async function PUT(request, { params }) {
       return NextResponse.json({ success: true, user: updatedUser })
     }
 
+
+    // VALIDATION: If updating joint holder information, validate required fields
+    if (body.jointHolder) {
+      // Validate joint holder required fields
+      if (!body.jointHolder.firstName?.trim()) {
+        return NextResponse.json({ success: false, error: 'Joint holder first name is required' }, { status: 400 })
+      }
+      if (!body.jointHolder.lastName?.trim()) {
+        return NextResponse.json({ success: false, error: 'Joint holder last name is required' }, { status: 400 })
+      }
+      if (!body.jointHolder.email || !/\S+@\S+\.\S+/.test(body.jointHolder.email)) {
+        return NextResponse.json({ success: false, error: 'Valid joint holder email is required' }, { status: 400 })
+      }
+      if (!body.jointHolder.phone?.trim()) {
+        return NextResponse.json({ success: false, error: 'Joint holder phone is required' }, { status: 400 })
+      }
+      if (!body.jointHolder.dob) {
+        return NextResponse.json({ success: false, error: 'Joint holder date of birth is required' }, { status: 400 })
+      }
+      if (!body.jointHolder.ssn?.trim()) {
+        return NextResponse.json({ success: false, error: 'Joint holder SSN is required' }, { status: 400 })
+      }
+      // Validate joint holder address fields
+      if (!body.jointHolder.address) {
+        return NextResponse.json({ success: false, error: 'Joint holder address is required' }, { status: 400 })
+      }
+      if (!body.jointHolder.address.street1?.trim()) {
+        return NextResponse.json({ success: false, error: 'Joint holder street address is required' }, { status: 400 })
+      }
+      if (!body.jointHolder.address.city?.trim()) {
+        return NextResponse.json({ success: false, error: 'Joint holder city is required' }, { status: 400 })
+      }
+      if (!body.jointHolder.address.state?.trim()) {
+        return NextResponse.json({ success: false, error: 'Joint holder state is required' }, { status: 400 })
+      }
+      if (!body.jointHolder.address.zip?.trim()) {
+        return NextResponse.json({ success: false, error: 'Joint holder zip code is required' }, { status: 400 })
+      }
+      if (body.jointHolder.address.zip.length !== 5) {
+        return NextResponse.json({ success: false, error: 'Joint holder zip code must be 5 digits' }, { status: 400 })
+      }
+    }
+
+    // VALIDATION: If setting accountType to joint, must also provide jointHoldingType
+    if (body.accountType === 'joint' && !body.jointHoldingType && !body.jointHolder) {
+      return NextResponse.json({ success: false, error: 'Joint holding type and joint holder information are required for joint accounts' }, { status: 400 })
+    }
 
     // Fallback: Update user with whatever fields are provided
     const result = await updateUser(id, body)
