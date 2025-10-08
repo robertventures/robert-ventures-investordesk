@@ -536,153 +536,6 @@ export default function AdminUserDetailsPage({ params }) {
             </div>
           </div>
 
-          {/* Transactions Section */}
-          <div className={styles.sectionCard}>
-            <div className={styles.sectionHeader}>
-              <h2 className={styles.sectionTitle}>Transactions</h2>
-            </div>
-            {(() => {
-              // Collect all distribution transactions from user's investments
-              const allDistributions = []
-              if (user.investments && user.investments.length > 0) {
-                user.investments.forEach(inv => {
-                  if (inv.transactions && Array.isArray(inv.transactions)) {
-                    inv.transactions.forEach(tx => {
-                      if (tx.type === 'distribution' || tx.type === 'contribution') {
-                        allDistributions.push({
-                          ...tx,
-                          investmentId: inv.id,
-                          lockupPeriod: inv.lockupPeriod,
-                          paymentFrequency: inv.paymentFrequency
-                        })
-                      }
-                    })
-                  }
-                })
-              }
-
-              // Sort by date (most recent first)
-              allDistributions.sort((a, b) => {
-                const dateA = a.date ? new Date(a.date).getTime() : 0
-                const dateB = b.date ? new Date(b.date).getTime() : 0
-                return dateB - dateA
-              })
-
-              // Calculate summary stats
-              const payouts = allDistributions.filter(tx => tx.type === 'distribution')
-              const contributions = allDistributions.filter(tx => tx.type === 'contribution')
-              const totalAmount = allDistributions.reduce((sum, tx) => sum + (tx.amount || 0), 0)
-              const pendingCount = allDistributions.filter(tx => tx.status === 'pending').length
-
-              return allDistributions.length > 0 ? (
-                <>
-                  {/* Transaction Summary */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '20px' }}>
-                    <div style={{ padding: '16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                      <div style={{ fontSize: '14px', color: '#64748b', marginBottom: '4px' }}>Total Transactions</div>
-                      <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#1f2937' }}>
-                        ${totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </div>
-                      <div style={{ fontSize: '12px', color: '#64748b' }}>{allDistributions.length} transactions</div>
-                    </div>
-                    <div style={{ padding: '16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                      <div style={{ fontSize: '14px', color: '#64748b', marginBottom: '4px' }}>💸 Distributions</div>
-                      <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#7c3aed' }}>
-                        ${payouts.reduce((sum, tx) => sum + (tx.amount || 0), 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </div>
-                      <div style={{ fontSize: '12px', color: '#64748b' }}>{payouts.length} distributions</div>
-                    </div>
-                    <div style={{ padding: '16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                      <div style={{ fontSize: '14px', color: '#64748b', marginBottom: '4px' }}>📈 Contributions</div>
-                      <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#0369a1' }}>
-                        ${contributions.reduce((sum, tx) => sum + (tx.amount || 0), 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </div>
-                      <div style={{ fontSize: '12px', color: '#64748b' }}>{contributions.length} contributions</div>
-                    </div>
-                    {pendingCount > 0 && (
-                      <div style={{ padding: '16px', background: '#fef3c7', borderRadius: '8px', border: '1px solid #f59e0b' }}>
-                        <div style={{ fontSize: '14px', color: '#92400e', marginBottom: '4px' }}>⏳ Pending Approval</div>
-                        <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#92400e' }}>{pendingCount}</div>
-                        <div style={{ fontSize: '12px', color: '#92400e' }}>transactions</div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Transaction List */}
-                  <div className={styles.list}>
-                    {allDistributions.map(tx => (
-                      <div key={tx.id} style={{
-                        padding: '16px',
-                        border: '1px solid #e2e8f0',
-                        borderRadius: '8px',
-                        marginBottom: '12px',
-                        background: 'white'
-                      }}>
-                        <div style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          marginBottom: '12px'
-                        }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{
-                              fontSize: '18px',
-                              color: tx.type === 'distribution' ? '#7c3aed' : '#0369a1'
-                            }}>
-                              {tx.type === 'distribution' ? '💸' : '📈'}
-                            </span>
-                            <span style={{ fontWeight: 'bold' }}>
-                              {tx.type === 'distribution' ? 'Distribution' : 'Contribution'}
-                            </span>
-                            <span style={{
-                              padding: '2px 8px',
-                              borderRadius: '12px',
-                              fontSize: '12px',
-                              fontWeight: 'bold',
-                              background: tx.status === 'completed' ? '#dcfce7' :
-                                        tx.status === 'pending' ? '#fef3c7' :
-                                        '#fee2e2',
-                              color: tx.status === 'completed' ? '#166534' :
-                                    tx.status === 'pending' ? '#92400e' :
-                                    '#991b1b'
-                            }}>
-                              {tx.status || 'completed'}
-                            </span>
-                          </div>
-                          <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#1f2937' }}>
-                            ${(tx.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </div>
-                        </div>
-
-                        <div style={{
-                          display: 'grid',
-                          gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-                          gap: '12px',
-                          fontSize: '14px',
-                          color: '#64748b'
-                        }}>
-                          <div><b>Investment ID:</b> {tx.investmentId}</div>
-                          <div><b>Date:</b> {tx.date ? new Date(tx.date).toLocaleDateString('en-US', {
-                            timeZone: 'America/New_York',
-                            month: 'short',
-                            day: 'numeric',
-                            year: 'numeric'
-                          }) : '-'}</div>
-                          <div><b>Month Index:</b> {tx.monthIndex != null ? `Month ${tx.monthIndex}` : '-'}</div>
-                          <div><b>Lockup Period:</b> {tx.lockupPeriod || '-'}</div>
-                          <div><b>Payment Frequency:</b> {tx.paymentFrequency || '-'}</div>
-                          <div><b>Transaction ID:</b> {tx.id}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <div className={styles.muted}>No distributions</div>
-              )
-            })()}
-          </div>
-
           {/* Investments Section */}
           <div className={styles.sectionCard}>
             <div className={styles.sectionHeader}>
@@ -900,6 +753,168 @@ export default function AdminUserDetailsPage({ params }) {
             )}
           </div>
 
+          {/* Transactions Section */}
+          <div className={styles.sectionCard}>
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.sectionTitle}>Transactions</h2>
+            </div>
+            {(() => {
+              // Collect all distribution transactions from user's investments
+              const allDistributions = []
+              if (user.investments && user.investments.length > 0) {
+                user.investments.forEach(inv => {
+                  if (inv.transactions && Array.isArray(inv.transactions)) {
+                    inv.transactions.forEach(tx => {
+                      if (tx.type === 'distribution' || tx.type === 'contribution') {
+                        allDistributions.push({
+                          ...tx,
+                          investmentId: inv.id,
+                          lockupPeriod: inv.lockupPeriod,
+                          paymentFrequency: inv.paymentFrequency
+                        })
+                      }
+                    })
+                  }
+                })
+              }
+
+              // Sort by date (most recent first), then by type (distribution before contribution)
+              allDistributions.sort((a, b) => {
+                const dateA = a.date ? new Date(a.date).getTime() : 0
+                const dateB = b.date ? new Date(b.date).getTime() : 0
+                
+                // First sort by date (most recent first)
+                if (dateA !== dateB) {
+                  return dateB - dateA
+                }
+                
+                // If dates are the same, ensure distribution comes before contribution
+                // This handles compounding investments where both transactions have the same date
+                if (a.type === 'distribution' && b.type === 'contribution') {
+                  return -1 // a (distribution) comes first
+                }
+                if (a.type === 'contribution' && b.type === 'distribution') {
+                  return 1 // b (distribution) comes first
+                }
+                
+                return 0 // Same type, maintain order
+              })
+
+              // Calculate summary stats
+              const payouts = allDistributions.filter(tx => tx.type === 'distribution')
+              const contributions = allDistributions.filter(tx => tx.type === 'contribution')
+              const totalAmount = allDistributions.reduce((sum, tx) => sum + (tx.amount || 0), 0)
+              const pendingCount = allDistributions.filter(tx => tx.status === 'pending').length
+
+              return allDistributions.length > 0 ? (
+                <>
+                  {/* Transaction Summary */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '20px' }}>
+                    <div style={{ padding: '16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                      <div style={{ fontSize: '14px', color: '#64748b', marginBottom: '4px' }}>Total Transactions</div>
+                      <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#1f2937' }}>
+                        ${totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#64748b' }}>{allDistributions.length} transactions</div>
+                    </div>
+                    <div style={{ padding: '16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                      <div style={{ fontSize: '14px', color: '#64748b', marginBottom: '4px' }}>💸 Distributions</div>
+                      <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#7c3aed' }}>
+                        ${payouts.reduce((sum, tx) => sum + (tx.amount || 0), 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#64748b' }}>{payouts.length} distributions</div>
+                    </div>
+                    <div style={{ padding: '16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                      <div style={{ fontSize: '14px', color: '#64748b', marginBottom: '4px' }}>📈 Contributions</div>
+                      <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#0369a1' }}>
+                        ${contributions.reduce((sum, tx) => sum + (tx.amount || 0), 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#64748b' }}>{contributions.length} contributions</div>
+                    </div>
+                    {pendingCount > 0 && (
+                      <div style={{ padding: '16px', background: '#fef3c7', borderRadius: '8px', border: '1px solid #f59e0b' }}>
+                        <div style={{ fontSize: '14px', color: '#92400e', marginBottom: '4px' }}>⏳ Pending Approval</div>
+                        <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#92400e' }}>{pendingCount}</div>
+                        <div style={{ fontSize: '12px', color: '#92400e' }}>transactions</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Transaction List */}
+                  <div className={styles.list}>
+                    {allDistributions.map(tx => (
+                      <div key={tx.id} style={{
+                        padding: '16px',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '8px',
+                        marginBottom: '12px',
+                        background: 'white'
+                      }}>
+                        <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          marginBottom: '12px'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{
+                              fontSize: '18px',
+                              color: tx.type === 'distribution' ? '#7c3aed' : '#0369a1'
+                            }}>
+                              {tx.type === 'distribution' ? '💸' : '📈'}
+                            </span>
+                            <span style={{ fontWeight: 'bold' }}>
+                              {tx.type === 'distribution' ? 'Distribution' : 'Contribution'}
+                            </span>
+                            <span style={{
+                              padding: '2px 8px',
+                              borderRadius: '12px',
+                              fontSize: '12px',
+                              fontWeight: 'bold',
+                              background: tx.status === 'completed' ? '#dcfce7' :
+                                        tx.status === 'pending' ? '#fef3c7' :
+                                        '#fee2e2',
+                              color: tx.status === 'completed' ? '#166534' :
+                                    tx.status === 'pending' ? '#92400e' :
+                                    '#991b1b'
+                            }}>
+                              {tx.status || 'completed'}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#1f2937' }}>
+                            ${(tx.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                        </div>
+
+                        <div style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+                          gap: '12px',
+                          fontSize: '14px',
+                          color: '#64748b'
+                        }}>
+                          <div><b>Investment ID:</b> {tx.investmentId}</div>
+                          <div><b>Date:</b> {tx.date ? new Date(tx.date).toLocaleDateString('en-US', {
+                            timeZone: 'America/New_York',
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric'
+                          }) : '-'}</div>
+                          <div><b>Month Index:</b> {tx.monthIndex != null ? `Month ${tx.monthIndex}` : '-'}</div>
+                          <div><b>Lockup Period:</b> {tx.lockupPeriod || '-'}</div>
+                          <div><b>Payment Frequency:</b> {tx.paymentFrequency || '-'}</div>
+                          <div><b>Transaction ID:</b> {tx.id}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className={styles.muted}>No distributions</div>
+              )
+            })()}
+          </div>
+
           {/* Account Profile Section */}
           <div className={styles.sectionCard}>
             <div className={styles.sectionHeader}>
@@ -997,6 +1012,92 @@ export default function AdminUserDetailsPage({ params }) {
                 <input name="country" value={form.country} readOnly disabled />
               </div>
             </div>
+
+            {/* Entity Information Subsection */}
+            {form.accountType === 'entity' && (
+              <>
+                <div className={styles.sectionHeader} style={{ marginTop: '32px', borderTop: '1px solid #e5e7eb', paddingTop: '24px' }}>
+                  <h3 className={styles.sectionTitle} style={{ fontSize: '18px', color: '#6b7280' }}>Entity Information</h3>
+                </div>
+                <div className={styles.grid}>
+                <div>
+                  <label><b>Entity Name</b></label>
+                  <input name="entityName" value={form.entityName} onChange={handleChange} disabled={!isEditing} />
+                  {errors.entityName && <div className={styles.muted}>{errors.entityName}</div>}
+                </div>
+                <div>
+                  <label><b>Entity Tax ID (EIN)</b></label>
+                  <input name="entityTaxId" value={form.entityTaxId} onChange={handleChange} placeholder="12-3456789" disabled={!isEditing} />
+                  {errors.entityTaxId && <div className={styles.muted}>{errors.entityTaxId}</div>}
+                </div>
+                <div>
+                  <label><b>Entity Registration Date</b></label>
+                  <input type="date" name="entityRegistrationDate" value={form.entityRegistrationDate} onChange={handleChange} min={MIN_DOB} max={maxToday} disabled={!isEditing} />
+                  {errors.entityRegistrationDate && <div className={styles.muted}>{errors.entityRegistrationDate}</div>}
+                </div>
+              </div>
+
+              {/* Authorized Representative Subsection */}
+              <div className={styles.sectionHeader} style={{ marginTop: '32px', borderTop: '1px solid #e5e7eb', paddingTop: '24px' }}>
+                <h3 className={styles.sectionTitle} style={{ fontSize: '18px', color: '#6b7280' }}>Authorized Representative</h3>
+              </div>
+              <div className={styles.grid}>
+                <div>
+                  <label><b>First Name</b></label>
+                  <input name="authorizedRep.firstName" value={form.authorizedRep.firstName} onChange={handleChange} disabled={!isEditing} />
+                  {errors['authorizedRep.firstName'] && <div className={styles.muted}>{errors['authorizedRep.firstName']}</div>}
+                </div>
+                <div>
+                  <label><b>Last Name</b></label>
+                  <input name="authorizedRep.lastName" value={form.authorizedRep.lastName} onChange={handleChange} disabled={!isEditing} />
+                  {errors['authorizedRep.lastName'] && <div className={styles.muted}>{errors['authorizedRep.lastName']}</div>}
+                </div>
+                <div>
+                  <label><b>Date of Birth</b></label>
+                  <input type="date" name="authorizedRep.dob" value={form.authorizedRep.dob} onChange={handleChange} min={MIN_DOB} max={maxAdultDob} disabled={!isEditing} />
+                  {errors['authorizedRep.dob'] && <div className={styles.muted}>{errors['authorizedRep.dob']}</div>}
+                </div>
+                <div>
+                  <label><b>SSN</b></label>
+                  <input name="authorizedRep.ssn" value={form.authorizedRep.ssn} onChange={handleChange} placeholder="123-45-6789" disabled={!isEditing} />
+                  {errors['authorizedRep.ssn'] && <div className={styles.muted}>{errors['authorizedRep.ssn']}</div>}
+                </div>
+                <div>
+                  <label><b>Street Address</b></label>
+                  <input name="authorizedRep.street1" value={form.authorizedRep.street1} onChange={handleChange} disabled={!isEditing} />
+                  {errors['authorizedRep.street1'] && <div className={styles.muted}>{errors['authorizedRep.street1']}</div>}
+                </div>
+                <div>
+                  <label><b>Apt or Unit</b></label>
+                  <input name="authorizedRep.street2" value={form.authorizedRep.street2} onChange={handleChange} disabled={!isEditing} />
+                </div>
+                <div>
+                  <label><b>City</b></label>
+                  <input name="authorizedRep.city" value={form.authorizedRep.city} onChange={handleChange} disabled={!isEditing} />
+                  {errors['authorizedRep.city'] && <div className={styles.muted}>{errors['authorizedRep.city']}</div>}
+                </div>
+                <div>
+                  <label><b>Zip</b></label>
+                  <input name="authorizedRep.zip" value={form.authorizedRep.zip} onChange={handleChange} disabled={!isEditing} />
+                  {errors['authorizedRep.zip'] && <div className={styles.muted}>{errors['authorizedRep.zip']}</div>}
+                </div>
+                <div>
+                  <label><b>State</b></label>
+                  <select name="authorizedRep.state" value={form.authorizedRep.state} onChange={handleChange} disabled={!isEditing}>
+                    <option value="">Select state</option>
+                    {US_STATES.map(s => (<option key={s} value={s}>{s}</option>))}
+                  </select>
+                  {errors['authorizedRep.state'] && <div className={styles.muted}>{errors['authorizedRep.state']}</div>}
+                </div>
+                <div>
+                  <label><b>Country</b></label>
+                  <input name="authorizedRep.country" value={form.authorizedRep.country} readOnly disabled />
+                </div>
+              </div>
+              </>
+            )}
+
+            {/* Save/Cancel buttons for Account Profile */}
             {isEditing && (
               <div className={styles.sectionActions}>
                 <button className={styles.saveButton} onClick={handleSave} disabled={isSaving}>

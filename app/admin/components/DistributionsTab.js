@@ -11,6 +11,8 @@ export default function DistributionsTab({ users }) {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterType, setFilterType] = useState('all') // 'all', 'distribution', 'contribution'
   const [groupBy, setGroupBy] = useState('date') // 'date', 'user', 'investment'
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 5
 
   // Collect all distribution events from all users
   const allDistributions = useMemo(() => {
@@ -133,6 +135,20 @@ export default function DistributionsTab({ users }) {
     return Object.values(groups).sort((a, b) => b.monthKey.localeCompare(a.monthKey))
   }, [filteredDistributions])
 
+  // Paginate month groups
+  const paginatedMonthGroups = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage
+    const endIndex = startIndex + itemsPerPage
+    return groupedByMonth.slice(startIndex, endIndex)
+  }, [groupedByMonth, currentPage, itemsPerPage])
+
+  const totalPages = Math.ceil(groupedByMonth.length / itemsPerPage)
+
+  // Reset to page 1 when filters change
+  useMemo(() => {
+    setCurrentPage(1)
+  }, [searchTerm, filterType])
+
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount || 0)
   }
@@ -224,7 +240,8 @@ export default function DistributionsTab({ users }) {
             </div>
           </div>
         ) : (
-          groupedByMonth.map(monthGroup => (
+          <>
+            {paginatedMonthGroups.map(monthGroup => (
             <div key={monthGroup.monthKey} className={styles.monthGroup}>
               <div className={styles.monthHeader}>
                 <div className={styles.monthTitle}>
@@ -326,7 +343,36 @@ export default function DistributionsTab({ users }) {
                 </table>
               </div>
             </div>
-          ))
+            ))}
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className={styles.paginationContainer}>
+                <button
+                  className={styles.paginationButton}
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                >
+                  ← Previous
+                </button>
+                
+                <div className={styles.paginationInfo}>
+                  Page {currentPage} of {totalPages}
+                  <span className={styles.paginationCount}>
+                    ({groupedByMonth.length} month{groupedByMonth.length !== 1 ? 's' : ''})
+                  </span>
+                </div>
+                
+                <button
+                  className={styles.paginationButton}
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  Next →
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

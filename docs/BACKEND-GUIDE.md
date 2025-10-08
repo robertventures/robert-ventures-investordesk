@@ -2624,7 +2624,7 @@ def calculate_total_earnings(investments, transactions, app_time):
    - Example calculation in `InvestmentReviewForm.js` shows proper implementation
 
 4. **Account Types reduced to 4**
-   - Only four valid account types: `individual`, `joint`, `entity`, `ira`
+   - Only four valid account types: `individual`, `joint`, `entity`, `IRA`
    - Removed: `custodial`, `roth-ira`, `traditional-ira`
    - IRA subtype (traditional/roth) is stored in the investment's `iraType` field
 
@@ -2686,7 +2686,7 @@ def calculate_total_earnings(investments, transactions, app_time):
   "bonds": 1000,
   "paymentFrequency": "monthly|compounding",
   "lockupPeriod": "1-year|3-year",
-  "accountType": "individual|joint|entity|ira",
+  "accountType": "individual|joint|entity|IRA",
   
   // Timestamps
   "createdAt": "ISO8601",           // When user created draft
@@ -2727,7 +2727,7 @@ def calculate_total_earnings(investments, transactions, app_time):
 
 **Important Notes:**
 - **`anticipatedEarnings` is NOT stored** - This value is calculated dynamically based on amount, lockup period, and payment frequency. Do not include this field in the database schema.
-- **`accountType` values** - Only four types are valid: `individual`, `joint`, `entity`, `ira`. The `ira` type can have subtypes (traditional/roth) stored in `iraType` field.
+- **`accountType` values** - Only four types are valid: `individual`, `joint`, `entity`, `IRA`. The `IRA` type can have subtypes (traditional/roth) stored in `iraType` field.
 
 ### Account Activity Entry (User-Level)
 
