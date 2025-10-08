@@ -24,7 +24,7 @@ function eventMeta(ev) {
     case 'monthly_distribution':
       return { icon: '💸', iconClass: styles.distribution, title: 'Monthly Payout' }
     case 'contribution':
-      return { icon: '📈', iconClass: styles.distribution, title: 'Contribution (Compounded)' }
+      return { icon: '📈', iconClass: styles.distribution, title: 'Contribution' }
     case 'monthly_compounded':
       return { icon: '📈', iconClass: styles.distribution, title: 'Monthly Compounded' }
     case 'withdrawal_requested':

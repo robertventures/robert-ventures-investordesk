@@ -2890,7 +2890,14 @@ Without calling this endpoint, the Distributions tab will be empty even when inv
 
 ### Overview
 
-The platform maintains each investment's transaction ledger. Three transaction types are generated monthly:
+**⚠️ TERMINOLOGY NOTE:**
+In the UI, "Transactions" is the main tab that displays all financial activity, with two subtypes:
+- **Distributions** (UI label) = Monthly payouts sent to investor bank accounts (database type: `distribution`)
+- **Contributions** (UI label) = Compounded interest reinvested into principal (database type: `contribution`)
+
+In the database and API, these are stored as transaction `type` fields with values `distribution` and `contribution`.
+
+The platform maintains each investment's transaction ledger. Transaction types are generated monthly:
 
 **1. For Monthly Payout Investments:**
 - **Distribution** (`distribution`) - Interest paid out to investor's bank account
@@ -3265,7 +3272,7 @@ For compounding investments, TWO transactions are created each month:
   "monthIndex": 1
 }
 
-// 2. Contribution (distribution reinvested)
+// 2. Contribution (earnings reinvested into principal)
 {
   "id": "TX-INV-10002-CONTR-2025-02",
   "type": "contribution",
@@ -3326,20 +3333,24 @@ user.activity = [
 
 ### Admin Dashboard Integration
 
-The admin dashboard displays distributions in three places:
+The admin dashboard displays financial transactions in three places:
 
-**1. Distributions Tab** (Primary View)
-- Shows all `monthly_distribution` and `monthly_compounded` events
+**1. Transactions Tab** (Primary View)
+- Shows all `distribution` and `contribution` transactions
 - Grouped by month with summaries
-- Filterable by type
+- Filterable by type (distributions vs contributions)
 - Searchable by user/investment
+- Data source: Investment transaction ledgers (`investment.transactions`)
 
 **2. Activity Tab**
-- Shows all events including distributions
-- Mixed with other event types (account created, investment confirmed, etc.)
+- Shows all account-level events across the platform
+- Includes investment lifecycle events (created, confirmed, rejected)
+- Mixed with other event types (account created, withdrawal events, etc.)
+- Data source: User activity arrays (`user.activity`)
 
 **3. User Details Page**
-- Shows distributions for specific user's investments
+- Shows transaction history for specific user's investments
+- Organized by investment with transaction breakdown
 
 **Implementation:**
 ```javascript
@@ -4118,9 +4129,9 @@ return {
 **Navigation Tabs:**
 - Dashboard - Overview metrics and action items
 - Accounts - User account management
-- **Transactions** - Investment management (renamed from "Investments")
+- Investments - Investment management
+- **Transactions** - All financial transactions (distributions and contributions)
 - **Activity** - Platform-wide activity events viewer
-- **Distributions** - Monthly payments and compounding interest tracking
 - Operations - Withdrawals, pending payouts, and time machine
 
 **Dashboard Metrics:**
@@ -4143,298 +4154,247 @@ The admin dashboard shows:
   - Distribution (Account Types, Lockup Periods, Payment Frequencies)
   - Recent Activity (Latest Investments)
 
-### Transactions Tab (formerly Investments)
+### Backend Data Requirements for Investment Management
 
-**Purpose:** Manage all investment transactions across all users
+**What the backend must provide:**
 
-**Features:**
-- Search by investment ID, account ID, name, email, or status
-- No summary metrics displayed at top (removed for cleaner view)
-- Card-based layout showing each investment with:
-  - Investment ID and Account ID
-  - Status badge (Active, Pending, Rejected, etc.)
-  - Account type badge (Individual, Joint, Entity, or IRA)
-  - User information
-  - Amount, Lockup period, Payment frequency
-  - Created date
-  - Action buttons: Approve, Reject, View Account
+Your backend must support investment approval workflow:
 
-**Account Type Badges:**
-All account types are visually distinguished with color-coded badges:
-- **Individual** - Purple badge (`#f3e8ff` background, `#6b21a8` text)
-- **Joint** - Blue badge (`#dbeafe` background, `#1e40af` text)
-- **Entity** - Amber badge (`#fef3c7` background, `#92400e` text)
-- **IRA** - Green badge (`#dcfce7` background, `#166534` text)
+1. **Investment Status Validation:**
+   - ✅ Allow approval only for `pending` status investments
+   - ✅ Allow rejection only for `pending` status investments
+   - ❌ **CRITICAL:** Reject requests to reject `active` investments (return HTTP 400 error)
+   - ❌ Reject status changes to already `withdrawn` or `rejected` investments
 
-These badges appear in both the Transactions and Accounts tabs for consistency.
+2. **Investment Approval Endpoint** (`POST /api/admin/investments/:id/approve-admin`):
+   - Validate investment status is `pending`
+   - Validate user profile is complete (see Profile Completion Requirements)
+   - Set `adminApproved = true`, `adminApprovedAt`, `adminApprovedBy`
+   - If both `bankApproved` and `adminApproved` are true, activate investment
+   - Return updated investment object
 
-**Status Pills:**
-Investment status badges must be properly centered (using flexbox: `display: flex`, `align-items: center`, `justify-content: center`)
+3. **Investment Rejection Endpoint** (`POST /api/admin/investments/:id/reject`):
+   - Validate investment status is `pending` (NOT `active`)
+   - Set `status = 'rejected'`, `rejectedAt`, `rejectionReason`
+   - Create activity event: `investment_rejected`
+   - Return updated investment object
 
-**Button States:**
-- Approve button: Disabled when status is `active`, `withdrawn`, or `rejected`
-- Reject button: Disabled when status is `rejected`, `active`, or `withdrawn`
-- **CRITICAL:** Active investments cannot be rejected (enforced in both frontend and backend)
+### Backend Data Requirements for Transaction Views
 
-### Distributions Tab
+**What the backend must provide:**
 
-**Purpose:** Track all monthly payments and compounding interest calculations made by the platform
+The frontend expects each investment to have a `transactions` array containing all financial transactions. Your backend must:
 
-**Features:**
-- **Summary Cards** showing:
-  - Total Distributions (all payments combined)
-  - Total Monthly Payouts (💸)
-  - Total Compounded Interest (📈)
-  - Transaction counts for each type
+1. **Generate transaction records** with these fields:
+   ```json
+   {
+     "id": "TX-INV-10001-DIST-2025-02",
+     "type": "distribution|contribution",
+     "amount": 83.33,
+     "status": "pending|approved",
+     "date": "2025-02-01T14:00:00.000Z",
+     "monthIndex": 1,
+     "payoutBankId": "BANK-001",  // for distributions only
+     "distributionTxId": "TX-INV-10002-DIST-2025-02"  // for contributions only
+   }
+   ```
 
-- **Filter Options:**
-  - View all distributions
-  - Filter by monthly payouts only (💸)
-  - Filter by compounded interest only (📈)
+2. **Transaction Types:**
+   - `distribution` - Interest earned (monthly payout) or generated (compounding)
+   - `contribution` - Distribution amount reinvested into principal (compounding only)
 
-- **Search Functionality:**
-  - Search by user name, email, or investment ID
-  - Real-time filtering
+3. **Generate via `/api/migrate-transactions` endpoint:**
+   - Called before loading admin data
+   - Creates missing monthly transactions based on app time
+   - Idempotent - safe to call multiple times
 
-- **Monthly Grouping:**
-  - Distributions grouped by month (e.g., "October 2025")
-  - Each month shows:
-    - Total amount distributed
-    - Breakdown of payouts vs. compounded
-    - Number of distributions
-  - Sorted by most recent month first
+4. **Frontend will:**
+   - Filter transactions by type
+   - Group by month automatically
+   - Calculate totals and summaries
+   - Display in user-friendly format
 
-- **Detailed Table** for each month:
-  - Distribution type (Monthly Payout or Compounded Interest)
-  - User information (clickable to user details)
-  - Investment ID (clickable to investment details)
-  - Amount
-  - Date
-  - Month index (Month 1, Month 2, etc.)
-  - Actions (View User button)
+**Backend responsibilities:**
+- ✅ Generate accurate transaction records with correct amounts
+- ✅ Set proper timestamps (9:00 AM ET on 1st of month)
+- ✅ Link contributions to distributions via `distributionTxId`
+- ✅ Include all required fields for each transaction type
+- ❌ Don't worry about UI display logic - frontend handles this
 
-**Event Types Displayed:**
-- `monthly_distribution` - Interest paid monthly to investor's bank account
-- `monthly_compounded` - Interest compounded monthly, added to principal
+### Backend Requirements for User & Investment Detail Views
 
-**Data Source:**
-All distributions are pulled from user activity events generated by the `/api/migrate-transactions` endpoint.
+**What the backend must provide:**
 
-**Empty State:**
-When no distributions are found, displays friendly empty state:
-- 📊 icon
-- "No distributions found" message
-- Contextual help text based on search/filter state
+**GET `/api/users/:id` endpoint:**
+- Must return complete user object including:
+  - All personal information (name, email, phone, DOB, SSN)
+  - Address object with all fields
+  - Joint holder information (if applicable)
+  - Entity information (if applicable)
+  - IRA information (if applicable)
+  - Trusted contact (if provided)
+  - Bank accounts array
+  - Complete `investments[]` array with all investment details
+  - Complete `activity[]` array
 
-### User Account Details Page
+**PUT `/api/users/:id` endpoint:**
+- Accept updates to user profile fields
+- Support `_action` parameter for specific operations:
+  - `verifyAccount` - Mark user as verified
+  - `updateInvestment` - Update investment details
+- Validate all changes before saving
+- Return updated user object
 
-**Route:** `/admin/users/[id]`
+**Frontend calculates these automatically:**
+- Total investments count (from `investments.length`)
+- Pending amount (sum of pending investments)
+- Approved/Active amount (sum of active investments)
+- Investment value calculations
 
-**Purpose:** View and edit comprehensive user account information
+**Backend responsibilities:**
+- ✅ Store and return accurate user data
+- ✅ Validate all updates
+- ✅ Maintain data integrity
+- ❌ Don't calculate display metrics - frontend handles this
 
-**Design Features:**
-- Uses `AdminHeader` component (highlights "Accounts" tab)
-- Breadcrumb navigation: `← Accounts / Account #[id]`
-- Consistent design with admin dashboard (card-based layout, modern styling)
-- Fully responsive across all devices
+### Backend Data Requirements for Activity Views
 
-**Page Sections:**
-1. **Breadcrumb Navigation**
-   - Back link to Accounts tab
-   - Current location indicator
+**What the backend must provide:**
 
-2. **Page Header**
-   - Account title and details
-   - User name and email subtitle
+The frontend displays account-level activity events from each user's `activity` array. Your backend must:
 
-3. **Metrics Cards**
-   - Total Investments count
-   - Pending Amount
-   - Approved Amount
+1. **Store activity events** in user records:
+   ```json
+   {
+     "activity": [
+       {
+         "id": "TX-INV-10000-CONFIRMED",
+         "userId": "USR-1001",
+         "investmentId": "INV-10000",
+         "type": "investment_confirmed",
+         "amount": 10000,
+         "date": "2025-10-05T00:00:00.000Z"
+       }
+     ]
+   }
+   ```
 
-4. **Account Profile Card**
-   - Account type, verification status
-   - Verify Account button (if unverified)
-   - Editable user information (name, email, phone, DOB, SSN, address)
-   - Save Changes button
+2. **Required activity event types:**
+   - `account_created` - User signs up
+   - `investment_created` - Investment created
+   - `investment_confirmed` - Investment approved and activated
+   - `investment_rejected` - Investment rejected by admin
+   - `withdrawal_requested` - User requests withdrawal
+   - `withdrawal_notice_started` - Withdrawal notice period begins
+   - `withdrawal_approved` - Withdrawal processed
+   - `withdrawal_rejected` - Withdrawal rejected
 
-5. **Joint Holder Card** (if joint account)
-   - Complete joint holder information
-   - Separate save button
+3. **Event ID format:**
+   - All uppercase: `TX-{entityType}-{numericId}-{TYPE}`
+   - Examples: `TX-INV-10000-CONFIRMED`, `TX-WDL-10000-APPROVED`
 
-6. **Investments List**
-   - Expandable cards for each investment
-   - View Details button linking to investment detail page
-   - All investment metadata displayed
+4. **GET `/api/users` endpoint requirements:**
+   - Return all users with their `activity` arrays
+   - Frontend will aggregate and display across all users
+   - Sort by date is handled client-side
 
-**Navigation:**
-- Breadcrumb "← Accounts" returns to `/admin?tab=accounts`
-- Investment "View Details" links to `/admin/investments/[id]`
+**Backend responsibilities:**
+- ✅ Create activity events at appropriate lifecycle moments
+- ✅ Use correct event ID format (all uppercase)
+- ✅ Include all required fields (id, type, date, userId, investmentId when applicable)
+- ✅ Store in user's `activity` array
+- ❌ Don't create duplicate events
+- ❌ Don't worry about UI filtering/sorting - frontend handles this
 
-### Investment Details Page
+### Backend Data Requirements for Account Management
 
-**Route:** `/admin/investments/[id]`
+**What the backend must provide:**
 
-**Purpose:** View and edit individual investment details
+Your backend's `GET /api/users` endpoint must return complete user objects with:
 
-**Design Features:**
-- Uses `AdminHeader` component (highlights "Transactions" tab)
-- Breadcrumb navigation: `← Transactions / Investment #[id]`
-- Consistent design with admin dashboard
-- Status badge with color-coded visual indicator
+1. **Core user fields:**
+   - `id`, `email`, `firstName`, `lastName`
+   - `isVerified`, `accountType`
+   - `createdAt`, `updatedAt`
 
-**Page Sections:**
-1. **Breadcrumb Navigation**
-   - Back link to Transactions tab
-   - Current investment identifier
+2. **Nested data:**
+   - `investments[]` - Array of all user investments
+   - `activity[]` - Array of account activity events
+   - `bankAccounts[]` - Connected bank accounts
+   - `address` - Complete address object
 
-2. **Page Header**
-   - Investment title
-   - Account link (clickable, navigates to user account page)
-   - Status badge with contextual color
-   - View Account button
+3. **Calculated fields** (frontend computes from investments):
+   - Total invested amount
+   - Number of investments
+   - Account type based on active investments
 
-3. **Metrics Cards**
-   - Investment Amount
-   - Created Date
-   - Submitted Date
-   - Confirmed Date (if applicable)
+**DELETE `/api/users/:id` endpoint:**
+- Remove user and all associated data
+- Return success/error status
+- Frontend handles confirmation dialog
 
-4. **Investment Details Card**
-   - Editable fields: Amount, Status, Payment Frequency, Lockup Period, Account Type
-   - Save Changes button
+### Admin API Endpoints Summary
 
-5. **Additional Information Cards** (conditionally displayed)
-   - Dates & Timeline (if lockup end date exists)
-   - Banking Information (if banking data exists)
-   - Personal Information (if personal info exists)
-   - Address (if address exists)
+**Your backend must implement these endpoints for the admin interface:**
 
-**Navigation:**
-- Breadcrumb "← Transactions" returns to `/admin?tab=transactions`
-- "View Account" button navigates to `/admin/users/[userId]`
-- Account link in subtitle navigates to user account page
+1. **User Management:**
+   - `GET /api/users` - Return all users with investments and activity
+   - `GET /api/users/:id` - Return single user with complete data
+   - `PUT /api/users/:id` - Update user information
+   - `DELETE /api/users/:id` - Delete user account
 
-### Activity Tab
+2. **Investment Management:**
+   - `PUT /api/users/:id` - Update investment (via `_action` parameter)
+   - `POST /api/admin/investments/:id/approve-admin` - Approve investment
+   - `POST /api/admin/investments/:id/reject` - Reject investment
 
-**Purpose:** View all platform-wide activity events in one centralized location
+3. **Transaction Generation:**
+   - `POST /api/migrate-transactions` - Generate monthly transactions (CRITICAL - must be called before loading admin data)
 
-**Features:**
-- Displays all activity events from all users across the platform
-- Real-time search functionality
-- Sort by date (most recent first)
-- Complete event tracking and audit trail
+4. **Withdrawals & Payouts:**
+   - `GET /api/admin/withdrawals` - Get pending withdrawals
+   - `POST /api/admin/withdrawals` - Process withdrawal
+   - `GET /api/admin/pending-payouts` - Get pending payouts
+   - `POST /api/admin/pending-payouts` - Manage payout status
 
-**Search Capabilities:**
-Search bar filters events by:
-- User name
-- User email
-- User ID
-- Investment ID
-- Event type
-- Event ID
+5. **Time Machine:**
+   - `GET /api/admin/time-machine` - Get current app time
+   - `POST /api/admin/time-machine` - Set app time
+   - `DELETE /api/admin/time-machine` - Reset to real time
 
-**Data Table Columns:**
-1. **Event** - Icon + event type (color-coded)
-2. **User** - Clickable link to user details
-3. **Email** - User's email address
-4. **Investment ID** - Clickable link to investment details (when applicable)
-5. **Amount** - Monetary value (when applicable)
-6. **Date** - Full timestamp
-7. **Event ID** - Unique transaction identifier
-8. **Actions** - "View User" button
+**Data Requirements:**
+- All responses must match the JSON structure defined in the Data Models section
+- Frontend handles all UI rendering, sorting, filtering, and display logic
+- Backend focuses on accurate data generation and business logic
 
-**Event Types Displayed:**
-- `account_created` - 👤 Account Created (blue)
-- `investment_created` - 🧾 Investment Created (blue)
-- `investment_confirmed` - ✅ Investment Confirmed (green)
-- `investment_rejected` - ❌ Investment Rejected (red)
-- `monthly_distribution` - 💸 Monthly Payout (purple)
-- `monthly_compounded` - 📈 Monthly Compounded (purple)
-- `withdrawal_requested` - 🏦 Withdrawal Requested (amber)
-- `withdrawal_notice_started` - ⏳ Withdrawal Notice Started (amber)
-- `withdrawal_approved` - ✅ Withdrawal Processed (green)
-- `withdrawal_rejected` - ❌ Withdrawal Rejected (red)
+### Trusted Contact Data Structure
 
-**Empty State:**
-- Shows message when no events match search criteria
-- Displays total count of filtered events in subtitle
+**Backend storage:**
 
-**Responsive Design:**
-- Event ID column hidden on screens < 1200px
-- Email column hidden on mobile devices
-- Maintains full functionality across all screen sizes
+Add `trustedContact` object to User model (all fields optional):
 
-**Navigation:**
-- Click user name → Navigate to user account page
-- Click investment ID → Navigate to investment details page
-- Click "View User" button → Navigate to user account page
-
-### Accounts Tab
-
-**Purpose:** Manage user accounts
-
-**Features:**
-- Search by name or email
-- Card-based layout with user information
-- Account type badges for all types (Individual, Joint, Entity, IRA)
-- Verified badge (green checkmark)
-- Statistics: number of investments, total invested, created date
-- Delete account button (with confirmation)
-- Click card to view detailed account information
-
-### Design Consistency
-
-**All admin pages share:**
-- `AdminHeader` navigation component
-- Breadcrumb trails for context and easy navigation back
-- Card-based, modern UI with consistent spacing and typography
-- Hover effects on interactive elements
-- Responsive design that works on all screen sizes
-- CSS variables for consistent theming:
-  - `--color-app-bg` - Page background
-  - `--color-surface` - Card backgrounds
-  - `--color-border` - Border colors
-  - `--color-accent` - Primary text
-  - `--color-info` - Links and primary actions
-  - `--color-success` - Success states
-  - `--color-danger` - Danger/delete actions
-
-**Navigation Flow:**
-```
-Admin Dashboard
-├── Dashboard Tab
-├── Accounts Tab → User Details → Investment Details
-├── Transactions Tab → Investment Details → User Details
-├── Activity Tab → User Details or Investment Details
-├── Distributions Tab → User Details or Investment Details
-└── Operations Tab
+```json
+{
+  "trustedContact": {
+    "firstName": "string",
+    "lastName": "string",
+    "email": "string",
+    "phone": "string",
+    "relationship": "spouse|parent|sibling|child|friend|attorney|financial_advisor|other"
+  }
+}
 ```
 
-### User Profile - Trusted Contact
+**Validation (only if fields provided):**
+- Email: Valid email format
+- Phone: Valid US 10-digit format
+- Relationship: Must be one of allowed enum values
+- All fields can be null/empty
 
-**Location:** User profile page, between Primary Holder and Joint Holder sections
-
-**Purpose:** Emergency contact information for situations where the investor cannot be reached
-
-**Fields (all optional):**
-- First Name
-- Last Name
-- Relationship (dropdown: Spouse, Parent, Sibling, Child, Friend, Attorney, Financial Advisor, Other)
-- Email (validated format if provided)
-- Phone (US format validation if provided)
-
-**Validation Rules:**
-- All fields are optional
-- Email must be valid format if provided
-- Phone must be valid US 10-digit number if provided
-- No fields are required, allowing partial information
-
-**Save Functionality:**
-- Primary Holder section has its own "Save Changes" button at the bottom
-- Allows investors to save personal information without scrolling to page bottom
-- Shows "Saving..." state during save operation
-- Displays "Saved!" success message after completion
+**API Endpoint:**
+- `PUT /api/users/:id` accepts `trustedContact` object
+- Validate format only if values provided
+- Return updated user object
 
 ---
 

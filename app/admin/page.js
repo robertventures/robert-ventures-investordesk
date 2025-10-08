@@ -460,7 +460,7 @@ export default function AdminPage() {
                 {activeTab === 'investments' && 'Investments'}
                 {activeTab === 'accounts' && 'Accounts'}
                 {activeTab === 'activity' && 'Activity'}
-                {activeTab === 'distributions' && 'Distributions'}
+                {activeTab === 'distributions' && 'Transactions'}
                 {activeTab === 'operations' && 'Operations'}
               </h1>
               <p className={styles.subtitle}>
@@ -468,7 +468,7 @@ export default function AdminPage() {
                 {activeTab === 'investments' && 'Manage and approve investment transactions'}
                 {activeTab === 'accounts' && 'View and manage user accounts'}
                 {activeTab === 'activity' && 'View all activity events across the platform'}
-                {activeTab === 'distributions' && 'Track monthly payments and compounding interest calculations'}
+                {activeTab === 'distributions' && 'Track all transactions including monthly payments and compounding interest calculations'}
                 {activeTab === 'operations' && 'Manage withdrawals, payouts, and system operations'}
               </p>
             </div>
@@ -511,7 +511,7 @@ export default function AdminPage() {
             <ActivityTab users={users || []} />
           )}
 
-          {/* Distributions Tab */}
+          {/* Transactions Tab */}
           {activeTab === 'distributions' && (
             <DistributionsTab users={users || []} />
           )}

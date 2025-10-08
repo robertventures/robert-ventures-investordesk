@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import styles from './DistributionsTab.module.css'
 
 /**
- * Distributions tab showing all monthly payments and compounding calculations
+ * Transactions tab showing all monthly payments and compounding calculations
  */
 export default function DistributionsTab({ users }) {
   const router = useRouter()
@@ -142,7 +142,7 @@ export default function DistributionsTab({ users }) {
   }
 
   const getEventTitle = (eventType) => {
-    return eventType === 'distribution' ? 'Distribution' : 'Contribution (Compounded)'
+    return eventType === 'distribution' ? 'Distribution' : 'Contribution'
   }
 
   const getEventColor = (eventType) => {
@@ -154,19 +154,19 @@ export default function DistributionsTab({ users }) {
       {/* Summary Cards */}
       <div className={styles.summaryGrid}>
         <div className={styles.summaryCard}>
-          <div className={styles.summaryLabel}>Total Distributions</div>
+          <div className={styles.summaryLabel}>Total Transactions</div>
           <div className={styles.summaryValue}>{formatCurrency(summary.totalDistributions)}</div>
           <div className={styles.summarySubtext}>{summary.totalCount} transactions</div>
         </div>
         <div className={styles.summaryCard}>
-          <div className={styles.summaryLabel}>💸 Monthly Payouts</div>
+          <div className={styles.summaryLabel}>💸 Distributions</div>
           <div className={styles.summaryValue}>{formatCurrency(summary.totalPayouts)}</div>
-          <div className={styles.summarySubtext}>{summary.payoutCount} payouts</div>
+          <div className={styles.summarySubtext}>{summary.payoutCount} distributions</div>
         </div>
         <div className={styles.summaryCard}>
-          <div className={styles.summaryLabel}>📈 Compounded Interest</div>
+          <div className={styles.summaryLabel}>📈 Contributions</div>
           <div className={styles.summaryValue}>{formatCurrency(summary.totalCompounded)}</div>
-          <div className={styles.summarySubtext}>{summary.compoundedCount} calculations</div>
+          <div className={styles.summarySubtext}>{summary.compoundedCount} contributions</div>
         </div>
       </div>
 
@@ -177,19 +177,19 @@ export default function DistributionsTab({ users }) {
             className={`${styles.filterButton} ${filterType === 'all' ? styles.active : ''}`}
             onClick={() => setFilterType('all')}
           >
-            All Distributions
+            All Transactions
           </button>
           <button
             className={`${styles.filterButton} ${filterType === 'distribution' ? styles.active : ''}`}
             onClick={() => setFilterType('distribution')}
           >
-            💸 Payouts
+            💸 Distributions
           </button>
           <button
             className={`${styles.filterButton} ${filterType === 'contribution' ? styles.active : ''}`}
             onClick={() => setFilterType('contribution')}
           >
-            📈 Compounded
+            📈 Contributions
           </button>
         </div>
 
@@ -218,9 +218,9 @@ export default function DistributionsTab({ users }) {
         {groupedByMonth.length === 0 ? (
           <div className={styles.emptyState}>
             <div className={styles.emptyIcon}>📊</div>
-            <div className={styles.emptyTitle}>No distributions found</div>
+            <div className={styles.emptyTitle}>No transactions found</div>
             <div className={styles.emptyText}>
-              {searchTerm ? `No distributions found matching "${searchTerm}"` : 'No distributions have been processed yet'}
+              {searchTerm ? `No transactions found matching "${searchTerm}"` : 'No transactions have been processed yet'}
             </div>
           </div>
         ) : (
@@ -229,7 +229,7 @@ export default function DistributionsTab({ users }) {
               <div className={styles.monthHeader}>
                 <div className={styles.monthTitle}>
                   <span className={styles.monthName}>{monthGroup.displayMonth}</span>
-                  <span className={styles.monthCount}>({monthGroup.events.length} distributions)</span>
+                  <span className={styles.monthCount}>({monthGroup.events.length} transactions)</span>
                 </div>
                 <div className={styles.monthSummary}>
                   <span className={styles.monthTotal}>Total: {formatCurrency(monthGroup.totalAmount)}</span>

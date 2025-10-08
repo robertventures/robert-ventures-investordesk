@@ -87,7 +87,7 @@ export default function ActivityTab({ users }) {
       case 'monthly_distribution':
         return { icon: '💸', title: 'Monthly Payout', color: '#5b21b6' }
       case 'contribution':
-        return { icon: '📈', title: 'Contribution (Compounded)', color: '#5b21b6' }
+        return { icon: '📈', title: 'Contribution', color: '#5b21b6' }
       case 'monthly_compounded':
         return { icon: '📈', title: 'Monthly Compounded', color: '#5b21b6' }
       case 'withdrawal_requested':

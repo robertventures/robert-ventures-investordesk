@@ -536,10 +536,10 @@ export default function AdminUserDetailsPage({ params }) {
             </div>
           </div>
 
-          {/* Distributions Section */}
+          {/* Transactions Section */}
           <div className={styles.sectionCard}>
             <div className={styles.sectionHeader}>
-              <h2 className={styles.sectionTitle}>Distributions</h2>
+              <h2 className={styles.sectionTitle}>Transactions</h2>
             </div>
             {(() => {
               // Collect all distribution transactions from user's investments
@@ -576,39 +576,39 @@ export default function AdminUserDetailsPage({ params }) {
 
               return allDistributions.length > 0 ? (
                 <>
-                  {/* Distribution Summary */}
+                  {/* Transaction Summary */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '20px' }}>
                     <div style={{ padding: '16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                      <div style={{ fontSize: '14px', color: '#64748b', marginBottom: '4px' }}>Total Distributions</div>
+                      <div style={{ fontSize: '14px', color: '#64748b', marginBottom: '4px' }}>Total Transactions</div>
                       <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#1f2937' }}>
                         ${totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
                       <div style={{ fontSize: '12px', color: '#64748b' }}>{allDistributions.length} transactions</div>
                     </div>
                     <div style={{ padding: '16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                      <div style={{ fontSize: '14px', color: '#64748b', marginBottom: '4px' }}>💸 Monthly Payouts</div>
+                      <div style={{ fontSize: '14px', color: '#64748b', marginBottom: '4px' }}>💸 Distributions</div>
                       <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#7c3aed' }}>
                         ${payouts.reduce((sum, tx) => sum + (tx.amount || 0), 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
-                      <div style={{ fontSize: '12px', color: '#64748b' }}>{payouts.length} payouts</div>
+                      <div style={{ fontSize: '12px', color: '#64748b' }}>{payouts.length} distributions</div>
                     </div>
                     <div style={{ padding: '16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                      <div style={{ fontSize: '14px', color: '#64748b', marginBottom: '4px' }}>📈 Compounded Interest</div>
+                      <div style={{ fontSize: '14px', color: '#64748b', marginBottom: '4px' }}>📈 Contributions</div>
                       <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#0369a1' }}>
                         ${contributions.reduce((sum, tx) => sum + (tx.amount || 0), 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
-                      <div style={{ fontSize: '12px', color: '#64748b' }}>{contributions.length} calculations</div>
+                      <div style={{ fontSize: '12px', color: '#64748b' }}>{contributions.length} contributions</div>
                     </div>
                     {pendingCount > 0 && (
                       <div style={{ padding: '16px', background: '#fef3c7', borderRadius: '8px', border: '1px solid #f59e0b' }}>
                         <div style={{ fontSize: '14px', color: '#92400e', marginBottom: '4px' }}>⏳ Pending Approval</div>
                         <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#92400e' }}>{pendingCount}</div>
-                        <div style={{ fontSize: '12px', color: '#92400e' }}>distributions</div>
+                        <div style={{ fontSize: '12px', color: '#92400e' }}>transactions</div>
                       </div>
                     )}
                   </div>
 
-                  {/* Distribution List */}
+                  {/* Transaction List */}
                   <div className={styles.list}>
                     {allDistributions.map(tx => (
                       <div key={tx.id} style={{
@@ -632,9 +632,7 @@ export default function AdminUserDetailsPage({ params }) {
                               {tx.type === 'distribution' ? '💸' : '📈'}
                             </span>
                             <span style={{ fontWeight: 'bold' }}>
-                              {tx.type === 'distribution' ? 
-                                (tx.paymentFrequency === 'compounding' ? 'Distribution (To Be Compounded)' : 'Distribution') 
-                                : 'Contribution (Compounded)'}
+                              {tx.type === 'distribution' ? 'Distribution' : 'Contribution'}
                             </span>
                             <span style={{
                               padding: '2px 8px',
