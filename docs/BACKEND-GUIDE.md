@@ -396,6 +396,55 @@ def validate_password(password):
     return True
 ```
 
+#### Admin Two-Factor Authentication (2FA)
+
+**Requirement:** All admin sign-ins must enforce 2FA.
+
+**Preferred approach (Google services):**
+- Google Identity Platform / Firebase Authentication MFA for OTP (SMS/TOTP). Store provider references, not raw secrets.
+- Alternative: Standards-based TOTP compatible with Google Authenticator (RFC 6238).
+
+**Data model additions (admins only):**
+```json
+{
+  "isMfaEnabled": true,
+  "mfaMethod": "google_identity|totp|sms",
+  "mfaEnrolledAt": "ISO8601 or null",
+  "mfaSecret": "encrypted string or null",        // TOTP only
+  "mfaBackupCodes": ["string", "..."]           // optional
+}
+```
+
+**API flow (high level):**
+- POST `/api/auth/admin/sign-in` → If credentials valid and `isAdmin`, return `{ success: true, mfaRequired: true, challengeId }` when 2FA needed.
+- POST `/api/auth/admin/verify-mfa` → Body: `{ challengeId, code }`; on success, issue session/token.
+
+**Pseudocode:**
+```python
+def authenticate_admin(email, password):
+    user = get_user_by_email(email)
+    if not user or not user.is_admin:
+        return {"success": False, "error": "Invalid credentials"}
+    if not verify_password(password, user.password):
+        return {"success": False, "error": "Invalid credentials"}
+    if require_mfa(user):
+        challenge_id = start_mfa_challenge(user)  # Google Identity or TOTP
+        return {"success": True, "mfaRequired": True, "challengeId": challenge_id}
+    return create_admin_session(user)
+
+def verify_admin_mfa(challenge_id, code):
+    if not verify_mfa_code(challenge_id, code):
+        return {"success": False, "error": "Invalid code"}
+    user = get_user_for_challenge(challenge_id)
+    return create_admin_session(user)
+```
+
+**Configuration:**
+- Google Identity/Firebase: `GOOGLE_CLOUD_PROJECT`, `FIREBASE_API_KEY`, and server-side credentials; use emulator in development.
+- TOTP: Encrypt `mfaSecret`, rate-limit verification attempts, support backup codes.
+
+**UX:** Admins enroll during first login or via profile; subsequent logins always require code. Non-admin users are not required to use 2FA.
+
 #### Session Timeout & Inactivity
 
 **Security Requirement:** Automatic logout after inactivity to protect user accounts.
@@ -4251,6 +4300,46 @@ The admin dashboard shows:
 - Two-Column Layout:
   - Distribution (Account Types, Lockup Periods, Payment Frequencies)
   - Recent Activity (Latest Investments)
+
+### Developer/Sandbox Admin Profile (Non-Destructive)
+
+**Requirement:** Provide a sandbox admin profile so developers can navigate and test the admin panel without causing real effects to data or payouts.
+
+**Behavior:**
+- All admin actions performed by a sandbox admin are treated as dry-runs: no mutations to persisted user/investment/transaction records.
+- API endpoints should return simulated responses with a `dryRun: true` and `simulated: true` marker and include a `simulatedChanges` array describing what would have changed.
+- Audit logs should record the action with `simulated: true` to maintain traceability without altering state.
+- UI should display a prominent "Sandbox Mode" banner for sandbox admins.
+
+**Enablement Options (choose one or both):**
+- Per-user flag: `isSandboxAdmin: true` on the admin user record.
+- Environment toggle: `ADMIN_SANDBOX_MODE=true` forces all admin actions to dry-run in non-production.
+
+**API Contract (examples):**
+- POST `/api/admin/investments/:id/approve-admin` with sandbox admin → returns `{ success: true, dryRun: true, simulated: true, simulatedChanges: [...] }` and does not persist approval.
+- POST `/api/admin/payouts/:event_id/approve` with sandbox admin → returns simulated status transition without persisting.
+
+**Data model additions (admin user):**
+```json
+{
+  "isSandboxAdmin": true
+}
+```
+
+**Server-side guard (pseudocode):**
+```python
+def guard_admin_action(user, action_fn, *args, **kwargs):
+    if user.is_sandbox_admin or os.getenv('ADMIN_SANDBOX_MODE') == 'true':
+        simulated = simulate_action(action_fn, *args, **kwargs)  # do not persist
+        return {"success": True, "dryRun": True, "simulated": True, "simulatedChanges": simulated}
+    # real execution path
+    result = action_fn(*args, **kwargs)
+    return {"success": True, **result}
+```
+
+**Notes:**
+- Sandbox mode must be disabled for real operational environments; restrict with environment checks and permissions.
+- Use clear labeling in responses and UI to prevent confusion during demos/testing.
 
 ### Backend Data Requirements for Investment Management
 
