@@ -49,16 +49,29 @@ export async function POST(request) {
     usersData.appTime = newAppTime.toISOString()
     usersData.timeMachineSetBy = adminUserId
     usersData.timeMachineSetAt = new Date().toISOString()
-    
+
     if (!await saveUsers(usersData)) {
       return NextResponse.json({ success: false, error: 'Failed to save app time' }, { status: 500 })
     }
 
-    return NextResponse.json({ 
-      success: true, 
+    // Respond immediately - let transaction sync happen in background
+    const response = NextResponse.json({
+      success: true,
       appTime: usersData.appTime,
-      message: 'App time updated successfully'
+      message: 'App time updated successfully. Transactions will sync in background.'
     })
+
+    // Sync transactions in background (non-blocking)
+    // This regenerates all distributions/contributions based on the new app time
+    // Don't await this - let it run after response is sent
+    fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/migrate-transactions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    }).catch(err => {
+      console.error('Failed to sync transactions after time machine update:', err)
+    })
+
+    return response
   } catch (error) {
     console.error('Error setting app time:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
@@ -89,16 +102,29 @@ export async function DELETE(request) {
     delete usersData.appTime
     delete usersData.timeMachineSetBy
     delete usersData.timeMachineSetAt
-    
+
     if (!await saveUsers(usersData)) {
       return NextResponse.json({ success: false, error: 'Failed to reset app time' }, { status: 500 })
     }
 
-    return NextResponse.json({ 
-      success: true, 
+    // Respond immediately - let transaction sync happen in background
+    const response = NextResponse.json({
+      success: true,
       appTime: new Date().toISOString(),
-      message: 'App time reset to real time'
+      message: 'App time reset to real time. Transactions will sync in background.'
     })
+
+    // Sync transactions in background (non-blocking)
+    // This regenerates all distributions/contributions based on real time
+    // Don't await this - let it run after response is sent
+    fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/migrate-transactions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    }).catch(err => {
+      console.error('Failed to sync transactions after time machine reset:', err)
+    })
+
+    return response
   } catch (error) {
     console.error('Error resetting app time:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })

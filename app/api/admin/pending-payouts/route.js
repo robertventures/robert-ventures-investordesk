@@ -16,7 +16,11 @@ export async function GET() {
 
         investment.transactions.forEach(tx => {
           if (tx.type !== 'distribution') return
+          // Only include pending/approved status distributions
           if (tx.status !== 'pending' && tx.status !== 'approved') return
+          // Exclude compounding investments - they don't require manual approval
+          // Compounding distributions are auto-approved and reinvested
+          if (investment.paymentFrequency === 'compounding' || tx.paymentFrequency === 'compounding') return
 
           pendingPayouts.push({
             ...tx,
@@ -26,6 +30,7 @@ export async function GET() {
             investmentId: investment.id,
             investmentAmount: investment.amount || 0,
             lockupPeriod: investment.lockupPeriod || tx.lockupPeriod,
+            paymentFrequency: investment.paymentFrequency || tx.paymentFrequency,
             payoutBankNickname: tx.payoutBankNickname || 'Unknown',
             failureReason: tx.failureReason || null,
             retryCount: tx.retryCount || 0,

@@ -21,7 +21,7 @@ export default function AdminPage() {
   // Tab management
   const initialTab = useMemo(() => {
     const t = searchParams?.get('tab') || 'dashboard'
-    const allowed = ['dashboard', 'investments', 'accounts', 'distributions', 'activity', 'operations']
+    const allowed = ['dashboard', 'accounts', 'distributions', 'activity', 'operations']
     return allowed.includes(t) ? t : 'dashboard'
   }, [searchParams])
   const [activeTab, setActiveTab] = useState(initialTab)
@@ -47,7 +47,6 @@ export default function AdminPage() {
 
   // State for specific tab operations
   const [savingId, setSavingId] = useState(null)
-  const [investmentsSearch, setInvestmentsSearch] = useState('')
   const [accountsSearch, setAccountsSearch] = useState('')
   const [isDeletingAccounts, setIsDeletingAccounts] = useState(false)
   const [isSeedingAccounts, setIsSeedingAccounts] = useState(false)
@@ -117,21 +116,6 @@ export default function AdminPage() {
     return allInvestments.filter(inv => inv.status === 'pending')
   }, [allInvestments])
 
-  const filteredInvestments = useMemo(() => {
-    if (!investmentsSearch.trim()) return allInvestments
-    const term = investmentsSearch.toLowerCase()
-    return allInvestments.filter(inv => {
-      const fullName = `${inv.user.firstName || ''} ${inv.user.lastName || ''}`.toLowerCase()
-      const email = (inv.user.email || '').toLowerCase()
-      const investmentId = (inv.id || '').toString().toLowerCase()
-      const accountId = (inv.user.id || '').toString().toLowerCase()
-      const status = (inv.status || '').toLowerCase()
-      return fullName.includes(term) || email.includes(term) || 
-             investmentId.includes(term) || accountId.includes(term) || 
-             status.includes(term)
-    })
-  }, [allInvestments, investmentsSearch])
-
   const sortedAccountUsers = useMemo(() => {
     return [...nonAdminUsers].sort((a, b) => {
       const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0
@@ -161,7 +145,7 @@ export default function AdminPage() {
     // Apply account filters
     filtered = filtered.filter(user => {
       const activeInvestments = (user.investments || []).filter(inv => 
-        inv.status === 'active' || inv.status === 'approved' || inv.status === 'invested'
+        inv.status === 'active' || inv.status === 'withdrawal_notice'
       )
       const numInvestments = activeInvestments.length
       const investedAmount = activeInvestments.reduce((sum, inv) => sum + (inv.amount || 0), 0)
@@ -330,7 +314,16 @@ export default function AdminPage() {
 
   // Time machine operations
   const updateAppTime = async (newAppTime) => {
+    console.log('updateAppTime called with:', newAppTime)
+    console.log('currentUser:', currentUser)
+    
+    if (!currentUser || !currentUser.id) {
+      alert('Current user not loaded. Please refresh the page.')
+      return
+    }
+    
     try {
+      console.log('Sending time machine update request...')
       const res = await fetch('/api/admin/time-machine', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -340,21 +333,42 @@ export default function AdminPage() {
         })
       })
       
+      if (!res.ok) {
+        console.error('Response not OK:', res.status, res.statusText)
+        throw new Error(`HTTP error! status: ${res.status}`)
+      }
+      
+      console.log('Parsing response...')
       const data = await res.json()
+      console.log('Response data:', data)
+      
       if (data.success) {
+        console.log('Setting time machine data...')
         setTimeMachineData({
           appTime: data.appTime,
           isActive: true,
           realTime: new Date().toISOString()
         })
+        
+        // Manually trigger transaction sync
+        console.log('Triggering transaction sync...')
+        try {
+          await fetch('/api/migrate-transactions', { method: 'POST' })
+          console.log('Transaction sync triggered')
+        } catch (syncErr) {
+          console.error('Failed to sync transactions:', syncErr)
+        }
+        
         alert('Time machine updated successfully!')
+        console.log('Refreshing users...')
         await refreshUsers()
+        console.log('Update complete!')
       } else {
         alert(data.error || 'Failed to update app time')
       }
     } catch (e) {
       console.error('Failed to update app time', e)
-      alert('An error occurred while updating app time')
+      alert('An error occurred while updating app time: ' + e.message)
     }
   }
 
@@ -363,6 +377,10 @@ export default function AdminPage() {
       const res = await fetch(`/api/admin/time-machine?adminUserId=${currentUser.id}`, {
         method: 'DELETE'
       })
+      
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`)
+      }
       
       const data = await res.json()
       if (data.success) {
@@ -457,7 +475,6 @@ export default function AdminPage() {
             <div>
               <h1 className={styles.title}>
                 {activeTab === 'dashboard' && 'Admin Dashboard'}
-                {activeTab === 'investments' && 'Investments'}
                 {activeTab === 'accounts' && 'Accounts'}
                 {activeTab === 'activity' && 'Activity'}
                 {activeTab === 'distributions' && 'Transactions'}
@@ -465,10 +482,9 @@ export default function AdminPage() {
               </h1>
               <p className={styles.subtitle}>
                 {activeTab === 'dashboard' && 'Overview of platform metrics and recent activity'}
-                {activeTab === 'investments' && 'Manage and approve investment transactions'}
                 {activeTab === 'accounts' && 'View and manage user accounts'}
                 {activeTab === 'activity' && 'View all activity events across the platform'}
-                {activeTab === 'distributions' && 'Track all transactions including monthly payments and compounding interest calculations'}
+                {activeTab === 'distributions' && 'Track all transactions including investments, monthly payments and compounding interest calculations'}
                 {activeTab === 'operations' && 'Manage withdrawals, payouts, and system operations'}
               </p>
             </div>
@@ -513,131 +529,7 @@ export default function AdminPage() {
 
           {/* Transactions Tab */}
           {activeTab === 'distributions' && (
-            <DistributionsTab users={users || []} />
-          )}
-
-          {/* Investments Tab */}
-          {activeTab === 'investments' && (
-            <div>
-              <div className={styles.searchContainer}>
-                <input
-                  type="text"
-                  placeholder="Search by investment ID, account ID, name, email, or status..."
-                  value={investmentsSearch}
-                  onChange={(e) => setInvestmentsSearch(e.target.value)}
-                  className={styles.searchInput}
-                />
-              </div>
-              <div className={styles.accountsGrid}>
-                {filteredInvestments.map(inv => (
-                  <div
-                    key={`${inv.user.id}-${inv.id}`}
-                    className={styles.accountCard}
-                    onClick={() => router.push(`/admin/investments/${inv.id}`)}
-                  >
-                    <div className={styles.accountCardHeader}>
-                      <div>
-                        <div className={styles.investmentId}>Investment #{inv.id}</div>
-                        <div className={styles.accountId} style={{ fontSize: '12px', marginTop: '4px' }}>
-                          Account #{inv.user.id}
-                        </div>
-                      </div>
-                      <div className={styles.accountBadges}>
-                        <div className={styles.investmentStatus} data-status={inv.status}>
-                          {inv.status}
-                        </div>
-                        {!isProfileComplete(inv.user) && (
-                          <span className={styles.warningBadge} title="Profile incomplete: Personal details and bank connection required">
-                            ⚠ Profile Incomplete
-                          </span>
-                        )}
-                        {inv.user.accountType === 'joint' && <span className={styles.jointBadge}>Joint</span>}
-                        {inv.user.accountType === 'individual' && <span className={styles.individualBadge}>Individual</span>}
-                        {inv.user.accountType === 'entity' && <span className={styles.entityBadge}>Entity</span>}
-                        {inv.user.accountType === 'ira' && <span className={styles.iraBadge}>IRA</span>}
-                      </div>
-                    </div>
-
-                    <div className={styles.accountCardBody}>
-                      <div className={styles.accountEmail}>{inv.user.email || '-'}</div>
-                      <div className={styles.accountName}>
-                        {inv.user.firstName || '-'} {inv.user.lastName || ''}
-                      </div>
-                      {inv.user.accountType === 'joint' && inv.user.jointHolder?.email && (
-                        <div className={styles.accountJointEmail}>Joint: {inv.user.jointHolder.email}</div>
-                      )}
-                      <div className={styles.accountPhone}>{inv.user.phone || '-'}</div>
-                    </div>
-
-                    <div className={styles.accountCardFooter}>
-                      <div className={styles.accountStat}>
-                        <div className={styles.statLabel}>Amount</div>
-                        <div className={styles.statValue}>${(inv.amount || 0).toLocaleString()}</div>
-                      </div>
-                      <div className={styles.accountStat}>
-                        <div className={styles.statLabel}>Lockup</div>
-                        <div className={styles.statValue}>{inv.lockupPeriod || '-'}</div>
-                      </div>
-                      <div className={styles.accountStat}>
-                        <div className={styles.statLabel}>Frequency</div>
-                        <div className={styles.statValue}>{inv.paymentFrequency || '-'}</div>
-                      </div>
-                      <div className={styles.accountStat}>
-                        <div className={styles.statLabel}>Created</div>
-                        <div className={styles.statValue}>
-                          {inv.createdAt ? new Date(inv.createdAt).toLocaleDateString() : '-'}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className={styles.accountCardActions} onClick={(e) => e.stopPropagation()}>
-                      {(() => {
-                        const profileComplete = isProfileComplete(inv.user)
-                        const canApprove = profileComplete && 
-                                          inv.status !== 'active' && 
-                                          inv.status !== 'withdrawn' && 
-                                          inv.status !== 'rejected'
-                        const disableReason = !profileComplete 
-                          ? 'Complete profile & bank connection required'
-                          : inv.status === 'active' ? 'Already active'
-                          : inv.status === 'withdrawn' ? 'Already withdrawn'
-                          : inv.status === 'rejected' ? 'Already rejected'
-                          : ''
-                        
-                        return (
-                          <button
-                            className={styles.approveButton}
-                            disabled={savingId === inv.id || !canApprove}
-                            onClick={(e) => { e.stopPropagation(); approveInvestment(inv.user.id, inv.id); }}
-                            title={!canApprove ? disableReason : ''}
-                          >
-                            {inv.status === 'active' ? 'Active' :
-                              inv.status === 'withdrawn' ? 'Withdrawn' :
-                              inv.status === 'rejected' ? 'Rejected' :
-                              (savingId === inv.id ? 'Approving...' : 'Approve')}
-                          </button>
-                        )
-                      })()}
-                      {inv.status !== 'active' && inv.status !== 'withdrawn' && (
-                        <button
-                          className={styles.dangerButton}
-                          disabled={savingId === inv.id || inv.status === 'rejected'}
-                          onClick={(e) => { e.stopPropagation(); rejectInvestment(inv.user.id, inv.id); }}
-                        >
-                          {inv.status === 'rejected' ? 'Rejected' : (savingId === inv.id ? 'Rejecting...' : 'Reject')}
-                        </button>
-                      )}
-                      <button
-                        className={styles.secondaryButton}
-                        onClick={(e) => { e.stopPropagation(); router.push(`/admin/users/${inv.user.id}`); }}
-                      >
-                        View Account
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <DistributionsTab users={users || []} timeMachineData={timeMachineData} />
           )}
 
           {/* Accounts Tab */}
@@ -810,7 +702,7 @@ export default function AdminPage() {
               <div className={styles.accountsGrid}>
                 {filteredAccountUsers.map(user => {
                   const activeInvestments = (user.investments || [])
-                    .filter(inv => inv.status === 'active' || inv.status === 'approved' || inv.status === 'invested')
+                    .filter(inv => inv.status === 'active' || inv.status === 'withdrawal_notice')
                   
                   const investedAmount = activeInvestments
                     .reduce((sum, inv) => sum + (inv.amount || 0), 0)

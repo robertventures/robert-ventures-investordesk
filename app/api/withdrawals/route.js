@@ -35,19 +35,32 @@ export async function POST(request) {
     }
 
     const investment = investments[invIndex]
-    
+
     // Check if investment is eligible for withdrawal
     if (investment.status !== 'active') {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Only active investments can be withdrawn' 
+      return NextResponse.json({
+        success: false,
+        error: 'Only active investments can be withdrawn'
       }, { status: 400 })
+    }
+
+    // Check if lockup period has expired
+    const appTime = await getCurrentAppTime()
+    const now = new Date(appTime || new Date().toISOString())
+
+    if (investment.lockupEndDate) {
+      const lockupEnd = new Date(investment.lockupEndDate)
+      if (now < lockupEnd) {
+        const daysRemaining = Math.ceil((lockupEnd - now) / (1000 * 60 * 60 * 24))
+        return NextResponse.json({
+          success: false,
+          error: `Cannot withdraw before lockup period ends. ${daysRemaining} day(s) remaining until ${lockupEnd.toLocaleDateString()}.`
+        }, { status: 400 })
+      }
     }
 
     // Calculate current value (as of app time) and set up withdrawal timeline
     // Robert Ventures has 90 days from the withdrawal request to provide funds + interest
-    const appTime = await getCurrentAppTime()
-    const now = new Date(appTime || new Date().toISOString())
     const currentValue = calculateInvestmentValue(investment, now.toISOString())
     // Notice period starts now; payout must be completed within 90 days
     const noticeStartAt = now.toISOString()
@@ -65,6 +78,7 @@ export async function POST(request) {
     // Create withdrawal record with sequential ID
     const withdrawalId = generateWithdrawalId(usersData.users)
     const nowIso = now.toISOString()
+    const accrualNotice = 'This investment keeps earning interest until the withdrawal is paid out. The final payout amount is calculated when funds are sent (within 90 days of your request).'
     const withdrawal = {
       id: withdrawalId,
       investmentId,
@@ -72,6 +86,12 @@ export async function POST(request) {
       amount: withdrawableAmount,
       principalAmount: principalAmount,
       earningsAmount: earningsAmount,
+      quotedAmount: withdrawableAmount,
+      quotedEarnings: earningsAmount,
+      finalAmount: null,
+      finalEarnings: null,
+      payoutCalculatedAt: null,
+      accrualNotice,
       status: 'notice',
       requestedAt: nowIso,
       noticeStartAt,
@@ -81,7 +101,9 @@ export async function POST(request) {
         lockupPeriod: investment.lockupPeriod,
         paymentFrequency: investment.paymentFrequency,
         confirmedAt: investment.confirmedAt,
-        lockupEndDate: investment.lockupEndDate
+        lockupEndDate: investment.lockupEndDate,
+        statusAtRequest: investment.status,
+        accruesUntilPayout: true
       }
     }
 
@@ -93,6 +115,13 @@ export async function POST(request) {
       id: redemptionTxId,
       type: 'redemption',
       amount: withdrawableAmount,
+      quotedAmount: withdrawableAmount,
+      quotedEarnings: earningsAmount,
+      quotedAt: nowIso,
+      finalAmount: null,
+      finalEarnings: null,
+      payoutCalculatedAt: null,
+      accrualNotice,
       status: 'pending',
       date: nowIso,
       withdrawalId,
@@ -142,7 +171,7 @@ export async function POST(request) {
     return NextResponse.json({ 
       success: true, 
       withdrawal,
-      message: 'Withdrawal request submitted successfully' 
+      message: 'Withdrawal request submitted successfully. This investment keeps earning interest until funds are sent (within 90 days of your request).'
     })
   } catch (error) {
     console.error('Error processing withdrawal:', error)

@@ -521,7 +521,19 @@ export default function AdminInvestmentDetailsPage({ params }) {
                               )}
                             </td>
                             <td className={styles.dateCell}>{date}</td>
-                            <td className={styles.eventIdCell}>{event.id}</td>
+                            <td className={styles.eventIdCell}>
+                              {(event.type === 'investment' || event.type === 'distribution' || event.type === 'contribution') && event.id ? (
+                                <button
+                                  className={styles.eventIdButton}
+                                  onClick={() => router.push(`/admin/transactions/${event.id}`)}
+                                  title="View transaction details"
+                                >
+                                  <code>{event.id}</code>
+                                </button>
+                              ) : (
+                                <span>{event.id}</span>
+                              )}
+                            </td>
                           </tr>
                         )
                       })}

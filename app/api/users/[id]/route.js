@@ -180,12 +180,43 @@ export async function PUT(request, { params }) {
 
       const currentInvestment = investments[invIndex]
 
-      // VALIDATION: Cannot reject an active investment
-      if (body.fields.status === 'rejected' && currentInvestment.status === 'active') {
-        return NextResponse.json({ success: false, error: 'Cannot reject an active investment' }, { status: 400 })
+      // VALIDATION: State machine for investment status transitions
+      // Define valid transitions to prevent impossible status changes
+      const validTransitions = {
+        'draft': ['pending'],                    // Can only submit draft for approval
+        'pending': ['active', 'rejected'],       // Can approve or reject pending investments
+        'active': ['withdrawal_notice'],         // Can only request withdrawal from active
+        'withdrawal_notice': ['withdrawn'],      // Can only complete withdrawal
+        'rejected': [],                          // Terminal state - no transitions allowed
+        'withdrawn': []                          // Terminal state - no transitions allowed
+      }
+
+      const currentStatus = currentInvestment.status
+      const requestedStatus = body.fields.status
+
+      if (requestedStatus && currentStatus !== requestedStatus) {
+        const allowedStatuses = validTransitions[currentStatus] || []
+        if (!allowedStatuses.includes(requestedStatus)) {
+          return NextResponse.json({
+            success: false,
+            error: `Invalid status transition from '${currentStatus}' to '${requestedStatus}'. Allowed transitions: ${allowedStatuses.join(', ') || 'none'}`
+          }, { status: 400 })
+        }
       }
 
       // VALIDATION: Investment amount must be positive (if being updated)
+      // VALIDATION: Cannot change amount on active investments (breaks calculations)
+      // This is critical for tax reporting and audit trail integrity
+      if (typeof body.fields.amount === 'number') {
+        const currentInvestment = investments[invIndex]
+        if (currentInvestment.status === 'active' && currentInvestment.amount !== body.fields.amount) {
+          return NextResponse.json({
+            success: false,
+            error: 'Cannot change investment amount on active investments. Amount is locked for tax reporting and audit compliance.'
+          }, { status: 400 })
+        }
+      }
+
       if (typeof body.fields.amount === 'number' && body.fields.amount <= 0) {
         return NextResponse.json({ success: false, error: 'Investment amount must be greater than zero' }, { status: 400 })
       }
@@ -349,13 +380,24 @@ export async function PUT(request, { params }) {
       const isLockingStatus = updatedInvestment.status === 'pending' || updatedInvestment.status === 'active'
       const shouldSetAccountType = isLockingStatus && updatedInvestment.accountType && !user.accountType
       
-      // Unlock user account type if investment was rejected and there are no pending/active investments
+      // Unlock user account type if investment reaches a terminal state (rejected/withdrawn)
+      // and there are no other pending/active/withdrawal_notice investments
       let shouldClearAccountType = false
-      if (updatedInvestment.status === 'rejected') {
-        const hasPendingOrActiveInvestments = investments.some(inv => 
-          inv.id !== updatedInvestment.id && (inv.status === 'pending' || inv.status === 'active')
+      if (updatedInvestment.status === 'rejected' || updatedInvestment.status === 'withdrawn') {
+        const hasPendingOrActiveInvestments = investments.some(inv =>
+          inv.id !== updatedInvestment.id &&
+          (inv.status === 'pending' || inv.status === 'active' || inv.status === 'withdrawal_notice')
         )
         shouldClearAccountType = !hasPendingOrActiveInvestments && user.accountType
+      }
+
+      // Also unlock account type if ALL investments are in terminal states (withdrawn/rejected)
+      // This handles the case where all investments were withdrawn previously but account type wasn't unlocked
+      if (!shouldClearAccountType && user.accountType) {
+        const allInvestmentsTerminal = investments.every(inv =>
+          inv.status === 'rejected' || inv.status === 'withdrawn'
+        )
+        shouldClearAccountType = allInvestmentsTerminal
       }
       
       // When unlocking account, also clear account-type-specific fields to avoid stale data
@@ -366,17 +408,32 @@ export async function PUT(request, { params }) {
         entity: null
       } : {}
       
-      const updatedUser = { 
-        ...user, 
-        investments, 
+      const updatedUser = {
+        ...user,
+        investments,
         ...(shouldSetAccountType ? { accountType: updatedInvestment.accountType } : {}),
         ...accountTypeFields,
-        updatedAt: new Date().toISOString() 
+        updatedAt: new Date().toISOString()
       }
       usersData.users[userIndex] = updatedUser
       if (!await saveUsers(usersData)) {
         return NextResponse.json({ success: false, error: 'Failed to update investment' }, { status: 500 })
       }
+
+      // Sync transactions immediately after investment status change
+      // This ensures distributions, contributions, and activity events are generated
+      if (body.fields.status === 'active' || body.fields.status === 'rejected' || body.fields.status === 'withdrawn') {
+        try {
+          await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/migrate-transactions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          })
+        } catch (err) {
+          console.error('Failed to sync transactions after investment update:', err)
+          // Non-blocking: don't fail the request if transaction sync fails
+        }
+      }
+
       return NextResponse.json({ success: true, user: updatedUser, investment: updatedInvestment })
     }
 
@@ -399,6 +456,21 @@ export async function PUT(request, { params }) {
       const inv = investments[invIndex]
       if (inv.status !== 'draft') {
         return NextResponse.json({ success: false, error: 'Only draft investments can be deleted' }, { status: 400 })
+      }
+
+      // Check if there are any active withdrawal requests for this investment
+      // This prevents orphaned withdrawals that reference deleted investments
+      const withdrawals = Array.isArray(user.withdrawals) ? user.withdrawals : []
+      const hasActiveWithdrawal = withdrawals.some(wd =>
+        wd.investmentId === body.investmentId &&
+        (wd.status === 'notice' || wd.status === 'pending')
+      )
+
+      if (hasActiveWithdrawal) {
+        return NextResponse.json({
+          success: false,
+          error: 'Cannot delete investment with active withdrawal request. Please reject the withdrawal first or wait for it to be processed.'
+        }, { status: 400 })
       }
 
       // Remove the investment

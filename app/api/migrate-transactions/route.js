@@ -15,6 +15,40 @@ const addDaysUtc = (date, days) => {
   return new Date(date.getTime() + days * MS_PER_DAY)
 }
 
+// Check if a date falls within Eastern Daylight Time (EDT)
+// EDT starts second Sunday in March, ends first Sunday in November
+const isDateInEDT = (date) => {
+  const year = date.getFullYear()
+  const month = date.getMonth() // 0-based
+  const day = date.getDate()
+
+  // EDT: March (2) to November (10), but check exact boundaries
+  if (month < 2 || month > 10) return false // Before March or after November
+  if (month > 2 && month < 10) return true  // April through October
+
+  // March: EDT starts on second Sunday
+  if (month === 2) {
+    const secondSunday = findNthWeekdayOfMonth(year, 2, 0, 2) // Second Sunday in March
+    return day >= secondSunday
+  }
+
+  // November: EDT ends on first Sunday
+  if (month === 10) {
+    const firstSunday = findNthWeekdayOfMonth(year, 10, 0, 1) // First Sunday in November
+    return day < firstSunday
+  }
+
+  return false
+}
+
+// Find the nth weekday of a month (0=Sunday, 1=Monday, etc.)
+const findNthWeekdayOfMonth = (year, month, weekday, n) => {
+  const firstDay = new Date(year, month, 1)
+  const firstWeekday = firstDay.getDay()
+  const daysToAdd = (weekday - firstWeekday + 7) % 7
+  return 1 + daysToAdd + (n - 1) * 7
+}
+
 // Create a Date object representing 9:00 AM Eastern Time on a specific calendar date
 // All distributions happen at 9:00 AM Eastern Time (EST/EDT) regardless of investor time zones
 // This function properly handles the UTC offset for Eastern Time
@@ -40,8 +74,12 @@ const createEasternTime9AM = (year, month, day) => {
   // Format is "MM/DD/YYYY, HH:MM"
   const match = easternString.match(/(\d+)\/(\d+)\/(\d+), (\d+):(\d+)/)
   if (!match) {
-    // Fallback: assume EST (UTC-5)
-    return new Date(Date.UTC(year, month - 1, day, 14, 0, 0, 0))
+    // Fallback: Calculate correct Eastern Time offset (EST vs EDT)
+    // EST (UTC-5): Nov-Mar, EDT (UTC-4): Mar-Nov
+    const date = new Date(year, month - 1, day)
+    const isDST = isDateInEDT(date)
+    const offsetHours = isDST ? 4 : 5  // EDT: UTC-4, EST: UTC-5
+    return new Date(Date.UTC(year, month - 1, day, 9 + offsetHours, 0, 0, 0))
   }
   
   const [_, monthET, dayET, yearET, hourET, minET] = match
@@ -207,6 +245,49 @@ export async function POST() {
         }
       }
 
+      // Ensure investment_created and investment_confirmed activity events exist for all investments
+      for (const inv of investments) {
+        if (!inv || !inv.id) continue
+        
+        // 1. Check for investment_created event
+        const investmentCreatedEventId = generateTransactionId('INV', inv.id, 'created')
+        const hasInvestmentCreatedEvent = user.activity.some(ev => ev.id === investmentCreatedEventId)
+        const investmentCreatedDate = inv.submittedAt || inv.createdAt
+        
+        if (!hasInvestmentCreatedEvent && investmentCreatedDate) {
+          user.activity.push({
+            id: investmentCreatedEventId,
+            type: 'investment_created',
+            investmentId: inv.id,
+            amount: inv.amount || 0,
+            date: investmentCreatedDate
+          })
+          eventsCreated++
+          userTouched = true
+          dataMutated = true
+        }
+        
+        // 2. Check for investment_confirmed event (only for confirmed/active investments)
+        if (inv.status !== 'draft' && inv.status !== 'pending' && inv.status !== 'rejected') {
+          const investmentConfirmedEventId = generateTransactionId('INV', inv.id, 'confirmed')
+          const hasInvestmentConfirmedEvent = user.activity.some(ev => ev.id === investmentConfirmedEventId)
+          const investmentConfirmedDate = inv.confirmedAt
+          
+          if (!hasInvestmentConfirmedEvent && investmentConfirmedDate) {
+            user.activity.push({
+              id: investmentConfirmedEventId,
+              type: 'investment_confirmed',
+              investmentId: inv.id,
+              amount: inv.amount || 0,
+              date: investmentConfirmedDate
+            })
+            eventsCreated++
+            userTouched = true
+            dataMutated = true
+          }
+        }
+      }
+
       for (const inv of investments) {
         if (!inv || !inv.id) continue
         let investmentTouched = false
@@ -230,6 +311,27 @@ export async function POST() {
           dataMutated = true
         }
 
+        // VALIDATION: Check ALL existing contributions for valid distributionTxId links
+        // This catches orphaned contributions that may exist from before validation was added
+        for (const tx of inv.transactions) {
+          if (tx.type === 'contribution') {
+            if (!tx.distributionTxId) {
+              throw new Error(`Existing contribution transaction ${tx.id} must have a distributionTxId`)
+            }
+            const distribution = inv.transactions.find(existing => existing.id === tx.distributionTxId)
+            if (!distribution) {
+              throw new Error(`Existing contribution ${tx.id} references non-existent distribution ${tx.distributionTxId}`)
+            }
+            if (distribution.type !== 'distribution') {
+              throw new Error(`Existing contribution ${tx.id} references transaction ${tx.distributionTxId} which is not a distribution`)
+            }
+            // Distribution must be created before the contribution
+            if (new Date(distribution.date) >= new Date(tx.date)) {
+              throw new Error(`Existing contribution ${tx.id} references distribution ${tx.distributionTxId} that was not created before the contribution`)
+            }
+          }
+        }
+
         const findTransaction = (id) => inv.transactions.find(tx => tx.id === id)
         const ensureTransaction = (tx) => {
           // VALIDATION: Contributions must have a distributionTxId and the distribution must exist
@@ -243,6 +345,10 @@ export async function POST() {
             }
             if (distribution.type !== 'distribution') {
               throw new Error(`Contribution ${tx.id} references transaction ${tx.distributionTxId} which is not a distribution`)
+            }
+            // Distribution must be created before the contribution
+            if (new Date(distribution.date) >= new Date(tx.date)) {
+              throw new Error(`Contribution ${tx.id} references distribution ${tx.distributionTxId} that was not created before the contribution`)
             }
           }
 
@@ -314,6 +420,7 @@ export async function POST() {
           }
         })()
         const investmentDate = inv.submittedAt || inv.createdAt || inv.confirmedAt || inv.updatedAt || now.toISOString()
+        const investmentTaxYear = new Date(investmentDate).getUTCFullYear()
         ensureTransaction({
           id: investmentTxId,
           type: 'investment',
@@ -324,7 +431,11 @@ export async function POST() {
           paymentFrequency: payFreq,
           confirmedAt: inv.confirmedAt || null,
           approvedAt: inv.confirmedAt || null,
-          rejectedAt: inv.rejectedAt || null
+          rejectedAt: inv.rejectedAt || null,
+          // Tax reporting metadata (principal contribution - not taxable)
+          taxYear: investmentTaxYear,
+          taxableIncome: 0,  // Principal contributions are not taxable income
+          incomeType: 'principal'  // Audit trail classification
         })
 
         // Distributions for monthly payout investments
@@ -392,6 +503,7 @@ export async function POST() {
                 status = existingTx.status
               }
 
+              const taxYear = new Date(distributionDateIso).getUTCFullYear()
               ensureTransaction({
                 id: txId,
                 type: 'distribution',
@@ -409,7 +521,11 @@ export async function POST() {
                 lastRetryAt: legacyEvent?.lastRetryAt || existingTx?.lastRetryAt || null,
                 completedAt: legacyEvent?.completedAt || existingTx?.completedAt || null,
                 manuallyCompleted: legacyEvent?.manuallyCompleted || existingTx?.manuallyCompleted || false,
-                failedAt: legacyEvent?.failedAt || existingTx?.failedAt || null
+                failedAt: legacyEvent?.failedAt || existingTx?.failedAt || null,
+                // Tax reporting metadata
+                taxYear,
+                taxableIncome: Math.round(distributionAmount * 100) / 100,  // For 1099-INT reporting
+                incomeType: 'interest'  // IRS classification
               })
 
               monthIndex += 1
@@ -463,31 +579,42 @@ export async function POST() {
               const legacyContributionEvent = legacyContributionEvents.get(legacyKey)
 
               // 1. First, create the DISTRIBUTION (earnings generated)
+              // For compounding investments, distributions are auto-approved and don't require admin action
               const distributionTxId = generateTransactionId('INV', inv.id, 'distribution', { date: compoundingDate })
+              const distributionTaxYear = new Date(compoundingDateIso).getUTCFullYear()
               ensureTransaction({
                 id: distributionTxId,
                 type: 'distribution',
                 amount: Math.round(interest * 100) / 100,
-                status: 'approved',
+                status: 'received',  // Auto-complete for compounding (no admin approval needed)
                 date: compoundingDateIso,
                 displayDate: compoundingDateIso,
                 monthIndex,
                 lockupPeriod: lockup,
                 paymentFrequency: payFreq,
                 principal: Math.round(balance * 100) / 100,
-                legacyReferenceId: legacyDistributionEvent?.id || null
+                completedAt: compoundingDateIso,  // Mark as completed immediately
+                legacyReferenceId: legacyDistributionEvent?.id || null,
+                // Tax reporting metadata (constructive receipt - taxable even though reinvested)
+                taxYear: distributionTaxYear,
+                taxableIncome: Math.round(interest * 100) / 100,  // For 1099-INT reporting
+                incomeType: 'interest',  // IRS classification
+                constructiveReceipt: true,  // Taxable but not paid out (reinvested)
+                actualReceipt: false  // Not distributed to investor
               })
 
               // 2. Then, create the CONTRIBUTION (distribution reinvested)
               // Contribution happens 1 second after distribution to maintain correct chronological order
+              // For compounding investments, contributions are auto-applied immediately
               const contributionDate = new Date(compoundingDate.getTime() + 1000)
               const contributionDateIso = contributionDate.toISOString()
               const contributionTxId = generateTransactionId('INV', inv.id, 'contribution', { date: compoundingDate })
+              const contributionTaxYear = new Date(contributionDateIso).getUTCFullYear()
               ensureTransaction({
                 id: contributionTxId,
                 type: 'contribution',
                 amount: Math.round(interest * 100) / 100,
-                status: 'approved',
+                status: 'received',  // Auto-complete for compounding (no admin approval needed)
                 date: contributionDateIso,
                 displayDate: compoundingDateIso,  // Show same display date as distribution
                 monthIndex,
@@ -495,7 +622,12 @@ export async function POST() {
                 paymentFrequency: payFreq,
                 principal: Math.round(balance * 100) / 100,
                 distributionTxId,  // Link to the distribution that was reinvested
-                legacyReferenceId: legacyContributionEvent?.id || null
+                completedAt: contributionDateIso,  // Mark as completed immediately
+                legacyReferenceId: legacyContributionEvent?.id || null,
+                // Tax reporting metadata (reinvestment of taxed earnings - not taxable itself)
+                taxYear: contributionTaxYear,
+                taxableIncome: 0,  // Not taxable (already taxed as distribution)
+                incomeType: 'reinvestment'  // Audit trail classification
               })
 
               balance += interest
@@ -534,17 +666,23 @@ export async function POST() {
             status = existingTx.status
           }
 
+          const redemptionDate = wd.requestedAt || wd.noticeStartAt || wd.approvedAt || wd.paidAt || now.toISOString()
+          const redemptionTaxYear = new Date(redemptionDate).getUTCFullYear()
           ensureTransaction({
             id: txId,
             type: 'redemption',
             amount: wd.amount || 0,
             status,
-            date: wd.requestedAt || wd.noticeStartAt || wd.approvedAt || wd.paidAt || now.toISOString(),
+            date: redemptionDate,
             withdrawalId: wd.id,
             payoutDueBy: wd.payoutDueBy || null,
             approvedAt: wd.approvedAt || null,
             paidAt: wd.paidAt || null,
-            rejectedAt: wd.rejectedAt || null
+            rejectedAt: wd.rejectedAt || null,
+            // Tax reporting metadata (return of principal and earnings)
+            taxYear: redemptionTaxYear,
+            taxableIncome: 0,  // For audit trail - actual taxable portion determined externally
+            incomeType: 'redemption'  // Audit trail classification
           })
         }
 

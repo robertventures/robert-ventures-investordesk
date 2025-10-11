@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getUsers, addUser, getUserByEmail, cleanupDuplicateUsers } from '../../../lib/database'
+import { getCurrentAppTime } from '../../../lib/appTime'
 
 // GET - Retrieve all users or a specific user by email
 export async function GET(request) {
@@ -25,7 +26,17 @@ export async function GET(request) {
       
       // Get all users
       const usersData = await getUsers()
-      return NextResponse.json({ success: true, users: usersData.users })
+      const appTime = await getCurrentAppTime()
+      
+      return NextResponse.json({ 
+        success: true, 
+        users: usersData.users,
+        timeMachine: {
+          appTime: appTime || new Date().toISOString(),
+          isActive: !!appTime,
+          realTime: new Date().toISOString()
+        }
+      })
     }
   } catch (error) {
     console.error('Error in GET /api/users:', error)

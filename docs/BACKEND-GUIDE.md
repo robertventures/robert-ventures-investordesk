@@ -103,11 +103,12 @@ Investment states must transition according to defined rules only.
 10. [Data Models](#data-models)
 11. [API Endpoints](#api-endpoints)
 12. [Distribution Events System](#distribution-events-system)
-13. [Business Logic Implementation](#business-logic-implementation)
-14. [Validation Rules](#validation-rules)
-15. [Database Indexes](#database-indexes)
-16. [UI/UX Requirements](#uiux-requirements)
-17. [Testing](#testing)
+13. [Tax Audit Trail](#tax-audit-trail)
+14. [Business Logic Implementation](#business-logic-implementation)
+15. [Validation Rules](#validation-rules)
+16. [Database Indexes](#database-indexes)
+17. [UI/UX Requirements](#uiux-requirements)
+18. [Testing](#testing)
 
 ---
 
@@ -2889,12 +2890,27 @@ Both transactions are sorted by type to ensure distribution appears before contr
   "amount": 10000,
   "principalAmount": 10000,
   "earningsAmount": 0,
+  "quotedAmount": 10000,
+  "quotedEarnings": 0,
+  "finalAmount": 10050,
+  "finalEarnings": 50,
+  "payoutCalculatedAt": "ISO8601 or null",
+  "accrualNotice": "This investment keeps earning interest until the withdrawal is paid out...",
   "status": "notice|approved|rejected",
   "requestedAt": "ISO8601",
   "noticeStartAt": "ISO8601",
   "payoutDueBy": "ISO8601",
   "approvedAt": "ISO8601 or null",
-  "paidAt": "ISO8601 or null"
+  "paidAt": "ISO8601 or null",
+  "investment": {
+    "originalAmount": 10000,
+    "lockupPeriod": "1-year",
+    "paymentFrequency": "compounding",
+    "confirmedAt": "ISO8601",
+    "lockupEndDate": "ISO8601",
+    "statusAtRequest": "active",
+    "accruesUntilPayout": true
+  }
 }
 ```
 
@@ -3468,6 +3484,275 @@ async function loadAdminData() {
 - Each pair has same monthIndex and date
 - Distribution always appears before contribution (sorted by type)
 - Contribution links back to distribution via `distributionTxId`
+
+---
+
+## Tax Audit Trail
+
+### Overview
+
+The platform maintains an **immutable audit trail** of all financial transactions for tax reporting purposes. We do NOT calculate taxes or generate 1099 forms in the app - we simply provide clean, structured transaction data that accountants or tax software can use.
+
+### Philosophy
+
+**What we DO:**
+- Tag every transaction with `taxYear`, `taxableIncome`, and `incomeType`
+- Lock transactions after the tax year ends (Feb 1 following year)
+- Provide a complete, chronological record of all financial events
+
+**What we DON'T do:**
+- Calculate tax liability
+- Generate 1099-INT or 1099-DIV forms
+- Perform backup withholding
+- Handle tax withholding or estimated payments
+
+The audit trail is exported to external tax preparation software or provided to accountants.
+
+### Tax Metadata on Transactions
+
+Every transaction automatically includes these fields:
+
+```javascript
+{
+  // Standard transaction fields
+  id: "INV-10001-TXN-DIST-2024-02-01",
+  type: "distribution",
+  amount: 66.67,
+  date: "2024-02-01T14:00:00.000Z",
+  status: "received",
+  
+  // Tax audit trail metadata
+  taxYear: 2024,              // Calendar year for tax reporting
+  taxableIncome: 66.67,       // Amount subject to taxation
+  incomeType: "interest",     // IRS classification for reporting
+  
+  // Optional: For compounding interest
+  constructiveReceipt: true,  // Taxable even though not paid out
+  actualReceipt: false        // Not distributed to investor (reinvested)
+}
+```
+
+### Income Type Classifications
+
+| Transaction Type | incomeType | taxableIncome | Notes |
+|-----------------|------------|---------------|-------|
+| Investment (initial) | `principal` | 0 | Not taxable - principal contribution |
+| Distribution (monthly payout) | `interest` | Full amount | Taxable interest income (1099-INT) |
+| Distribution (compounding) | `interest` | Full amount | Taxable via constructive receipt |
+| Contribution (reinvestment) | `reinvestment` | 0 | Not taxable - already taxed as distribution |
+| Redemption (withdrawal) | `redemption` | 0 | Mixed principal + earnings - calculated externally |
+
+### Constructive Receipt Rule
+
+**Monthly Payout Investments:**
+- Interest is distributed to the investor's bank account
+- Investor receives cash → `actualReceipt: true`
+- Taxable in the year received
+
+**Compounding Investments:**
+- Interest is earned but immediately reinvested
+- Investor doesn't receive cash, but has legal right to it → `constructiveReceipt: true`
+- **Still taxable** even though not paid out (IRS constructive receipt doctrine)
+- Creates two transactions: Distribution (taxable) → Contribution (reinvestment)
+
+```javascript
+// Example: Compounding investment earns $83.33 in Month 1
+
+// Transaction 1: Distribution (TAXABLE)
+{
+  type: "distribution",
+  amount: 83.33,
+  taxYear: 2024,
+  taxableIncome: 83.33,
+  incomeType: "interest",
+  constructiveReceipt: true,  // ✓ Taxable but not paid out
+  actualReceipt: false         // ✓ Not distributed
+}
+
+// Transaction 2: Contribution (NOT TAXABLE - reinvestment)
+{
+  type: "contribution",
+  amount: 83.33,
+  taxYear: 2024,
+  taxableIncome: 0,            // Not taxable (already taxed above)
+  incomeType: "reinvestment",
+  distributionTxId: "..."      // Links to the taxable distribution
+}
+```
+
+### Tax Year Locking
+
+**Lock Rules:**
+- Tax year locks on **January 31 of the following year** (1099 filing deadline)
+- Example: 2024 tax year locks on February 1, 2025
+- Once locked, transactions cannot be modified
+
+**Implementation:**
+```javascript
+// lib/taxCompliance.js
+
+export function isTaxYearLocked(taxYear) {
+  const now = new Date()
+  const lockDate = new Date(Date.UTC(taxYear + 1, 0, 31, 23, 59, 59))
+  return now > lockDate
+}
+
+export function validateTaxImmutability(transaction, proposedChanges) {
+  if (!transaction.taxYear) return { valid: true }
+  
+  const isLocked = isTaxYearLocked(transaction.taxYear)
+  if (!isLocked) return { valid: true }
+  
+  // Prevent changes to tax-relevant fields
+  const taxRelevantFields = ['amount', 'status', 'date', 'completedAt', 'taxableIncome']
+  const changedFields = Object.keys(proposedChanges).filter(field =>
+    taxRelevantFields.includes(field) &&
+    proposedChanges[field] !== transaction[field]
+  )
+  
+  if (changedFields.length > 0) {
+    return {
+      valid: false,
+      error: `Cannot modify transaction: Tax year ${transaction.taxYear} is locked`,
+      lockedFields: changedFields
+    }
+  }
+  
+  return { valid: true }
+}
+```
+
+### User Tax Information
+
+Each user has a minimal `taxInfo` object for tax reporting:
+
+```javascript
+user.taxInfo = {
+  // SSN for tax forms
+  ssnProvided: true,
+  ssnVerified: false,
+  ssnVerifiedDate: null,
+  
+  // W-9 form collection
+  w9OnFile: false,
+  w9ReceivedDate: null,
+  w9DocumentId: null
+}
+```
+
+### Transaction Export for Tax Reporting
+
+To generate tax reports, export all transactions for a given tax year:
+
+```javascript
+// Get all taxable transactions for 2024
+const taxableTransactions = user.investments
+  .flatMap(inv => inv.transactions)
+  .filter(tx => tx.taxYear === 2024 && tx.taxableIncome > 0)
+
+// Aggregate by income type
+const taxSummary = {
+  totalInterest: 0,
+  compoundingInterest: 0,  // Constructive receipt
+  paidOutInterest: 0       // Actual receipt
+}
+
+taxableTransactions.forEach(tx => {
+  if (tx.incomeType === 'interest') {
+    taxSummary.totalInterest += tx.taxableIncome
+    
+    if (tx.constructiveReceipt && !tx.actualReceipt) {
+      taxSummary.compoundingInterest += tx.taxableIncome
+    } else {
+      taxSummary.paidOutInterest += tx.taxableIncome
+    }
+  }
+})
+
+// This data is then exported to tax software or provided to accountant
+```
+
+### Python Backend Implementation
+
+```python
+from datetime import datetime
+
+def get_tax_year(date_str: str) -> int:
+    """Get tax year from ISO date string."""
+    dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+    return dt.year
+
+def is_tax_year_locked(tax_year: int) -> bool:
+    """Check if tax year is locked for modifications."""
+    now = datetime.utcnow()
+    lock_date = datetime(tax_year + 1, 1, 31, 23, 59, 59)
+    return now > lock_date
+
+def add_tax_metadata(transaction: dict) -> dict:
+    """Add tax metadata to a transaction."""
+    date_str = transaction['date']
+    tx_type = transaction['type']
+    amount = transaction['amount']
+    
+    # Determine taxable income and income type
+    if tx_type == 'investment':
+        taxable_income = 0
+        income_type = 'principal'
+    elif tx_type == 'distribution':
+        taxable_income = amount
+        income_type = 'interest'
+    elif tx_type == 'contribution':
+        taxable_income = 0
+        income_type = 'reinvestment'
+    elif tx_type == 'redemption':
+        taxable_income = 0
+        income_type = 'redemption'
+    else:
+        taxable_income = 0
+        income_type = 'other'
+    
+    return {
+        **transaction,
+        'taxYear': get_tax_year(date_str),
+        'taxableIncome': round(taxable_income, 2),
+        'incomeType': income_type
+    }
+```
+
+### Testing Tax Audit Trail
+
+**Test Scenario 1: Monthly Payout - Tax Metadata**
+1. Create investment with monthly payout
+2. Advance time by 1 month
+3. Verify distribution has:
+   - `taxYear: 2024`
+   - `taxableIncome: 66.67`
+   - `incomeType: "interest"`
+
+**Test Scenario 2: Compounding - Constructive Receipt**
+1. Create investment with compounding
+2. Advance time by 1 month
+3. Verify distribution has:
+   - `constructiveReceipt: true`
+   - `actualReceipt: false`
+   - `taxableIncome: 83.33`
+4. Verify contribution has:
+   - `taxableIncome: 0`
+   - `incomeType: "reinvestment"`
+
+**Test Scenario 3: Tax Year Locking**
+1. Create transaction in 2023
+2. Set app time to Feb 2, 2024
+3. Attempt to modify 2023 transaction
+4. Should fail with "Tax year 2023 is locked" error
+
+### Key Points
+
+✅ **Audit Trail Only** - We document, we don't calculate  
+✅ **Immutable After Filing** - Locked after Jan 31 of following year  
+✅ **Constructive Receipt** - Compounding interest is taxable even if reinvested  
+✅ **External Tax Prep** - Data exported to accountants or tax software  
+✅ **Complete Records** - Every financial event is tagged with tax metadata  
 
 ---
 
@@ -4651,6 +4936,9 @@ Expected:
 - Investment continues earning interest during withdrawal notice
 - Final payout includes partial month interest
 - `finalValue` and `totalEarnings` stored on completion
+- Admin uses the `complete` action (or legacy `approve`) to calculate final payout at payout time
+- Withdrawal records store both quoted and final payout amounts
+- Redemption transactions persist quoted amounts and are updated with final payout metadata at completion time
 
 #### 7. **Account Type Locking**
 - Account locks when investment reaches `pending` status

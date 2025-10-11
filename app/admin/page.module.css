@@ -402,12 +402,6 @@
   color: var(--color-info);
 }
 
-.investmentId {
-  font-weight: 600;
-  font-size: 14px;
-  color: var(--color-info);
-}
-
 .accountBadges {
   display: flex;
   flex-direction: column;
@@ -473,42 +467,6 @@
   font-weight: 500;
   text-align: center;
   border: 1px solid #f59e0b;
-}
-
-.investmentStatus {
-  padding: 4px 12px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: capitalize;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.investmentStatus[data-status="pending"] {
-  background: #fef3c7;
-  color: #92400e;
-}
-
-.investmentStatus[data-status="active"] {
-  background: #dcfce7;
-  color: #166534;
-}
-
-.investmentStatus[data-status="approved"] {
-  background: #dbeafe;
-  color: #1e40af;
-}
-
-.investmentStatus[data-status="rejected"] {
-  background: #fee2e2;
-  color: #991b1b;
-}
-
-.investmentStatus[data-status="withdrawn"] {
-  background: #f3f4f6;
-  color: #4b5563;
 }
 
 .accountCardBody {
@@ -756,8 +714,7 @@
     width: 100%;
   }
 
-  .accountId,
-  .investmentId {
+  .accountId {
     font-size: 11px;
   }
 

@@ -575,13 +575,13 @@ export default function AdminUserDetailsPage({ params }) {
                           letterSpacing: '0.025em',
                           background: inv.status === 'active' ? '#dcfce7' :
                                     inv.status === 'pending' ? '#fef3c7' :
-                                    inv.status === 'approved' ? '#dbeafe' :
-                                    inv.status === 'invested' ? '#f0fdf4' :
+                                    inv.status === 'withdrawal_notice' ? '#e0f2fe' :
+                                    inv.status === 'withdrawn' ? '#f1f5f9' :
                                     '#fee2e2',
                           color: inv.status === 'active' ? '#166534' :
                                 inv.status === 'pending' ? '#92400e' :
-                                inv.status === 'approved' ? '#1e40af' :
-                                inv.status === 'invested' ? '#166534' :
+                                inv.status === 'withdrawal_notice' ? '#2563eb' :
+                                inv.status === 'withdrawn' ? '#1f2937' :
                                 '#991b1b'
                         }}>
                           {inv.status}
@@ -753,37 +753,54 @@ export default function AdminUserDetailsPage({ params }) {
             )}
           </div>
 
-          {/* Transactions Section */}
+          {/* Activity Section */}
           <div className={styles.sectionCard}>
             <div className={styles.sectionHeader}>
-              <h2 className={styles.sectionTitle}>Transactions</h2>
+              <h2 className={styles.sectionTitle}>Activity</h2>
             </div>
             {(() => {
-              // Collect all distribution transactions from user's investments
-              const allDistributions = []
+              // Collect all activity events
+              const allActivity = []
+              
+              // Add user activity events (account creation, withdrawals, investment status changes, etc.)
+              if (user.activity && Array.isArray(user.activity)) {
+                user.activity.forEach(event => {
+                  allActivity.push({
+                    ...event,
+                    category: 'account'
+                  })
+                })
+              }
+              
+              // Add investment transaction events (distributions, contributions)
+              // NOTE: We filter out 'investment' type - that's just the initial principal ledger entry, not an activity event
               if (user.investments && user.investments.length > 0) {
                 user.investments.forEach(inv => {
                   if (inv.transactions && Array.isArray(inv.transactions)) {
                     inv.transactions.forEach(tx => {
-                      if (tx.type === 'distribution' || tx.type === 'contribution') {
-                        allDistributions.push({
-                          ...tx,
-                          investmentId: inv.id,
-                          lockupPeriod: inv.lockupPeriod,
-                          paymentFrequency: inv.paymentFrequency
-                        })
-                      }
+                      // Skip 'investment' type transactions (initial principal ledger entries)
+                      // Activity panel should show: distributions, contributions, redemptions
+                      // The investment creation/confirmation is tracked in user.activity
+                      if (tx.type === 'investment') return
+                      
+                      allActivity.push({
+                        ...tx,
+                        investmentId: inv.id,
+                        lockupPeriod: inv.lockupPeriod,
+                        paymentFrequency: inv.paymentFrequency,
+                        category: 'transaction'
+                      })
                     })
                   }
                 })
               }
 
-              // Sort by date (most recent first), then by type (distribution before contribution)
-              allDistributions.sort((a, b) => {
+              // Sort by date (newest first), then by type for same dates
+              allActivity.sort((a, b) => {
                 const dateA = a.date ? new Date(a.date).getTime() : 0
                 const dateB = b.date ? new Date(b.date).getTime() : 0
                 
-                // First sort by date (most recent first)
+                // First sort by date (newest first)
                 if (dateA !== dateB) {
                   return dateB - dateA
                 }
@@ -800,34 +817,72 @@ export default function AdminUserDetailsPage({ params }) {
                 return 0 // Same type, maintain order
               })
 
-              // Calculate summary stats
-              const payouts = allDistributions.filter(tx => tx.type === 'distribution')
-              const contributions = allDistributions.filter(tx => tx.type === 'contribution')
-              const totalAmount = allDistributions.reduce((sum, tx) => sum + (tx.amount || 0), 0)
-              const pendingCount = allDistributions.filter(tx => tx.status === 'pending').length
+              // Helper function to get event metadata (icon, title, color)
+              const getEventMeta = (eventType) => {
+                switch (eventType) {
+                  case 'account_created':
+                    return { icon: '👤', title: 'Account Created', color: '#0369a1', showAmount: false }
+                  case 'investment_created':
+                    return { icon: '🧾', title: 'Investment Created', color: '#0369a1', showAmount: true }
+                  case 'investment_confirmed':
+                    return { icon: '✅', title: 'Investment Confirmed', color: '#065f46', showAmount: false }
+                  case 'investment_rejected':
+                    return { icon: '❌', title: 'Investment Rejected', color: '#991b1b', showAmount: false }
+                  case 'investment':
+                    return { icon: '🧾', title: 'Investment', color: '#0369a1', showAmount: true }
+                  case 'distribution':
+                    return { icon: '💸', title: 'Distribution', color: '#7c3aed', showAmount: true }
+                  case 'monthly_distribution':
+                    return { icon: '💸', title: 'Monthly Payout', color: '#7c3aed', showAmount: true }
+                  case 'contribution':
+                    return { icon: '📈', title: 'Contribution', color: '#0369a1', showAmount: true }
+                  case 'monthly_compounded':
+                    return { icon: '📈', title: 'Monthly Compounded', color: '#0369a1', showAmount: true }
+                  case 'withdrawal_requested':
+                    return { icon: '🏦', title: 'Withdrawal Requested', color: '#ca8a04', showAmount: true }
+                  case 'withdrawal_notice_started':
+                    return { icon: '⏳', title: 'Withdrawal Notice Started', color: '#ca8a04', showAmount: false }
+                  case 'withdrawal_approved':
+                    return { icon: '✅', title: 'Withdrawal Processed', color: '#065f46', showAmount: true }
+                  case 'withdrawal_rejected':
+                    return { icon: '❌', title: 'Withdrawal Rejected', color: '#991b1b', showAmount: false }
+                  case 'redemption':
+                    return { icon: '🏦', title: 'Redemption', color: '#ca8a04', showAmount: true }
+                  default:
+                    return { icon: '•', title: eventType || 'Unknown Event', color: '#6b7280', showAmount: true }
+                }
+              }
 
-              return allDistributions.length > 0 ? (
+              // Calculate summary stats
+              const distributions = allActivity.filter(e => e.type === 'distribution' || e.type === 'monthly_distribution')
+              const contributions = allActivity.filter(e => e.type === 'contribution' || e.type === 'monthly_compounded')
+              const accountEvents = allActivity.filter(e => e.category === 'account')
+              const totalDistributionAmount = distributions.reduce((sum, e) => sum + (e.amount || 0), 0)
+              const totalContributionAmount = contributions.reduce((sum, e) => sum + (e.amount || 0), 0)
+              const pendingCount = allActivity.filter(e => e.status === 'pending').length
+
+              return allActivity.length > 0 ? (
                 <>
-                  {/* Transaction Summary */}
+                  {/* Activity Summary */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '20px' }}>
                     <div style={{ padding: '16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                      <div style={{ fontSize: '14px', color: '#64748b', marginBottom: '4px' }}>Total Transactions</div>
+                      <div style={{ fontSize: '14px', color: '#64748b', marginBottom: '4px' }}>Total Activity</div>
                       <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#1f2937' }}>
-                        ${totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {allActivity.length}
                       </div>
-                      <div style={{ fontSize: '12px', color: '#64748b' }}>{allDistributions.length} transactions</div>
+                      <div style={{ fontSize: '12px', color: '#64748b' }}>{accountEvents.length} account events</div>
                     </div>
                     <div style={{ padding: '16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                       <div style={{ fontSize: '14px', color: '#64748b', marginBottom: '4px' }}>💸 Distributions</div>
                       <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#7c3aed' }}>
-                        ${payouts.reduce((sum, tx) => sum + (tx.amount || 0), 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        ${totalDistributionAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
-                      <div style={{ fontSize: '12px', color: '#64748b' }}>{payouts.length} distributions</div>
+                      <div style={{ fontSize: '12px', color: '#64748b' }}>{distributions.length} distributions</div>
                     </div>
                     <div style={{ padding: '16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                       <div style={{ fontSize: '14px', color: '#64748b', marginBottom: '4px' }}>📈 Contributions</div>
                       <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#0369a1' }}>
-                        ${contributions.reduce((sum, tx) => sum + (tx.amount || 0), 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        ${totalContributionAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
                       <div style={{ fontSize: '12px', color: '#64748b' }}>{contributions.length} contributions</div>
                     </div>
@@ -835,82 +890,122 @@ export default function AdminUserDetailsPage({ params }) {
                       <div style={{ padding: '16px', background: '#fef3c7', borderRadius: '8px', border: '1px solid #f59e0b' }}>
                         <div style={{ fontSize: '14px', color: '#92400e', marginBottom: '4px' }}>⏳ Pending Approval</div>
                         <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#92400e' }}>{pendingCount}</div>
-                        <div style={{ fontSize: '12px', color: '#92400e' }}>transactions</div>
+                        <div style={{ fontSize: '12px', color: '#92400e' }}>events</div>
                       </div>
                     )}
                   </div>
 
-                  {/* Transaction List */}
+                  {/* Activity List */}
                   <div className={styles.list}>
-                    {allDistributions.map(tx => (
-                      <div key={tx.id} style={{
-                        padding: '16px',
-                        border: '1px solid #e2e8f0',
-                        borderRadius: '8px',
-                        marginBottom: '12px',
-                        background: 'white'
-                      }}>
-                        <div style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          marginBottom: '12px'
+                    {allActivity.map(event => {
+                      const meta = getEventMeta(event.type)
+                      return (
+                        <div key={event.id} style={{
+                          padding: '16px',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: '8px',
+                          marginBottom: '12px',
+                          background: 'white'
                         }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{
-                              fontSize: '18px',
-                              color: tx.type === 'distribution' ? '#7c3aed' : '#0369a1'
-                            }}>
-                              {tx.type === 'distribution' ? '💸' : '📈'}
-                            </span>
-                            <span style={{ fontWeight: 'bold' }}>
-                              {tx.type === 'distribution' ? 'Distribution' : 'Contribution'}
-                            </span>
-                            <span style={{
-                              padding: '2px 8px',
-                              borderRadius: '12px',
-                              fontSize: '12px',
-                              fontWeight: 'bold',
-                              background: tx.status === 'completed' ? '#dcfce7' :
-                                        tx.status === 'pending' ? '#fef3c7' :
-                                        '#fee2e2',
-                              color: tx.status === 'completed' ? '#166534' :
-                                    tx.status === 'pending' ? '#92400e' :
-                                    '#991b1b'
-                            }}>
-                              {tx.status || 'completed'}
-                            </span>
+                          <div style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginBottom: '12px'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{
+                                fontSize: '18px',
+                                color: meta.color
+                              }}>
+                                {meta.icon}
+                              </span>
+                              <span style={{ fontWeight: 'bold' }}>
+                                {meta.title}
+                              </span>
+                              {event.status && (
+                                <span style={{
+                                  padding: '2px 8px',
+                                  borderRadius: '12px',
+                                  fontSize: '12px',
+                                  fontWeight: 'bold',
+                                  background: event.status === 'completed' ? '#dcfce7' :
+                                            event.status === 'pending' ? '#fef3c7' :
+                                            event.status === 'active' ? '#dbeafe' :
+                                            '#fee2e2',
+                                  color: event.status === 'completed' ? '#166534' :
+                                        event.status === 'pending' ? '#92400e' :
+                                        event.status === 'active' ? '#1e40af' :
+                                        '#991b1b'
+                                }}>
+                                  {event.status}
+                                </span>
+                              )}
+                            </div>
+                            {meta.showAmount && event.amount != null && (
+                              <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#1f2937' }}>
+                                ${(event.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </div>
+                            )}
                           </div>
-                          <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#1f2937' }}>
-                            ${(tx.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </div>
-                        </div>
 
-                        <div style={{
-                          display: 'grid',
-                          gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-                          gap: '12px',
-                          fontSize: '14px',
-                          color: '#64748b'
-                        }}>
-                          <div><b>Investment ID:</b> {tx.investmentId}</div>
-                          <div><b>Date:</b> {tx.date ? new Date(tx.date).toLocaleDateString('en-US', {
-                            timeZone: 'America/New_York',
-                            month: 'short',
-                            day: 'numeric',
-                            year: 'numeric'
-                          }) : '-'}</div>
-                          <div><b>Month Index:</b> {tx.monthIndex != null ? `Month ${tx.monthIndex}` : '-'}</div>
-                          <div><b>Lockup Period:</b> {tx.lockupPeriod || '-'}</div>
-                          <div><b>Payment Frequency:</b> {tx.paymentFrequency || '-'}</div>
-                          <div><b>Transaction ID:</b> {tx.id}</div>
+                          <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+                            gap: '12px',
+                            fontSize: '14px',
+                            color: '#64748b'
+                          }}>
+                            {event.investmentId && (
+                              <div><b>Investment ID:</b> {event.investmentId}</div>
+                            )}
+                            <div><b>Date:</b> {event.date ? new Date(event.date).toLocaleDateString('en-US', {
+                              timeZone: 'America/New_York',
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                              hour: 'numeric',
+                              minute: '2-digit'
+                            }) : '-'}</div>
+                            {event.monthIndex != null && (
+                              <div><b>Month Index:</b> Month {event.monthIndex}</div>
+                            )}
+                            {event.lockupPeriod && (
+                              <div><b>Lockup Period:</b> {event.lockupPeriod}</div>
+                            )}
+                            {event.paymentFrequency && (
+                              <div><b>Payment Frequency:</b> {event.paymentFrequency}</div>
+                            )}
+                            <div>
+                              <b>Event ID:</b>{' '}
+                              {(event.type === 'investment' || event.type === 'distribution' || event.type === 'contribution') && event.id ? (
+                                <button
+                                  onClick={() => router.push(`/admin/transactions/${event.id}`)}
+                                  style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    color: '#0369a1',
+                                    textDecoration: 'underline',
+                                    cursor: 'pointer',
+                                    padding: 0,
+                                    font: 'inherit'
+                                  }}
+                                  title="View transaction details"
+                                >
+                                  {event.id}
+                                </button>
+                              ) : (
+                                <span>{event.id}</span>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 </>
               ) : (
-                <div className={styles.muted}>No distributions</div>
+                <div className={styles.muted}>No activity yet</div>
               )
             })()}
           </div>
