@@ -18,7 +18,8 @@ export default function AdminInvestmentDetailsPage({ params }) {
     status: '',
     paymentFrequency: '',
     lockupPeriod: '',
-    accountType: ''
+    accountType: '',
+    paymentMethod: ''
   })
 
   useEffect(() => {
@@ -70,7 +71,8 @@ export default function AdminInvestmentDetailsPage({ params }) {
           status: foundInvestment.status || '',
           paymentFrequency: foundInvestment.paymentFrequency || '',
           lockupPeriod: foundInvestment.lockupPeriod || '',
-          accountType: foundInvestment.accountType || ''
+          accountType: foundInvestment.accountType || '',
+          paymentMethod: foundInvestment.paymentMethod || 'ach'
         })
       } catch (e) {
         console.error('Failed to load investment', e)
@@ -103,8 +105,78 @@ export default function AdminInvestmentDetailsPage({ params }) {
     setIsEditing(false)
   }
 
+  // Define valid status transitions (state machine)
+  const validTransitions = {
+    'draft': ['pending'],
+    'pending': ['active', 'rejected'],
+    'active': ['withdrawal_notice'],
+    'withdrawal_notice': ['withdrawn'],
+    'rejected': [],
+    'withdrawn': []
+  }
+
+  // Get valid status options for dropdown
+  const getValidStatusOptions = () => {
+    const currentStatus = investment?.status
+    if (!currentStatus) return ['draft', 'pending', 'active', 'rejected', 'withdrawal_notice', 'withdrawn']
+    
+    const allowed = validTransitions[currentStatus] || []
+    // Always include the current status
+    return [currentStatus, ...allowed]
+  }
+
+  const validateForm = () => {
+    // Validate amount
+    const amount = parseFloat(form.amount)
+    if (isNaN(amount) || amount <= 0) {
+      return 'Investment amount must be greater than zero'
+    }
+    if (amount < 1000) {
+      return 'Minimum investment amount is $1,000'
+    }
+    if (amount % 10 !== 0) {
+      return 'Investment amount must be in $10 increments'
+    }
+
+    // Validate status transitions
+    const currentStatus = investment.status
+    const requestedStatus = form.status
+    
+    if (currentStatus !== requestedStatus) {
+      const allowedStatuses = validTransitions[currentStatus] || []
+      if (!allowedStatuses.includes(requestedStatus)) {
+        return `Invalid status transition from '${currentStatus}' to '${requestedStatus}'. Allowed: ${allowedStatuses.join(', ') || 'none'}`
+      }
+    }
+
+    // Cannot change amount on active investments
+    if (investment.status === 'active' && investment.amount !== amount) {
+      return 'Cannot change investment amount on active investments. Amount is locked for tax reporting and audit compliance.'
+    }
+
+    // IRA accounts cannot use monthly payment frequency
+    if (form.accountType === 'ira' && form.paymentFrequency === 'monthly') {
+      return 'IRA accounts can only use compounding payment frequency'
+    }
+
+    // Account type must match user's account type
+    if (user.accountType && form.accountType !== user.accountType) {
+      return `Account type must be ${user.accountType} for this user`
+    }
+
+    return null // No errors
+  }
+
   const handleSave = async () => {
     if (!user || !investment) return
+    
+    // Validate form before submission
+    const validationError = validateForm()
+    if (validationError) {
+      alert(validationError)
+      return
+    }
+
     setIsSaving(true)
     try {
       const res = await fetch(`/api/users/${user.id}`, {
@@ -119,7 +191,8 @@ export default function AdminInvestmentDetailsPage({ params }) {
             status: form.status,
             paymentFrequency: form.paymentFrequency,
             lockupPeriod: form.lockupPeriod,
-            accountType: form.accountType
+            accountType: form.accountType,
+            paymentMethod: form.paymentMethod
           }
         })
       })
@@ -268,19 +341,33 @@ export default function AdminInvestmentDetailsPage({ params }) {
                   className={styles.input}
                   min="1000"
                   step="10"
-                  disabled={!isEditing}
+                  disabled={!isEditing || investment.status === 'active'}
                 />
+                {investment.status === 'active' && (
+                  <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>
+                    ⚠️ Amount is locked on active investments for tax compliance
+                  </div>
+                )}
               </div>
               <div>
                 <label>Status</label>
                 <select name="status" value={form.status} onChange={handleChange} className={styles.input} disabled={!isEditing}>
-                  <option value="draft">Draft</option>
-                  <option value="pending">Pending</option>
-                  <option value="active">Active</option>
-                  <option value="rejected">Rejected</option>
-                  <option value="withdrawal_notice">Withdrawal Notice</option>
-                  <option value="withdrawn">Withdrawn</option>
+                  {getValidStatusOptions().map(status => (
+                    <option key={status} value={status}>
+                      {status === 'draft' && 'Draft'}
+                      {status === 'pending' && 'Pending'}
+                      {status === 'active' && 'Active'}
+                      {status === 'rejected' && 'Rejected'}
+                      {status === 'withdrawal_notice' && 'Withdrawal Notice'}
+                      {status === 'withdrawn' && 'Withdrawn'}
+                    </option>
+                  ))}
                 </select>
+                {isEditing && investment.status && (
+                  <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>
+                    Valid transitions from {investment.status}: {(validTransitions[investment.status] || []).join(', ') || 'none'}
+                  </div>
+                )}
               </div>
               <div>
                 <label>Payment Frequency</label>
@@ -288,6 +375,11 @@ export default function AdminInvestmentDetailsPage({ params }) {
                   <option value="monthly">Monthly</option>
                   <option value="compounding">Compounding</option>
                 </select>
+                {isEditing && form.accountType === 'ira' && form.paymentFrequency === 'monthly' && (
+                  <div style={{ fontSize: '12px', color: '#dc2626', marginTop: '4px' }}>
+                    ⚠️ IRA accounts can only use compounding
+                  </div>
+                )}
               </div>
               <div>
                 <label>Lockup Period</label>
@@ -304,6 +396,28 @@ export default function AdminInvestmentDetailsPage({ params }) {
                   <option value="entity">Entity</option>
                   <option value="ira">IRA</option>
                 </select>
+                {isEditing && user?.accountType && form.accountType !== user.accountType && (
+                  <div style={{ fontSize: '12px', color: '#dc2626', marginTop: '4px' }}>
+                    ⚠️ User's account type is {user.accountType}
+                  </div>
+                )}
+              </div>
+              <div>
+                <label>Payment Method</label>
+                <select name="paymentMethod" value={form.paymentMethod} onChange={handleChange} className={styles.input} disabled={!isEditing}>
+                  <option value="ach">ACH Transfer</option>
+                  <option value="wire">Wire Transfer</option>
+                </select>
+                {form.paymentMethod === 'wire' && (
+                  <div style={{ fontSize: '12px', color: '#92400e', marginTop: '4px' }}>
+                    🏦 Wire transfers require manual approval
+                  </div>
+                )}
+                {form.paymentMethod === 'ach' && investment.autoApproved && (
+                  <div style={{ fontSize: '12px', color: '#1e40af', marginTop: '4px' }}>
+                    ✓ Auto-approved (ACH)
+                  </div>
+                )}
               </div>
             </div>
 

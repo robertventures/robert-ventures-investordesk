@@ -1,9 +1,10 @@
 import { useMemo } from 'react'
+import { calculateInvestmentValue } from '../../../lib/investmentCalculations'
 
 /**
  * Custom hook to calculate dashboard metrics from users data
  */
-export function useAdminMetrics(users, withdrawals = [], pendingPayouts = []) {
+export function useAdminMetrics(users, withdrawals = [], pendingPayouts = [], appTime = null) {
   const nonAdminUsers = useMemo(() => 
     (users || []).filter(u => !u.isAdmin), 
     [users]
@@ -12,8 +13,10 @@ export function useAdminMetrics(users, withdrawals = [], pendingPayouts = []) {
   const metrics = useMemo(() => {
     const now = new Date()
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+    const currentTime = appTime || now
     
     let totalAUM = 0
+    let totalAmountOwed = 0
     let pendingCapital = 0
     let totalAmountRaised = 0
     let pendingInvestmentsCount = 0
@@ -59,9 +62,13 @@ export function useAdminMetrics(users, withdrawals = [], pendingPayouts = []) {
           totalAmountRaised += amount
         }
 
-        if (inv.status === 'active') {
+        if (inv.status === 'active' || inv.status === 'withdrawal_notice') {
           totalAUM += amount
           activeInvestmentsCount++
+          
+          // Calculate current value with compound interest for total amount owed
+          const calculation = calculateInvestmentValue(inv, currentTime)
+          totalAmountOwed += calculation.currentValue
         } else if (inv.status === 'pending') {
           pendingCapital += amount
           pendingInvestmentsCount++
@@ -97,14 +104,6 @@ export function useAdminMetrics(users, withdrawals = [], pendingPayouts = []) {
     const avgInvestmentSize = activeInvestmentsCount > 0 
       ? totalAUM / activeInvestmentsCount 
       : 0
-      
-    const pendingWithdrawalAmount = withdrawals.reduce((sum, w) => 
-      sum + (Number(w.amount) || 0), 0
-    )
-    const pendingPayoutAmount = pendingPayouts.reduce((sum, p) => 
-      sum + (Number(p.amount) || 0), 0
-    )
-    const totalAmountOwed = pendingWithdrawalAmount + pendingPayoutAmount
     
     const investorsCount = nonAdminUsers.filter(u => 
       (u.investments || []).some(inv => inv.status === 'active')
@@ -140,7 +139,7 @@ export function useAdminMetrics(users, withdrawals = [], pendingPayouts = []) {
       investmentsByFrequency,
       accountsByType
     }
-  }, [nonAdminUsers, withdrawals, pendingPayouts])
+  }, [nonAdminUsers, withdrawals, pendingPayouts, appTime])
 
   return metrics
 }

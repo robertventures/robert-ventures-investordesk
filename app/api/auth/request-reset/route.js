@@ -21,7 +21,6 @@ export async function POST(request) {
 
     if (!user) {
       // For security, we still return success to prevent email enumeration
-      console.log('Password reset requested for non-existent email:', email)
       return NextResponse.json({ success: true })
     }
 
@@ -44,11 +43,6 @@ export async function POST(request) {
     }
 
     // In production, you would send an email here
-    // For now, we'll just log it (and in dev, the token can be retrieved from the database)
-    console.log('Password reset requested for:', email)
-    console.log('Reset token:', resetToken)
-    console.log('Reset URL:', `http://localhost:3000/reset-password?token=${resetToken}`)
-
     return NextResponse.json({ 
       success: true,
       // In dev mode, include the token (remove in production!)

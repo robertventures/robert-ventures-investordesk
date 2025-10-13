@@ -73,7 +73,6 @@ export default function PersonalDetailsForm() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    console.log('Form submitted with data:', formData)
     
     if (validateForm()) {
       try {
@@ -81,9 +80,6 @@ export default function PersonalDetailsForm() {
         const userId = localStorage.getItem('currentUserId')
         const email = new URLSearchParams(window.location.search).get('email') || 
                      localStorage.getItem('signupEmail')
-        
-        console.log('User ID found:', userId)
-        console.log('Email found:', email)
         
         if (!userId) {
           alert('User session not found. Please start the signup process again.')
@@ -97,8 +93,6 @@ export default function PersonalDetailsForm() {
           phoneNumber: normalizePhoneForDB(formData.phoneNumber)
         }
         
-        console.log('Updating user with data:', updateData)
-        
         // Update existing user in database
         const response = await fetch(`/api/users/${userId}`, {
           method: 'PUT',
@@ -108,13 +102,10 @@ export default function PersonalDetailsForm() {
           body: JSON.stringify(updateData)
         })
         
-        console.log('API response status:', response.status)
         const result = await response.json()
-        console.log('API response data:', result)
         
         if (result.success) {
           // Keep user session for next step
-          console.log('User updated:', result.user)
           // Navigate to investment page
           router.push('/investment')
         } else {
@@ -124,8 +115,6 @@ export default function PersonalDetailsForm() {
         console.error('Error updating user data:', error)
         alert('An error occurred while saving your data. Please try again.')
       }
-    } else {
-      console.log('Form validation failed')
     }
   }
 

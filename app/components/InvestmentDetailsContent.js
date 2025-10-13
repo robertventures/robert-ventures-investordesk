@@ -266,6 +266,12 @@ export default function InvestmentDetailsContent({ investmentId }) {
                   </span>
                 </div>
                 <div className={styles.detailItem}>
+                  <span className={styles.detailLabel}>PAYMENT METHOD</span>
+                  <span className={styles.detailValue}>
+                    {investmentData.paymentMethod === 'wire' ? '🏦 Wire Transfer' : '🔄 ACH Transfer'}
+                  </span>
+                </div>
+                <div className={styles.detailItem}>
                   <span className={styles.detailLabel}>BONDS</span>
                   <span className={styles.detailValue}>{investmentData.bonds || '0'}</span>
                 </div>

@@ -15,8 +15,10 @@ export default function AdminUserDetailsPage({ params }) {
   const [isVerifying, setIsVerifying] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [appTime, setAppTime] = useState(null)
+  const [activityPage, setActivityPage] = useState(1)
 
   const MIN_DOB = '1900-01-01'
+  const ACTIVITY_ITEMS_PER_PAGE = 20
 
   const formatZip = (value = '') => value.replace(/\D/g, '').slice(0, 5)
   const formatPhone = (value = '') => {
@@ -757,6 +759,17 @@ export default function AdminUserDetailsPage({ params }) {
           <div className={styles.sectionCard}>
             <div className={styles.sectionHeader}>
               <h2 className={styles.sectionTitle}>Activity</h2>
+              {(() => {
+                const totalActivity = user?.activity?.length || 0
+                const totalTransactions = user?.investments?.reduce((sum, inv) => sum + (inv.transactions?.filter(tx => tx.type !== 'investment')?.length || 0), 0) || 0
+                const total = totalActivity + totalTransactions
+                const totalPages = Math.ceil(total / ACTIVITY_ITEMS_PER_PAGE)
+                return totalPages > 1 ? (
+                  <div style={{ fontSize: '14px', color: '#6b7280' }}>
+                    Page {activityPage} of {totalPages}
+                  </div>
+                ) : null
+              })()}
             </div>
             {(() => {
               // Collect all activity events
@@ -861,6 +874,12 @@ export default function AdminUserDetailsPage({ params }) {
               const totalContributionAmount = contributions.reduce((sum, e) => sum + (e.amount || 0), 0)
               const pendingCount = allActivity.filter(e => e.status === 'pending').length
 
+              // Pagination
+              const totalActivityPages = Math.ceil(allActivity.length / ACTIVITY_ITEMS_PER_PAGE)
+              const startIndex = (activityPage - 1) * ACTIVITY_ITEMS_PER_PAGE
+              const endIndex = startIndex + ACTIVITY_ITEMS_PER_PAGE
+              const paginatedActivity = allActivity.slice(startIndex, endIndex)
+
               return allActivity.length > 0 ? (
                 <>
                   {/* Activity Summary */}
@@ -897,7 +916,7 @@ export default function AdminUserDetailsPage({ params }) {
 
                   {/* Activity List */}
                   <div className={styles.list}>
-                    {allActivity.map(event => {
+                    {paginatedActivity.map(event => {
                       const meta = getEventMeta(event.type)
                       return (
                         <div key={event.id} style={{
@@ -1003,6 +1022,80 @@ export default function AdminUserDetailsPage({ params }) {
                       )
                     })}
                   </div>
+
+                  {/* Pagination Controls */}
+                  {totalActivityPages > 1 && (
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '16px',
+                      padding: '24px 16px',
+                      marginTop: '20px',
+                      background: '#ffffff',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '8px'
+                    }}>
+                      <button
+                        onClick={() => setActivityPage(prev => Math.max(1, prev - 1))}
+                        disabled={activityPage === 1}
+                        style={{
+                          padding: '8px 16px',
+                          background: activityPage === 1 ? '#f3f4f6' : '#0369a1',
+                          color: activityPage === 1 ? '#9ca3af' : 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          fontSize: '14px',
+                          fontWeight: 500,
+                          cursor: activityPage === 1 ? 'not-allowed' : 'pointer',
+                          transition: 'all 0.2s ease',
+                          minWidth: '100px',
+                          opacity: activityPage === 1 ? 0.5 : 1
+                        }}
+                      >
+                        ← Previous
+                      </button>
+                      <div style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '4px',
+                        fontSize: '14px',
+                        fontWeight: 500,
+                        color: '#111827',
+                        minWidth: '150px',
+                        textAlign: 'center'
+                      }}>
+                        Page {activityPage} of {totalActivityPages}
+                        <span style={{
+                          fontSize: '12px',
+                          color: '#6b7280',
+                          fontWeight: 400
+                        }}>
+                          (Showing {startIndex + 1}-{Math.min(endIndex, allActivity.length)} of {allActivity.length})
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => setActivityPage(prev => Math.min(totalActivityPages, prev + 1))}
+                        disabled={activityPage === totalActivityPages}
+                        style={{
+                          padding: '8px 16px',
+                          background: activityPage === totalActivityPages ? '#f3f4f6' : '#0369a1',
+                          color: activityPage === totalActivityPages ? '#9ca3af' : 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          fontSize: '14px',
+                          fontWeight: 500,
+                          cursor: activityPage === totalActivityPages ? 'not-allowed' : 'pointer',
+                          transition: 'all 0.2s ease',
+                          minWidth: '100px',
+                          opacity: activityPage === totalActivityPages ? 0.5 : 1
+                        }}
+                      >
+                        Next →
+                      </button>
+                    </div>
+                  )}
                 </>
               ) : (
                 <div className={styles.muted}>No activity yet</div>

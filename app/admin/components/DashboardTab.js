@@ -1,3 +1,4 @@
+import { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import MetricCard from './MetricCard'
 import ActionCard from './ActionCard'
@@ -7,32 +8,177 @@ import styles from './DashboardTab.module.css'
 /**
  * Main dashboard tab showing overview metrics and recent activity
  */
-export default function DashboardTab({ metrics, pendingInvestments, onApprove, onReject, savingId }) {
+export default function DashboardTab({ 
+  metrics, 
+  pendingInvestments, 
+  pendingPayouts,
+  isLoadingPayouts,
+  onApprove, 
+  onReject, 
+  savingId,
+  onPayoutAction,
+  onRefreshPayouts
+}) {
   const router = useRouter()
+
+  // Selection state for bulk actions
+  const [selectedPayouts, setSelectedPayouts] = useState(new Set())
+  const [isProcessingBulk, setIsProcessingBulk] = useState(false)
+
+  // Toggle single payout selection
+  const togglePayoutSelection = useCallback((payoutId) => {
+    setSelectedPayouts(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(payoutId)) {
+        newSet.delete(payoutId)
+      } else {
+        newSet.add(payoutId)
+      }
+      return newSet
+    })
+  }, [])
+
+  // Toggle all payouts selection
+  const toggleSelectAll = useCallback(() => {
+    if (selectedPayouts.size === pendingPayouts.length) {
+      setSelectedPayouts(new Set())
+    } else {
+      setSelectedPayouts(new Set(pendingPayouts.map(p => p.id)))
+    }
+  }, [pendingPayouts, selectedPayouts.size])
+
+  // Bulk complete selected payouts
+  const handleBulkComplete = useCallback(async () => {
+    if (selectedPayouts.size === 0) return
+    
+    if (!confirm(`Mark ${selectedPayouts.size} payout(s) as completed? This will bypass bank transfers.`)) {
+      return
+    }
+
+    setIsProcessingBulk(true)
+    let successCount = 0
+    let failCount = 0
+    
+    try {
+      for (const payoutId of selectedPayouts) {
+        const payout = pendingPayouts.find(p => p.id === payoutId)
+        if (payout) {
+          try {
+            const res = await fetch('/api/admin/pending-payouts', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                action: 'complete', 
+                userId: payout.userId, 
+                transactionId: payout.id 
+              })
+            })
+            const data = await res.json()
+            if (data.success) {
+              successCount++
+            } else {
+              failCount++
+            }
+          } catch (e) {
+            failCount++
+          }
+        }
+      }
+      
+      // Show summary message
+      if (failCount === 0) {
+        alert(`Successfully completed ${successCount} payout(s)!`)
+      } else {
+        alert(`Completed ${successCount} payout(s). ${failCount} failed.`)
+      }
+      
+      // Refresh data
+      await onRefreshPayouts()
+      setSelectedPayouts(new Set())
+    } finally {
+      setIsProcessingBulk(false)
+    }
+  }, [selectedPayouts, pendingPayouts, onRefreshPayouts])
+
+  // Bulk fail selected payouts
+  const handleBulkFail = useCallback(async () => {
+    if (selectedPayouts.size === 0) return
+    
+    const reason = prompt(`Enter failure reason for ${selectedPayouts.size} payout(s):`)
+    if (!reason) return
+
+    setIsProcessingBulk(true)
+    let successCount = 0
+    let failCount = 0
+    
+    try {
+      for (const payoutId of selectedPayouts) {
+        const payout = pendingPayouts.find(p => p.id === payoutId)
+        if (payout) {
+          try {
+            const res = await fetch('/api/admin/pending-payouts', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                action: 'fail', 
+                userId: payout.userId, 
+                transactionId: payout.id,
+                failureReason: reason
+              })
+            })
+            const data = await res.json()
+            if (data.success) {
+              successCount++
+            } else {
+              failCount++
+            }
+          } catch (e) {
+            failCount++
+          }
+        }
+      }
+      
+      // Show summary message
+      if (failCount === 0) {
+        alert(`Successfully marked ${successCount} payout(s) as failed.`)
+      } else {
+        alert(`Marked ${successCount} payout(s) as failed. ${failCount} operations failed.`)
+      }
+      
+      // Refresh data
+      await onRefreshPayouts()
+      setSelectedPayouts(new Set())
+    } finally {
+      setIsProcessingBulk(false)
+    }
+  }, [selectedPayouts, pendingPayouts, onRefreshPayouts])
+
+  const allSelected = pendingPayouts && pendingPayouts.length > 0 && selectedPayouts.size === pendingPayouts.length
+  const someSelected = selectedPayouts.size > 0
 
   return (
     <div className={styles.dashboardTab}>
       {/* Primary Metrics */}
       <div className={styles.primaryMetricsGrid}>
         <MetricCard 
-          label="Total AUM" 
-          value={`$${metrics.totalAUM.toLocaleString()}`} 
-        />
-        <MetricCard 
-          label="Pending Capital" 
-          value={`$${metrics.pendingCapital.toLocaleString()}`} 
-        />
-        <MetricCard 
-          label="Total Amount Owed" 
-          value={`$${metrics.totalAmountOwed.toLocaleString()}`} 
+          label="Active Investors" 
+          value={metrics.investorsCount} 
         />
         <MetricCard 
           label="Total Accounts" 
           value={metrics.totalAccounts} 
         />
         <MetricCard 
-          label="Active Investors" 
-          value={metrics.investorsCount} 
+          label="Total AUM" 
+          value={`$${metrics.totalAUM.toLocaleString()}`} 
+        />
+        <MetricCard 
+          label="Total Amount Owed" 
+          value={`$${metrics.totalAmountOwed.toLocaleString()}`} 
+        />
+        <MetricCard 
+          label="Pending Investments" 
+          value={`$${metrics.pendingCapital.toLocaleString()}`} 
         />
       </div>
 
@@ -66,6 +212,10 @@ export default function DashboardTab({ metrics, pendingInvestments, onApprove, o
                       <span className={styles.pendingItemLockup}>
                         {inv.lockupPeriod === '1-year' ? '1-Year' : '3-Year'} Lockup
                       </span>
+                      <span className={styles.pendingItemDivider}>•</span>
+                      <span className={`${styles.pendingItemPaymentMethod} ${inv.paymentMethod === 'wire' ? styles.wirePayment : styles.achPayment}`}>
+                        {inv.paymentMethod === 'wire' ? '🏦 Wire Transfer' : '🔄 ACH Transfer'}
+                      </span>
                     </div>
                   </div>
                   <div className={styles.pendingItemAmount}>
@@ -75,7 +225,7 @@ export default function DashboardTab({ metrics, pendingInvestments, onApprove, o
                 <div className={styles.pendingItemActions}>
                   <button
                     onClick={() => {
-                      if (confirm(`Approve investment ${inv.id} for ${inv.user.firstName} ${inv.user.lastName}?\n\nAmount: $${inv.amount.toLocaleString()}\nAccount Type: ${inv.accountType}\nLockup: ${inv.lockupPeriod === '1-year' ? '1-Year' : '3-Year'}\n\nThis will activate the investment and lock the user's account type.`)) {
+                      if (confirm(`Approve investment ${inv.id} for ${inv.user.firstName} ${inv.user.lastName}?\n\nAmount: $${inv.amount.toLocaleString()}\nAccount Type: ${inv.accountType}\nLockup: ${inv.lockupPeriod === '1-year' ? '1-Year' : '3-Year'}\nPayment Method: ${inv.paymentMethod === 'wire' ? 'Wire Transfer' : 'ACH Transfer'}\n\nThis will activate the investment and lock the user's account type.`)) {
                         onApprove(inv.user.id, inv.id)
                       }
                     }}
@@ -106,29 +256,167 @@ export default function DashboardTab({ metrics, pendingInvestments, onApprove, o
         )}
       </SectionCard>
 
-      {/* Other Action Items */}
-      {(metrics.pendingWithdrawalsCount > 0 || metrics.pendingPayoutsCount > 0) && (
-        <SectionCard title="Other Actions">
-          <div className={styles.actionGrid}>
-            {metrics.pendingWithdrawalsCount > 0 && (
-              <ActionCard
-                value={metrics.pendingWithdrawalsCount}
-                label="Pending Withdrawals"
-                variant="warning"
-                onClick={() => router.push('/admin?tab=operations')}
-              />
-            )}
-            {metrics.pendingPayoutsCount > 0 && (
-              <ActionCard
-                value={metrics.pendingPayoutsCount}
-                label="Pending Payouts"
-                variant="warning"
-                onClick={() => router.push('/admin?tab=operations')}
-              />
-            )}
+      {/* Pending Payouts Section */}
+      <SectionCard title="Pending Payouts">
+        <div className={styles.sectionHeader}>
+          <p className={styles.sectionDescription}>
+            Monthly interest payments requiring admin approval
+          </p>
+          <button 
+            className={styles.refreshButton} 
+            onClick={onRefreshPayouts} 
+            disabled={isLoadingPayouts}
+          >
+            {isLoadingPayouts ? 'Refreshing...' : 'Refresh'}
+          </button>
+        </div>
+
+        {pendingPayouts && pendingPayouts.length > 0 && (
+          <div className={styles.alertBox}>
+            <strong>⚠️ {pendingPayouts.length} Payout{pendingPayouts.length !== 1 ? 's' : ''} Pending</strong>
+            <p>
+              These monthly interest payments require manual approval from admin.
+              You can retry the payouts or manually mark them as completed once approved.
+            </p>
           </div>
-        </SectionCard>
-      )}
+        )}
+
+        {/* Bulk Actions Bar */}
+        {someSelected && (
+          <div className={styles.bulkActionsBar}>
+            <div className={styles.bulkActionsLeft}>
+              <span className={styles.selectionCount}>
+                {selectedPayouts.size} selected
+              </span>
+              <button
+                className={styles.clearSelectionButton}
+                onClick={() => setSelectedPayouts(new Set())}
+              >
+                Clear
+              </button>
+            </div>
+            <div className={styles.bulkActionsRight}>
+              <button
+                className={styles.bulkCompleteButton}
+                onClick={handleBulkComplete}
+                disabled={isProcessingBulk}
+              >
+                ✓ Complete Selected
+              </button>
+              <button
+                className={styles.bulkFailButton}
+                onClick={handleBulkFail}
+                disabled={isProcessingBulk}
+              >
+                ✗ Fail Selected
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className={styles.tableContainer}>
+          <table className={styles.table}>
+            <thead>
+              <tr>
+                <th className={styles.checkboxCell}>
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={toggleSelectAll}
+                    disabled={!pendingPayouts || pendingPayouts.length === 0}
+                    className={styles.checkbox}
+                  />
+                </th>
+                <th>User</th>
+                <th>Investment ID</th>
+                <th>Amount</th>
+                <th>Scheduled Date</th>
+                <th>Bank Account</th>
+                <th>Status</th>
+                <th>Failure Reason</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {!pendingPayouts || pendingPayouts.length === 0 ? (
+                <tr>
+                  <td colSpan="9" className={styles.emptyState}>
+                    ✅ No pending payouts - all monthly payments have been successfully processed!
+                  </td>
+                </tr>
+              ) : (
+                pendingPayouts.map(payout => (
+                  <tr 
+                    key={payout.id} 
+                    className={`${payout.status === 'rejected' ? styles.failedRow : styles.pendingRow} ${selectedPayouts.has(payout.id) ? styles.selectedRow : ''}`}
+                  >
+                    <td className={styles.checkboxCell}>
+                      <input
+                        type="checkbox"
+                        checked={selectedPayouts.has(payout.id)}
+                        onChange={() => togglePayoutSelection(payout.id)}
+                        className={styles.checkbox}
+                      />
+                    </td>
+                    <td>
+                      <div className={styles.userCell}>
+                        <div className={styles.userName}>{payout.userName || payout.userId}</div>
+                        <div className={styles.userEmail}>{payout.userEmail}</div>
+                      </div>
+                    </td>
+                    <td className={styles.monospaceCell}>{payout.investmentId}</td>
+                    <td><strong>${(payout.amount || 0).toFixed(2)}</strong></td>
+                    <td className={styles.dateCell}>{new Date(payout.date).toLocaleDateString()}</td>
+                    <td className={styles.bankCell}>{payout.payoutBankNickname || 'Not configured'}</td>
+                    <td>
+                      <span className={`${styles.badge} ${styles[payout.status]}`}>
+                        {payout.status.toUpperCase()}
+                      </span>
+                    </td>
+                    <td className={styles.reasonCell}>
+                      {payout.failureReason || (payout.status === 'pending' ? 'Awaiting admin approval' : '-')}
+                    </td>
+                    <td>
+                      <div className={styles.actionButtonGroup}>
+                        <button
+                          className={styles.retryButton}
+                          onClick={() => onPayoutAction('retry', payout.userId, payout.id)}
+                          title="Retry payout"
+                        >
+                          🔄 Retry
+                        </button>
+                        <button
+                          className={styles.completeButton}
+                          onClick={() => {
+                            if (confirm('Mark this payout as completed? This will bypass the bank transfer.')) {
+                              onPayoutAction('complete', payout.userId, payout.id)
+                            }
+                          }}
+                          title="Mark as completed"
+                        >
+                          ✓ Complete
+                        </button>
+                        <button
+                          className={styles.failButton}
+                          onClick={() => {
+                            const reason = prompt('Enter failure reason:')
+                            if (reason) {
+                              onPayoutAction('fail', payout.userId, payout.id, reason)
+                            }
+                          }}
+                          title="Mark as failed"
+                        >
+                          ✗ Fail
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </SectionCard>
 
       {/* Two Column Layout */}
       <div className={styles.twoColumnLayout}>

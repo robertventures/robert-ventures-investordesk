@@ -43,7 +43,7 @@ export default function AdminPage() {
   } = useAdminData()
 
   // Metrics calculation with custom hook
-  const metrics = useAdminMetrics(users, withdrawals, pendingPayouts)
+  const metrics = useAdminMetrics(users, withdrawals, pendingPayouts, timeMachineData?.appTime)
 
   // State for specific tab operations
   const [savingId, setSavingId] = useState(null)
@@ -314,16 +314,12 @@ export default function AdminPage() {
 
   // Time machine operations
   const updateAppTime = async (newAppTime) => {
-    console.log('updateAppTime called with:', newAppTime)
-    console.log('currentUser:', currentUser)
-    
     if (!currentUser || !currentUser.id) {
       alert('Current user not loaded. Please refresh the page.')
       return
     }
     
     try {
-      console.log('Sending time machine update request...')
       const res = await fetch('/api/admin/time-machine', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -338,12 +334,9 @@ export default function AdminPage() {
         throw new Error(`HTTP error! status: ${res.status}`)
       }
       
-      console.log('Parsing response...')
       const data = await res.json()
-      console.log('Response data:', data)
       
       if (data.success) {
-        console.log('Setting time machine data...')
         setTimeMachineData({
           appTime: data.appTime,
           isActive: true,
@@ -351,18 +344,14 @@ export default function AdminPage() {
         })
         
         // Manually trigger transaction sync
-        console.log('Triggering transaction sync...')
         try {
           await fetch('/api/migrate-transactions', { method: 'POST' })
-          console.log('Transaction sync triggered')
         } catch (syncErr) {
           console.error('Failed to sync transactions:', syncErr)
         }
         
         alert('Time machine updated successfully!')
-        console.log('Refreshing users...')
         await refreshUsers()
-        console.log('Update complete!')
       } else {
         alert(data.error || 'Failed to update app time')
       }
@@ -485,7 +474,7 @@ export default function AdminPage() {
                 {activeTab === 'accounts' && 'View and manage user accounts'}
                 {activeTab === 'activity' && 'View all activity events across the platform'}
                 {activeTab === 'distributions' && 'Track all transactions including investments, monthly payments and compounding interest calculations'}
-                {activeTab === 'operations' && 'Manage withdrawals, payouts, and system operations'}
+                {activeTab === 'operations' && 'Manage withdrawals, tax reporting, and system operations'}
               </p>
             </div>
           </div>
@@ -495,9 +484,13 @@ export default function AdminPage() {
             <DashboardTab 
               metrics={metrics} 
               pendingInvestments={pendingInvestments}
+              pendingPayouts={pendingPayouts}
+              isLoadingPayouts={isLoadingPayouts}
               onApprove={approveInvestment}
               onReject={rejectInvestment}
               savingId={savingId}
+              onPayoutAction={handlePayoutAction}
+              onRefreshPayouts={refreshPayouts}
             />
           )}
 
@@ -505,20 +498,16 @@ export default function AdminPage() {
             <OperationsTab
               withdrawals={withdrawals}
               isLoadingWithdrawals={isLoadingWithdrawals}
-              pendingPayouts={pendingPayouts}
-              isLoadingPayouts={isLoadingPayouts}
               timeMachineData={timeMachineData}
               currentUser={currentUser}
               onWithdrawalAction={actOnWithdrawal}
-              onPayoutAction={handlePayoutAction}
-          onTimeMachineUpdate={updateAppTime}
-          onTimeMachineReset={resetAppTime}
-          onDeleteAccounts={deleteAllAccounts}
-          onSeedTestAccounts={seedTestAccounts}
-          isDeletingAccounts={isDeletingAccounts}
-          isSeedingAccounts={isSeedingAccounts}
+              onTimeMachineUpdate={updateAppTime}
+              onTimeMachineReset={resetAppTime}
+              onDeleteAccounts={deleteAllAccounts}
+              onSeedTestAccounts={seedTestAccounts}
+              isDeletingAccounts={isDeletingAccounts}
+              isSeedingAccounts={isSeedingAccounts}
               onRefreshWithdrawals={refreshWithdrawals}
-              onRefreshPayouts={refreshPayouts}
             />
           )}
 

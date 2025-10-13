@@ -48,6 +48,8 @@ export default function TransactionsList({ limit = null, showViewAll = true, fil
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [expandedId, setExpandedId] = useState(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 20
 
   useEffect(() => {
     const load = async () => {
@@ -87,7 +89,19 @@ export default function TransactionsList({ limit = null, showViewAll = true, fil
   if (loading) return <div className={styles.empty}>Loading activity…</div>
   if (!user) return <div className={styles.empty}>No user found.</div>
   const filtered = filterInvestmentId ? events.filter(ev => ev.investmentId === filterInvestmentId) : events
-  const visibleEvents = limit ? filtered.slice(0, limit) : filtered
+  
+  // Apply pagination if no limit is set (limit is used for "Recent Activity" widgets)
+  // When limit is set, we're showing a preview; when not set, show full paginated list
+  let visibleEvents
+  let totalPages = 1
+  if (limit) {
+    visibleEvents = filtered.slice(0, limit)
+  } else {
+    totalPages = Math.ceil(filtered.length / itemsPerPage)
+    const startIndex = (currentPage - 1) * itemsPerPage
+    const endIndex = startIndex + itemsPerPage
+    visibleEvents = filtered.slice(startIndex, endIndex)
+  }
 
   return (
     <div className={styles.listSection}>
@@ -148,9 +162,37 @@ export default function TransactionsList({ limit = null, showViewAll = true, fil
           )
         })}
       </div>
+      
+      {/* Show "View All" button when using limit */}
       {limit && events.length > limit && showViewAll && (
         <div className={styles.footer}>
           <button className={styles.viewAllButton} onClick={() => router.push('/dashboard?section=activity')}>View all activity →</button>
+        </div>
+      )}
+      
+      {/* Show pagination when not using limit and there are multiple pages */}
+      {!limit && totalPages > 1 && (
+        <div className={styles.paginationContainer}>
+          <button
+            className={styles.paginationButton}
+            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+            disabled={currentPage === 1}
+          >
+            ← Previous
+          </button>
+          <div className={styles.paginationInfo}>
+            Page {currentPage} of {totalPages}
+            <span className={styles.paginationCount}>
+              (Showing {((currentPage - 1) * itemsPerPage) + 1}-{Math.min(currentPage * itemsPerPage, filtered.length)} of {filtered.length})
+            </span>
+          </div>
+          <button
+            className={styles.paginationButton}
+            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+            disabled={currentPage === totalPages}
+          >
+            Next →
+          </button>
         </div>
       )}
     </div>

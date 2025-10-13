@@ -48,12 +48,10 @@ export async function GET(request) {
 export async function POST(request) {
   try {
     const body = await request.json()
-    console.log('Received user data:', body)
     const { email, password } = body
     
     // Validate required fields - only email is required for initial creation
     if (!email) {
-      console.log('Missing required field: email')
       return NextResponse.json(
         { success: false, error: 'Email is required' },
         { status: 400 }
@@ -62,10 +60,7 @@ export async function POST(request) {
     
     // Check if user already exists
     const existingUser = await getUserByEmail(email)
-    console.log('Checking for existing user with email:', email)
-    console.log('Existing user found:', existingUser ? 'YES' : 'NO')
     if (existingUser) {
-      console.log('User already exists:', email, 'Existing user ID:', existingUser.id)
       return NextResponse.json(
         { success: false, error: 'User with this email already exists' },
         { status: 409 }
@@ -73,9 +68,7 @@ export async function POST(request) {
     }
     
     // Add new user
-    console.log('Adding new user...')
     const result = await addUser({ email, password })
-    console.log('Add user result:', result)
     
     if (result.success) {
       return NextResponse.json({ success: true, user: result.user }, { status: 201 })

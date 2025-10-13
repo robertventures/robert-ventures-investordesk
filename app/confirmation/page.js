@@ -91,7 +91,6 @@ export default function ConfirmationPage() {
     inputRefs.current[0]?.focus()
     
     // In a real implementation, this would trigger a new email
-    console.log('Resending verification code to:', email)
   }
 
   const handleSubmit = async (e) => {

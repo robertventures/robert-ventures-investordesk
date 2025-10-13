@@ -8,7 +8,6 @@ export async function PUT(request, { params }) {
   try {
     const { id } = params
     const body = await request.json()
-    console.log('Updating user with data:', body)
     
     // Validate that we have at least one field to update
     if (Object.keys(body).length === 0) {
@@ -87,6 +86,17 @@ export async function PUT(request, { params }) {
       const validLockups = ['1-year', '3-year']
       if (body.investment.lockupPeriod && !validLockups.includes(body.investment.lockupPeriod)) {
         return NextResponse.json({ success: false, error: 'Lockup period must be "1-year" or "3-year"' }, { status: 400 })
+      }
+
+      // VALIDATION: Payment method must be valid
+      const validPaymentMethods = ['ach', 'wire']
+      if (body.investment.paymentMethod && !validPaymentMethods.includes(body.investment.paymentMethod)) {
+        return NextResponse.json({ success: false, error: 'Payment method must be "ach" or "wire"' }, { status: 400 })
+      }
+      
+      // Default to ACH if not specified
+      if (!body.investment.paymentMethod) {
+        body.investment.paymentMethod = 'ach'
       }
 
       // VALIDATION: IRA accounts cannot use monthly payment frequency (Bug #2)
@@ -302,21 +312,73 @@ export async function PUT(request, { params }) {
       if (updatedInvestment.accountType === 'ira' && updatedInvestment.paymentFrequency === 'monthly') {
         return NextResponse.json({ success: false, error: 'IRA accounts can only use compounding payment frequency' }, { status: 400 })
       }
+
+      // AUTO-APPROVAL FOR ACH INVESTMENTS
+      // When status changes to 'pending', automatically approve ACH investments
+      if (body.fields.status === 'pending' && updatedInvestment.paymentMethod === 'ach') {
+        // Automatically approve ACH investments - change status to active
+        updatedInvestment.status = 'active'
+        updatedInvestment.autoApproved = true
+        updatedInvestment.autoApprovedReason = 'ACH payment method'
+        
+        // Set confirmation timestamp
+        const appTime = await getCurrentAppTime()
+        const confirmedDate = new Date(appTime)
+        updatedInvestment.confirmedAt = confirmedDate.toISOString()
+        updatedInvestment.confirmationSource = 'auto_ach'
+        
+        // Calculate lockup end date
+        const lockupYears = updatedInvestment.lockupPeriod === '3-year' ? 3 : 1
+        const lockupEndDate = new Date(confirmedDate)
+        lockupEndDate.setFullYear(lockupEndDate.getFullYear() + lockupYears)
+        updatedInvestment.lockupEndDate = lockupEndDate.toISOString()
+      }
+      // Wire investments remain pending for manual approval
+      else if (body.fields.status === 'pending' && updatedInvestment.paymentMethod === 'wire') {
+        // Keep as pending, add metadata
+        updatedInvestment.requiresManualApproval = true
+        updatedInvestment.manualApprovalReason = 'Wire transfer payment method'
+      }
       
       // On confirmation, set server-driven confirmation date and lock up end date
       if (body.fields.status === 'active') {
+        // Validate investment has all required fields before activation
+        if (!updatedInvestment.amount || updatedInvestment.amount <= 0) {
+          return NextResponse.json({
+            success: false,
+            error: 'Cannot activate investment: amount is required and must be greater than zero'
+          }, { status: 400 })
+        }
+        if (!updatedInvestment.paymentFrequency) {
+          return NextResponse.json({
+            success: false,
+            error: 'Cannot activate investment: paymentFrequency is required'
+          }, { status: 400 })
+        }
+        if (!updatedInvestment.lockupPeriod) {
+          return NextResponse.json({
+            success: false,
+            error: 'Cannot activate investment: lockupPeriod is required'
+          }, { status: 400 })
+        }
+        if (!updatedInvestment.accountType) {
+          return NextResponse.json({
+            success: false,
+            error: 'Cannot activate investment: accountType is required'
+          }, { status: 400 })
+        }
+
         // Always derive confirmation date from server app time (supports time machine)
         const appTime = await getCurrentAppTime()
         const confirmedDate = new Date(appTime)
         const lockupYears = updatedInvestment.lockupPeriod === '3-year' ? 3 : 1
-        
-        // Calculate lock up end date if missing
-        if (!updatedInvestment.lockupEndDate) {
-          const lockupEndDate = new Date(confirmedDate)
-          lockupEndDate.setFullYear(lockupEndDate.getFullYear() + lockupYears)
-          updatedInvestment.lockupEndDate = lockupEndDate.toISOString()
-        }
-        
+
+        // Always recalculate lockup end date on confirmation to ensure consistency
+        // This ensures lockupEndDate always matches confirmedAt + lockupPeriod
+        const lockupEndDate = new Date(confirmedDate)
+        lockupEndDate.setFullYear(lockupEndDate.getFullYear() + lockupYears)
+        updatedInvestment.lockupEndDate = lockupEndDate.toISOString()
+
         // Override any client-provided confirmedAt with authoritative server/app time
         updatedInvestment.confirmedAt = confirmedDate.toISOString()
 
@@ -475,7 +537,12 @@ export async function PUT(request, { params }) {
 
       // Remove the investment
       investments.splice(invIndex, 1)
-      
+
+      // Clean up any activity events associated with this investment
+      // This prevents orphaned events from appearing in the activity feed
+      const activity = Array.isArray(user.activity) ? user.activity : []
+      const cleanedActivity = activity.filter(event => event.investmentId !== body.investmentId)
+
       // Unlock user account type if there are no pending/active investments remaining after deletion
       let shouldClearAccountType = false
       if (user.accountType) {
@@ -493,11 +560,12 @@ export async function PUT(request, { params }) {
         entity: null
       } : {}
       
-      const updatedUser = { 
-        ...user, 
-        investments, 
+      const updatedUser = {
+        ...user,
+        investments,
+        activity: cleanedActivity,
         ...accountTypeFields,
-        updatedAt: new Date().toISOString() 
+        updatedAt: new Date().toISOString()
       }
       usersData.users[userIndex] = updatedUser
       if (!await saveUsers(usersData)) {
@@ -556,7 +624,6 @@ export async function PUT(request, { params }) {
 
     // Fallback: Update user with whatever fields are provided
     const result = await updateUser(id, body)
-    console.log('Update result:', result)
 
     if (result.success) {
       return NextResponse.json({ success: true, user: result.user })

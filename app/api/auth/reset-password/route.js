@@ -70,9 +70,6 @@ export async function POST(request) {
       )
     }
 
-    console.log('Password reset successful for user:', user.email)
-    console.log('Account automatically verified:', user.email)
-
     return NextResponse.json({ 
       success: true,
       message: 'Password reset successful. Your account has been verified.'

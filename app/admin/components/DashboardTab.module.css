@@ -212,6 +212,309 @@
   margin: 0;
 }
 
+/* Pending Payouts Styles */
+.sectionHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.sectionDescription {
+  color: #6b7280;
+  font-size: 14px;
+  margin: 0;
+}
+
+.refreshButton {
+  padding: 8px 16px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.refreshButton:hover:not(:disabled) {
+  background: #6b7280;
+  color: white;
+}
+
+.refreshButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.alertBox {
+  margin-bottom: 16px;
+  padding: 16px;
+  background-color: #fef3c7;
+  border: 1px solid #f59e0b;
+  border-radius: 8px;
+}
+
+.alertBox strong {
+  display: block;
+  margin-bottom: 8px;
+  color: #92400e;
+}
+
+.alertBox p {
+  margin: 0;
+  font-size: 14px;
+  color: #78350f;
+}
+
+.tableContainer {
+  overflow-x: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.table thead {
+  background: #f9fafb;
+}
+
+.table th {
+  text-align: left;
+  padding: 12px;
+  font-weight: 600;
+  color: var(--color-accent);
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.table td {
+  padding: 12px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.table tbody tr:hover {
+  background: #f9fafb;
+}
+
+.failedRow {
+  background-color: #fee !important;
+}
+
+.pendingRow {
+  background-color: #fffbeb !important;
+}
+
+.selectedRow {
+  background-color: #e0f2fe !important;
+  border-left: 3px solid #0284c7;
+}
+
+.checkboxCell {
+  width: 40px;
+  text-align: center;
+}
+
+.checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.userCell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.userName {
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
+.userEmail {
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.monospaceCell {
+  font-family: monospace;
+  font-size: 0.85rem;
+}
+
+.dateCell {
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.bankCell {
+  font-size: 0.85rem;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reasonCell {
+  font-size: 0.85rem;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bulkActionsBar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #e0f2fe;
+  border: 1px solid #0284c7;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.bulkActionsLeft {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.selectionCount {
+  font-weight: 600;
+  color: #0c4a6e;
+  font-size: 0.9rem;
+}
+
+.clearSelectionButton {
+  padding: 0.4rem 0.75rem;
+  background: white;
+  border: 1px solid #0284c7;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  color: #0284c7;
+  transition: all 0.2s ease;
+}
+
+.clearSelectionButton:hover {
+  background: #f0f9ff;
+}
+
+.bulkActionsRight {
+  display: flex;
+  gap: 8px;
+}
+
+.bulkCompleteButton,
+.bulkFailButton {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.bulkCompleteButton {
+  background-color: #10b981;
+  color: white;
+}
+
+.bulkCompleteButton:hover:not(:disabled) {
+  background-color: #059669;
+}
+
+.bulkCompleteButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.bulkFailButton {
+  background-color: #ef4444;
+  color: white;
+}
+
+.bulkFailButton:hover:not(:disabled) {
+  background-color: #dc2626;
+}
+
+.bulkFailButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.badge.pending {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.badge.failed {
+  background-color: #fecaca;
+  color: #991b1b;
+}
+
+.actionButtonGroup {
+  display: flex;
+  flex-direction: row;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.actionButtonGroup button {
+  font-size: 0.75rem;
+  padding: 0.35rem 0.5rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.retryButton {
+  background-color: #dbeafe;
+  color: #1e40af;
+}
+
+.retryButton:hover {
+  background-color: #bfdbfe;
+}
+
+.completeButton {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+.completeButton:hover {
+  background-color: #a7f3d0;
+}
+
+.failButton {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+.failButton:hover {
+  background-color: #fecaca;
+}
+
 /* Pending Approvals List */
 .pendingList {
   display: flex;
@@ -301,6 +604,23 @@
 
 .pendingItemLockup {
   color: #6b7280;
+}
+
+.pendingItemPaymentMethod {
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.wirePayment {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.achPayment {
+  background: #dbeafe;
+  color: #1e40af;
 }
 
 .pendingItemAmount {

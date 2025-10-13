@@ -9,6 +9,8 @@ import styles from './ActivityTab.module.css'
 export default function ActivityTab({ users }) {
   const router = useRouter()
   const [searchTerm, setSearchTerm] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 20
 
   // Collect all activity events from all users
   const allActivity = useMemo(() => {
@@ -29,6 +31,10 @@ export default function ActivityTab({ users }) {
       investments.forEach(investment => {
         const transactions = Array.isArray(investment.transactions) ? investment.transactions : []
         transactions.forEach(tx => {
+          // Filter out 'investment' type transactions to avoid duplicates with user.activity events
+          // (investment_created/investment_confirmed already show these milestones)
+          if (tx.type === 'investment') return
+          
           events.push({
             ...tx,
             userId: user.id,
@@ -68,6 +74,20 @@ export default function ActivityTab({ users }) {
       )
     })
   }, [allActivity, searchTerm])
+
+  // Paginate filtered activity
+  const paginatedActivity = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage
+    const endIndex = startIndex + itemsPerPage
+    return filteredActivity.slice(startIndex, endIndex)
+  }, [filteredActivity, currentPage, itemsPerPage])
+
+  const totalPages = Math.ceil(filteredActivity.length / itemsPerPage)
+
+  // Reset to page 1 when search term changes
+  useMemo(() => {
+    setCurrentPage(1)
+  }, [searchTerm])
 
   // Get event metadata (icon, title, color)
   const getEventMeta = (eventType) => {
@@ -114,7 +134,10 @@ export default function ActivityTab({ users }) {
       <div className={styles.header}>
         <div>
           <h2 className={styles.title}>Platform Activity</h2>
-          <p className={styles.subtitle}>All activity events across the platform ({filteredActivity.length} total)</p>
+          <p className={styles.subtitle}>
+            All activity events across the platform ({filteredActivity.length} total)
+            {totalPages > 1 && ` - Page ${currentPage} of ${totalPages}`}
+          </p>
         </div>
       </div>
 
@@ -161,7 +184,7 @@ export default function ActivityTab({ users }) {
                 </td>
               </tr>
             ) : (
-              filteredActivity.map(event => {
+              paginatedActivity.map(event => {
                 const meta = getEventMeta(event.type)
                 const dateValue = event.displayDate || event.date
                 const date = dateValue
@@ -242,6 +265,32 @@ export default function ActivityTab({ users }) {
           </tbody>
         </table>
       </div>
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className={styles.paginationContainer}>
+          <button
+            className={styles.paginationButton}
+            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+            disabled={currentPage === 1}
+          >
+            ← Previous
+          </button>
+          <div className={styles.paginationInfo}>
+            Page {currentPage} of {totalPages}
+            <span className={styles.paginationCount}>
+              (Showing {((currentPage - 1) * itemsPerPage) + 1}-{Math.min(currentPage * itemsPerPage, filteredActivity.length)} of {filteredActivity.length})
+            </span>
+          </div>
+          <button
+            className={styles.paginationButton}
+            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+            disabled={currentPage === totalPages}
+          >
+            Next →
+          </button>
+        </div>
+      )}
     </div>
   )
 }
