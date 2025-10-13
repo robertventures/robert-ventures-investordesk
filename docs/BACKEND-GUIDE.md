@@ -1,8 +1,8 @@
 # Backend Implementation Guide
 
-**Robert Ventures Investment Platform - Python Backend Requirements**
+**Robert Ventures Investment Platform - Backend Requirements**
 
-This guide documents the exact business logic, calculations, and API requirements needed to build a Python backend that mirrors the Next.js reference implementation.
+This guide documents the exact business logic, calculations, and API requirements needed to build a backend that matches the Next.js reference implementation. While examples use Python syntax for clarity, the concepts are language-agnostic and can be implemented in any backend technology.
 
 ---
 
@@ -31,13 +31,28 @@ Investment platform for bonds with:
 - **Lockup periods:** 1-year (8% APY) or 3-year (10% APY)
 - **Payment options:** Monthly payouts or compounding
 - **Account types:** Individual, Joint, Entity, IRA
+- **Payment methods:**
+  - ACH transfers (via Plaid or similar) - up to $100,000, auto-approved
+  - Wire transfers - for amounts > $100,000 or IRA accounts, requires admin approval
+
+### About This Guide
+This guide is **technology-agnostic**. While code examples use Python-like syntax for readability, you can implement this backend in any language/framework (Python, Node.js, Java, Go, etc.).
+
+The critical requirement is that your implementation:
+- Produces identical calculation results (penny-perfect)
+- Follows the same data model structure (JSON format)
+- Provides the same REST API endpoints
+- Maintains transaction immutability for audit trails
+
+**Reference Implementation:** A working Next.js implementation exists at `/lib/` and `/app/api/` - use it to verify your calculations match exactly.
 
 ### Key Requirements
 - **Penny-perfect calculations** - Must match reference implementation exactly
 - **Sequential IDs** - Human-readable (USR-1001, INV-10000, not UUIDs)
 - **App time system** - Admin-controlled time for testing/demos
-- **Netlify Blobs storage** - Same data store as Next.js app
 - **Complete audit trail** - Immutable transaction records for all financial activity
+- **RESTful JSON API** - Standard HTTP endpoints for frontend integration
+- **Data persistence** - Reliable storage layer (database of your choice)
 
 ---
 
@@ -69,21 +84,50 @@ def get_monthly_rate(lockup_period):
 
 ### Payment Methods & Auto-Approval
 ```python
-# ACH investments are automatically approved
-# Wire investments require manual admin approval
+# Payment method options: 'ach' or 'wire'
+# ACH: Uses Plaid or similar integration, automatically approved
+# Wire: Manual bank transfer, requires admin approval
+
+ACH_MAX_AMOUNT = 100000  # $100,000 ACH limit
+
+def validate_payment_method(amount, payment_method, account_type):
+    """
+    Validate payment method based on amount and account type.
+
+    Rules:
+    - ACH: Max $100,000 (Plaid/similar limitations)
+    - Wire: Required for amounts > $100,000
+    - IRA: Must use wire transfers only
+    """
+    if account_type == 'ira' and payment_method != 'wire':
+        raise ValueError("IRA accounts must use wire transfer")
+
+    if amount > ACH_MAX_AMOUNT and payment_method == 'ach':
+        raise ValueError(
+            f"Investments over ${ACH_MAX_AMOUNT:,} must use wire transfer "
+            f"(ACH provider limitations)"
+        )
+
+    return True
 
 def should_auto_approve(payment_method):
+    """ACH investments are automatically approved, wire requires admin approval"""
     return payment_method == 'ach'
 ```
 
 ### Account Type Restrictions
 ```python
-# IRA accounts cannot use monthly payment frequency
-# IRA must use compounding only
+# IRA accounts have specific restrictions:
+# 1. Must use wire transfer (no ACH)
+# 2. Must use compounding payment frequency (no monthly payouts)
 
-def validate_ira_restriction(account_type, payment_frequency):
-    if account_type == 'ira' and payment_frequency == 'monthly':
-        raise ValueError("IRA accounts can only use compounding")
+def validate_ira_restrictions(account_type, payment_frequency, payment_method):
+    if account_type == 'ira':
+        if payment_frequency == 'monthly':
+            raise ValueError("IRA accounts can only use compounding payment frequency")
+        if payment_method != 'wire':
+            raise ValueError("IRA accounts must use wire transfer")
+    return True
 ```
 
 ---
@@ -1010,7 +1054,44 @@ def test_withdrawal_partial_month():
     assert payout['total_amount'] > 10800  # More than 12 full months
 ```
 
-#### 5. Transaction Immutability
+#### 5. Payment Method Validation
+```python
+def test_payment_method_validation():
+    # ACH: OK for amounts under $100k
+    investment = create_investment(
+        amount=50000,
+        payment_method='ach',
+        account_type='individual'
+    )
+    assert investment.status == 'draft'
+
+    # ACH: Reject for amounts over $100k
+    with pytest.raises(ValueError, match="must use wire transfer"):
+        create_investment(
+            amount=150000,
+            payment_method='ach',
+            account_type='individual'
+        )
+
+    # IRA: Must use wire only
+    with pytest.raises(ValueError, match="IRA accounts must use wire transfer"):
+        create_investment(
+            amount=10000,
+            payment_method='ach',
+            account_type='ira'
+        )
+
+    # IRA: Wire is OK
+    ira_investment = create_investment(
+        amount=10000,
+        payment_method='wire',
+        account_type='ira'
+    )
+    assert ira_investment.payment_method == 'wire'
+    assert ira_investment.requires_manual_approval == True
+```
+
+#### 6. Transaction Immutability
 ```python
 def test_transaction_immutability():
     investment = create_investment(confirmed_at='2024-01-15T09:00:00.000Z')
@@ -1047,13 +1128,28 @@ This guide provides:
 - ✅ Complete API endpoint specifications
 - ✅ Testing scenarios to verify correctness
 
-**Next Steps:**
-1. Implement data models matching JSON structure
-2. Build ID generators (sequential, not UUID)
-3. Implement interest calculations (test against reference)
-4. Create immutable transaction system for audit trail
-5. Build API endpoints following specs
-6. Test against provided scenarios
+**Implementation Approach:**
+1. Choose your technology stack (Python/FastAPI, Node.js/Express, Java/Spring, etc.)
+2. Implement data models matching the JSON structure documented above
+3. Build sequential ID generators (not UUIDs - format must match exactly)
+4. Implement interest calculation formulas (test against reference implementation)
+5. Create immutable transaction system for complete audit trail
+6. Build REST API endpoints matching the specifications
+7. Validate calculations match reference implementation penny-for-penny
+8. Test against all provided scenarios
 
 **Reference Implementation:**
-See `/lib/investmentCalculations.js`, `/lib/idGenerator.js`, and `/app/api/users/[id]/route.js` for exact logic.
+- Interest calculations: `/lib/investmentCalculations.js`
+- ID generation: `/lib/idGenerator.js`
+- API routes: `/app/api/users/[id]/route.js`
+- Use these to verify your implementation produces identical results
+
+**Technology Notes:**
+- **Database:** Choose any (PostgreSQL, MongoDB, MySQL, etc.) - structure must support the JSON data models
+- **API Framework:** Any that supports REST/JSON (FastAPI, Express, Spring Boot, Django, etc.)
+- **Authentication:** Standard session/JWT - coordinate with frontend team
+- **Payment Integration:**
+  - ACH: Plaid, Stripe, Dwolla, or similar (must support $100k limit)
+  - Wire: Manual processing or integration with banking partner
+  - IRA: Wire transfer only (coordinate with IRA custodian if applicable)
+- **Hosting:** Any cloud platform that meets your security/compliance requirements
