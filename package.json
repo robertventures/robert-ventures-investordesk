@@ -13,8 +13,10 @@
   "dependencies": {
     "@netlify/blobs": "^10.0.11",
     "next": "^14.2.32",
+    "papaparse": "^5.5.3",
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
+    "resend": "^6.1.2",
     "styled-jsx": "^5.1.1"
   },
   "devDependencies": {

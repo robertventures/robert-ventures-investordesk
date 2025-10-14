@@ -50,7 +50,7 @@ The critical requirement is that your implementation:
 - **Penny-perfect calculations** - Must match reference implementation exactly
 - **Sequential IDs** - Human-readable (USR-1001, INV-10000, not UUIDs)
 - **App time system** - Admin-controlled time for testing/demos
-- **Complete audit trail** - Immutable transaction records for all financial activity
+- **Complete audit trail** - Immutable transaction records for all financial activity (for external tax reporting and compliance)
 - **RESTful JSON API** - Standard HTTP endpoints for frontend integration
 - **Data persistence** - Reliable storage layer (database of your choice)
 
@@ -720,7 +720,7 @@ def generate_monthly_payout_transaction(investment, date):
     }
 ```
 
-### Transaction Immutability
+### Transaction Immutability & Audit Trail
 ```python
 """
 All transactions are immutable once created.
@@ -728,6 +728,16 @@ This ensures a complete audit trail of all financial activity.
 
 Transactions should never be modified or deleted after creation.
 If corrections are needed, create reversing/correcting transactions instead.
+
+Purpose:
+- Financial audit trail
+- External tax reporting and compliance
+- Accountant/tax professional access
+- Regulatory compliance
+
+The system records raw transaction data (type, amount, date, status).
+Tax classification and reporting are handled externally by accountants
+or tax software using this complete transaction history.
 """
 ```
 
@@ -1117,6 +1127,529 @@ def test_transaction_immutability():
 
 ---
 
+---
+
+## Migration & Onboarding System
+
+### Overview
+
+Complete system for migrating investors from external platforms (e.g., Wealthblock) with full historical data including profiles, investments, distributions, and contributions. Includes automated welcome emails and 3-step onboarding flow.
+
+### Import Methods
+
+#### CSV Upload
+```python
+def process_csv_import(csv_file, field_mappings):
+    """
+    Process bulk investor import from CSV file.
+    
+    Features:
+    - Auto-detect field mappings
+    - Manual mapping adjustments
+    - Preview and edit before import
+    - Batch processing with validation
+    """
+    investors = parse_csv(csv_file)
+    
+    for row in investors:
+        investor = {
+            'email': row[field_mappings['email']],
+            'firstName': row[field_mappings['firstName']],
+            'lastName': row[field_mappings['lastName']],
+            'phone': row[field_mappings['phone']],
+            'dob': row[field_mappings['dob']],
+            'address': {
+                'street1': row[field_mappings['street1']],
+                'city': row[field_mappings['city']],
+                'state': row[field_mappings['state']],
+                'zip': row[field_mappings['zip']]
+            },
+            'accountType': row[field_mappings['accountType']],
+            
+            # SSN and bank collected during onboarding
+            'ssn': '',
+            'bankAccounts': [],
+            
+            # Onboarding flags
+            'needsOnboarding': True,
+            'onboardingCompleted': False,
+            
+            # Investment
+            'investments': [{
+                'amount': row[field_mappings['amount']],
+                'lockupPeriod': row[field_mappings['lockupPeriod']],
+                'paymentFrequency': row[field_mappings['paymentFrequency']],
+                'investmentDate': row[field_mappings['investmentDate']],
+                'status': 'active'
+            }],
+            
+            # Historical transactions
+            'distributions': parse_distributions(row, field_mappings),
+            'contributions': parse_contributions(row, field_mappings)
+        }
+        
+        create_investor(investor)
+```
+
+#### Manual Entry
+```python
+def create_investor_manually(investor_data):
+    """
+    Create single investor with full data including historical transactions.
+    
+    investor_data includes:
+    - Basic info: email, name, phone, DOB, address
+    - Investment: amount, terms, date
+    - Distributions: [{amount, date, description}, ...]
+    - Contributions: [{amount, date, description}, ...]
+    """
+    # Create user
+    user = create_user({
+        'email': investor_data['email'],
+        'firstName': investor_data['firstName'],
+        'lastName': investor_data['lastName'],
+        'phone': investor_data['phone'],
+        'dob': investor_data['dob'],
+        'address': investor_data['address'],
+        'accountType': investor_data['accountType'],
+        
+        # Security fields - collected during onboarding
+        'ssn': '',
+        'password': '',  # Set during onboarding
+        'bankAccounts': [],
+        
+        # Onboarding flags
+        'needsOnboarding': True,
+        'onboardingCompleted': False
+    })
+    
+    # Create investment
+    if investor_data.get('investment'):
+        investment = create_investment(user.id, {
+            'amount': investor_data['investment']['amount'],
+            'lockupPeriod': investor_data['investment']['lockupPeriod'],
+            'paymentFrequency': investor_data['investment']['paymentFrequency'],
+            'status': 'active',
+            'confirmedAt': investor_data['investment']['date']
+        })
+    
+    # Create historical transactions
+    for distribution in investor_data.get('distributions', []):
+        create_activity_event(user.id, {
+            'type': 'distribution',
+            'amount': distribution['amount'],
+            'date': distribution['date'],
+            'description': distribution['description'],
+            'status': 'approved',
+            'investmentId': investment.id
+        })
+    
+    for contribution in investor_data.get('contributions', []):
+        create_activity_event(user.id, {
+            'type': 'contribution',
+            'amount': contribution['amount'],
+            'date': contribution['date'],
+            'description': contribution['description'],
+            'investmentId': investment.id
+        })
+    
+    return user
+```
+
+### Historical Transactions
+
+#### Distribution
+Money flowing FROM platform TO investor (interest, dividends, returns).
+
+```python
+{
+    "id": "TX-USR-1001-DIST-2024-03-31",
+    "userId": "USR-1001",
+    "investmentId": "INV-10000",
+    "type": "distribution",
+    "amount": 2000,
+    "date": "2024-03-31T09:00:00.000Z",
+    "description": "Q1 2024 distribution",
+    "status": "approved"
+}
+```
+
+#### Contribution
+Money flowing FROM investor TO platform (additional investments).
+
+```python
+{
+    "id": "TX-USR-1001-CONTR-2024-05-15",
+    "userId": "USR-1001",
+    "investmentId": "INV-10000",
+    "type": "contribution",
+    "amount": 25000,
+    "date": "2024-05-15T09:00:00.000Z",
+    "description": "Additional investment"
+}
+```
+
+### Email System Integration
+
+#### Welcome Email Flow
+```python
+def send_welcome_email(user):
+    """
+    Send welcome email with onboarding link.
+    Uses Resend (or similar email service).
+    """
+    # Generate reset token (reused for onboarding)
+    reset_token = generate_secure_token()
+    reset_expiry = add_hours(get_current_time(), 24)  # 24-hour expiry
+    
+    user.reset_token = reset_token
+    user.reset_token_expiry = reset_expiry
+    save_user(user)
+    
+    # Build onboarding link
+    onboarding_link = f"{APP_URL}/onboarding?token={reset_token}"
+    
+    # Send email
+    email_service.send({
+        'to': user.email,
+        'from': EMAIL_FROM,
+        'subject': 'Welcome to Robert Ventures - Complete Your Account Setup',
+        'html': generate_welcome_html(user, onboarding_link),
+        'text': generate_welcome_text(user, onboarding_link)
+    })
+```
+
+#### Email Template Structure
+```python
+def generate_welcome_html(user, onboarding_link):
+    """
+    Generate HTML email template with:
+    - Personalized greeting
+    - Migration explanation
+    - Prominent CTA button
+    - 3-step process overview
+    - Security notice (24hr expiry)
+    - Support contact
+    """
+    return f"""
+    <html>
+      <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h1>Welcome to Robert Ventures, {user.firstName}!</h1>
+        
+        <p>Your account has been migrated from Wealthblock. To complete your setup 
+        and access your investment dashboard, please complete the following steps:</p>
+        
+        <a href="{onboarding_link}" 
+           style="background: #0066cc; color: white; padding: 12px 24px; 
+                  text-decoration: none; border-radius: 4px; display: inline-block;">
+          Complete Account Setup
+        </a>
+        
+        <h3>Setup Steps:</h3>
+        <ol>
+          <li><strong>Set Your Password</strong> - Create a secure password</li>
+          <li><strong>Verify Your SSN</strong> - For tax compliance</li>
+          <li><strong>Link Bank Account</strong> - For distributions and withdrawals</li>
+        </ol>
+        
+        <p><strong>Important:</strong> This link expires in 24 hours.</p>
+        
+        <p>Questions? Contact us at support@robertventures.com</p>
+      </body>
+    </html>
+    """
+```
+
+### Onboarding Flow
+
+#### Step 1: Password Setup
+```python
+POST /api/auth/onboarding/password
+# Validates token and sets user password
+
+Request: {
+    "token": "abc123...",
+    "password": "SecurePass123!"
+}
+
+def set_onboarding_password(token, password):
+    user = find_user_by_reset_token(token)
+    if not user or is_token_expired(token):
+        raise ValueError("Invalid or expired token")
+    
+    user.password = hash_password(password)
+    user.reset_token = None  # Invalidate token after use
+    user.is_verified = True  # Mark as verified
+    save_user(user)
+    
+    return {"success": True, "user": user}
+```
+
+#### Step 2: SSN Verification
+```python
+POST /api/users/:id
+# Add SSN for tax compliance
+
+Request: {
+    "_action": "updateSSN",
+    "ssn": "123-45-6789"
+}
+
+def update_ssn(user_id, ssn):
+    user = get_user(user_id)
+    
+    # Validate SSN format
+    if not validate_ssn_format(ssn):
+        raise ValueError("Invalid SSN format. Must be XXX-XX-XXXX")
+    
+    user.ssn = ssn
+    save_user(user)
+    
+    return {"success": True, "user": user}
+```
+
+#### Step 3: Bank Account Linking
+```python
+POST /api/users/:id
+# Add bank account
+
+Request: {
+    "_action": "addBankAccount",
+    "bankAccount": {
+        "accountHolderName": "John Doe",
+        "routingNumber": "123456789",
+        "accountNumber": "9876543210",
+        "accountType": "checking"
+    }
+}
+
+def add_bank_account(user_id, bank_data):
+    user = get_user(user_id)
+    
+    # Validate routing number (9 digits)
+    if not validate_routing_number(bank_data['routingNumber']):
+        raise ValueError("Invalid routing number")
+    
+    bank_account = {
+        'id': generate_bank_account_id(user_id),
+        'accountHolderName': bank_data['accountHolderName'],
+        'routingNumber': bank_data['routingNumber'],
+        'accountNumber': encrypt(bank_data['accountNumber']),  # Encrypt sensitive data
+        'accountType': bank_data['accountType'],
+        'lastFour': bank_data['accountNumber'][-4:],
+        'isPrimary': len(user.bank_accounts) == 0,  # First account is primary
+        'createdAt': get_current_time()
+    }
+    
+    user.bank_accounts.append(bank_account)
+    save_user(user)
+    
+    return {"success": True, "user": user}
+```
+
+#### Step 4: Complete Onboarding
+```python
+POST /api/users/:id
+# Mark onboarding as complete
+
+Request: {
+    "_action": "completeOnboarding"
+}
+
+def complete_onboarding(user_id):
+    user = get_user(user_id)
+    
+    # Validate all required steps completed
+    if not user.password:
+        raise ValueError("Password not set")
+    if not user.ssn:
+        raise ValueError("SSN not verified")
+    if not user.bank_accounts:
+        raise ValueError("Bank account not linked")
+    
+    user.onboarding_completed = True
+    user.needs_onboarding = False
+    save_user(user)
+    
+    return {"success": True, "redirect": "/dashboard"}
+```
+
+### API Endpoints
+
+#### Import Investors
+```python
+POST /api/admin/import-investors
+# Admin only - bulk import investors
+
+Request: {
+    "investors": [
+        {
+            "email": "investor@example.com",
+            "firstName": "John",
+            "lastName": "Doe",
+            "phone": "+1-555-0100",
+            "dob": "1980-05-15",
+            "address": {...},
+            "accountType": "individual",
+            "investment": {
+                "amount": 100000,
+                "lockupPeriod": "3-year",
+                "paymentFrequency": "compounding",
+                "date": "2024-01-01"
+            },
+            "distributions": [
+                {"amount": 2000, "date": "2024-03-31", "description": "Q1 2024"}
+            ],
+            "contributions": [
+                {"amount": 25000, "date": "2024-05-15", "description": "Additional"}
+            ]
+        }
+    ]
+}
+
+Response: {
+    "success": true,
+    "imported": 60,
+    "failed": 2,
+    "errors": [...]
+}
+```
+
+#### Send Welcome Emails
+```python
+POST /api/auth/send-welcome
+# Admin only - send welcome emails to imported investors
+
+Request: {
+    "userIds": ["USR-1001", "USR-1002", "USR-1003"]
+}
+
+Response: {
+    "success": true,
+    "sent": 58,
+    "failed": 2,
+    "errors": [
+        {"email": "invalid@domain", "error": "Invalid email address"}
+    ]
+}
+```
+
+### Security Considerations
+
+#### Data Protection
+```python
+# During Import:
+- ❌ DO NOT collect SSN (request during onboarding)
+- ❌ DO NOT collect password (set during onboarding)
+- ❌ DO NOT collect bank accounts (add during onboarding)
+- ✅ DO collect: email, name, phone, DOB, address
+- ✅ DO import: investment data, historical transactions
+
+# During Onboarding:
+- ✅ Validate token (24hr expiry)
+- ✅ Require strong password
+- ✅ Encrypt SSN at rest
+- ✅ Encrypt bank account numbers
+- ✅ Use HTTPS for all communications
+- ✅ Invalidate token after password set
+```
+
+#### User Flags
+```python
+{
+    "needsOnboarding": True,        # Set during import
+    "onboardingCompleted": False,   # Set after completing all steps
+    "resetToken": "...",            # Generated for onboarding link
+    "resetTokenExpiry": "...",      # 24 hours from generation
+    "isVerified": False             # Set True after password setup
+}
+```
+
+### Environment Configuration
+
+```python
+# Email Service (Resend)
+RESEND_API_KEY = "re_abc123..."
+EMAIL_FROM = "noreply@robertventures.com"
+
+# Application
+NEXT_PUBLIC_APP_URL = "https://invest.robertventures.com"
+
+# Security
+PASSWORD_MIN_LENGTH = 8
+TOKEN_EXPIRY_HOURS = 24
+```
+
+### Testing Migration System
+
+#### Test Scenario 1: Single Investor Migration
+```python
+def test_migrate_single_investor_with_history():
+    # 1. Import investor
+    investor = {
+        'email': 'john.doe@example.com',
+        'firstName': 'John',
+        'lastName': 'Doe',
+        'investment': {
+            'amount': 100000,
+            'lockupPeriod': '3-year',
+            'paymentFrequency': 'compounding',
+            'date': '2024-01-01'
+        },
+        'distributions': [
+            {'amount': 2000, 'date': '2024-03-31', 'description': 'Q1 2024'},
+            {'amount': 2000, 'date': '2024-06-30', 'description': 'Q2 2024'}
+        ]
+    }
+    
+    result = import_investor(investor)
+    assert result.success == True
+    assert result.user.needs_onboarding == True
+    assert len(result.user.activity) >= 3  # Account + Investment + 2 distributions
+    
+    # 2. Send welcome email
+    email_result = send_welcome_email(result.user)
+    assert email_result.sent == True
+    
+    # 3. Complete onboarding
+    token = result.user.reset_token
+    set_password(token, 'SecurePass123!')
+    update_ssn(result.user.id, '123-45-6789')
+    add_bank_account(result.user.id, {...})
+    complete_result = complete_onboarding(result.user.id)
+    
+    # 4. Verify completion
+    user = get_user(result.user.id)
+    assert user.onboarding_completed == True
+    assert user.needs_onboarding == False
+    assert user.ssn is not None
+    assert len(user.bank_accounts) > 0
+```
+
+#### Test Scenario 2: Bulk CSV Import
+```python
+def test_bulk_csv_import():
+    csv_data = """
+    Email,First Name,Last Name,Phone,Investment Amount,Lockup Period
+    user1@example.com,John,Doe,555-0100,100000,3-year
+    user2@example.com,Jane,Smith,555-0200,50000,1-year
+    user3@example.com,Bob,Wilson,555-0300,75000,3-year
+    """
+    
+    result = process_csv_import(csv_data, field_mappings)
+    assert result.imported == 3
+    assert result.failed == 0
+    
+    # Verify all users need onboarding
+    for user_id in result.user_ids:
+        user = get_user(user_id)
+        assert user.needs_onboarding == True
+        assert user.ssn == ''
+        assert len(user.bank_accounts) == 0
+```
+
+---
+
 ## Summary
 
 This guide provides:
@@ -1124,8 +1657,11 @@ This guide provides:
 - ✅ Penny-perfect calculation formulas
 - ✅ Sequential ID generation patterns
 - ✅ State machine with transition rules
-- ✅ Complete transaction audit trail system
+- ✅ Complete transaction audit trail system (for external tax reporting and compliance)
 - ✅ Complete API endpoint specifications
+- ✅ Migration & onboarding system
+- ✅ Historical transaction import
+- ✅ Email integration patterns
 - ✅ Testing scenarios to verify correctness
 
 **Implementation Approach:**
@@ -1135,19 +1671,25 @@ This guide provides:
 4. Implement interest calculation formulas (test against reference implementation)
 5. Create immutable transaction system for complete audit trail
 6. Build REST API endpoints matching the specifications
-7. Validate calculations match reference implementation penny-for-penny
-8. Test against all provided scenarios
+7. Implement migration & onboarding system with email integration
+8. Add historical transaction import support
+9. Validate calculations match reference implementation penny-for-penny
+10. Test against all provided scenarios
 
 **Reference Implementation:**
 - Interest calculations: `/lib/investmentCalculations.js`
 - ID generation: `/lib/idGenerator.js`
 - API routes: `/app/api/users/[id]/route.js`
+- Email service: `/lib/emailService.js`
+- Migration: `/app/api/admin/import-investors/route.js`
+- Onboarding: `/app/onboarding/page.js`
 - Use these to verify your implementation produces identical results
 
 **Technology Notes:**
 - **Database:** Choose any (PostgreSQL, MongoDB, MySQL, etc.) - structure must support the JSON data models
 - **API Framework:** Any that supports REST/JSON (FastAPI, Express, Spring Boot, Django, etc.)
 - **Authentication:** Standard session/JWT - coordinate with frontend team
+- **Email Service:** Resend, SendGrid, Mailgun, or similar (must support transactional emails)
 - **Payment Integration:**
   - ACH: Plaid, Stripe, Dwolla, or similar (must support $100k limit)
   - Wire: Manual processing or integration with banking partner

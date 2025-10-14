@@ -420,7 +420,6 @@ export async function POST() {
           }
         })()
         const investmentDate = inv.submittedAt || inv.createdAt || inv.confirmedAt || inv.updatedAt || now.toISOString()
-        const investmentTaxYear = new Date(investmentDate).getUTCFullYear()
         ensureTransaction({
           id: investmentTxId,
           type: 'investment',
@@ -431,11 +430,7 @@ export async function POST() {
           paymentFrequency: payFreq,
           confirmedAt: inv.confirmedAt || null,
           approvedAt: inv.confirmedAt || null,
-          rejectedAt: inv.rejectedAt || null,
-          // Tax reporting metadata (principal contribution - not taxable)
-          taxYear: investmentTaxYear,
-          taxableIncome: 0,  // Principal contributions are not taxable income
-          incomeType: 'principal'  // Audit trail classification
+          rejectedAt: inv.rejectedAt || null
         })
 
         // Distributions for monthly payout investments
@@ -503,7 +498,6 @@ export async function POST() {
                 status = existingTx.status
               }
 
-              const taxYear = new Date(distributionDateIso).getUTCFullYear()
               ensureTransaction({
                 id: txId,
                 type: 'distribution',
@@ -521,11 +515,7 @@ export async function POST() {
                 lastRetryAt: legacyEvent?.lastRetryAt || existingTx?.lastRetryAt || null,
                 completedAt: legacyEvent?.completedAt || existingTx?.completedAt || null,
                 manuallyCompleted: legacyEvent?.manuallyCompleted || existingTx?.manuallyCompleted || false,
-                failedAt: legacyEvent?.failedAt || existingTx?.failedAt || null,
-                // Tax reporting metadata
-                taxYear,
-                taxableIncome: Math.round(distributionAmount * 100) / 100,  // For 1099-INT reporting
-                incomeType: 'interest'  // IRS classification
+                failedAt: legacyEvent?.failedAt || existingTx?.failedAt || null
               })
 
               monthIndex += 1
@@ -581,7 +571,6 @@ export async function POST() {
               // 1. First, create the DISTRIBUTION (earnings generated)
               // For compounding investments, distributions are auto-approved and don't require admin action
               const distributionTxId = generateTransactionId('INV', inv.id, 'distribution', { date: compoundingDate })
-              const distributionTaxYear = new Date(compoundingDateIso).getUTCFullYear()
               ensureTransaction({
                 id: distributionTxId,
                 type: 'distribution',
@@ -594,13 +583,7 @@ export async function POST() {
                 paymentFrequency: payFreq,
                 principal: Math.round(balance * 100) / 100,
                 completedAt: compoundingDateIso,  // Mark as completed immediately
-                legacyReferenceId: legacyDistributionEvent?.id || null,
-                // Tax reporting metadata (constructive receipt - taxable even though reinvested)
-                taxYear: distributionTaxYear,
-                taxableIncome: Math.round(interest * 100) / 100,  // For 1099-INT reporting
-                incomeType: 'interest',  // IRS classification
-                constructiveReceipt: true,  // Taxable but not paid out (reinvested)
-                actualReceipt: false  // Not distributed to investor
+                legacyReferenceId: legacyDistributionEvent?.id || null
               })
 
               // 2. Then, create the CONTRIBUTION (distribution reinvested)
@@ -609,7 +592,6 @@ export async function POST() {
               const contributionDate = new Date(compoundingDate.getTime() + 1000)
               const contributionDateIso = contributionDate.toISOString()
               const contributionTxId = generateTransactionId('INV', inv.id, 'contribution', { date: compoundingDate })
-              const contributionTaxYear = new Date(contributionDateIso).getUTCFullYear()
               ensureTransaction({
                 id: contributionTxId,
                 type: 'contribution',
@@ -623,11 +605,7 @@ export async function POST() {
                 principal: Math.round(balance * 100) / 100,
                 distributionTxId,  // Link to the distribution that was reinvested
                 completedAt: contributionDateIso,  // Mark as completed immediately
-                legacyReferenceId: legacyContributionEvent?.id || null,
-                // Tax reporting metadata (reinvestment of taxed earnings - not taxable itself)
-                taxYear: contributionTaxYear,
-                taxableIncome: 0,  // Not taxable (already taxed as distribution)
-                incomeType: 'reinvestment'  // Audit trail classification
+                legacyReferenceId: legacyContributionEvent?.id || null
               })
 
               balance += interest
@@ -667,7 +645,6 @@ export async function POST() {
           }
 
           const redemptionDate = wd.requestedAt || wd.noticeStartAt || wd.approvedAt || wd.paidAt || now.toISOString()
-          const redemptionTaxYear = new Date(redemptionDate).getUTCFullYear()
           ensureTransaction({
             id: txId,
             type: 'redemption',
@@ -678,11 +655,7 @@ export async function POST() {
             payoutDueBy: wd.payoutDueBy || null,
             approvedAt: wd.approvedAt || null,
             paidAt: wd.paidAt || null,
-            rejectedAt: wd.rejectedAt || null,
-            // Tax reporting metadata (return of principal and earnings)
-            taxYear: redemptionTaxYear,
-            taxableIncome: 0,  // For audit trail - actual taxable portion determined externally
-            incomeType: 'redemption'  // Audit trail classification
+            rejectedAt: wd.rejectedAt || null
           })
         }
 

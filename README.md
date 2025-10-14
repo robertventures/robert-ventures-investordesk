@@ -33,7 +33,44 @@ This app follows a wireframe-style minimalist design with:
 
 ## Features
 
+### Investor Portal
 - Email input validation
 - Human verification checkbox
 - Responsive design
 - Wireframe-style aesthetics
+- Investment management
+- Transaction history
+- Document access
+
+### Admin Dashboard
+- User account management
+- Investment approval workflow
+- Withdrawal processing
+- Tax reporting and compliance
+- Time machine (date simulation for testing)
+- **Investor Import System** - Migrate investors from Wealthblock or other platforms
+
+## Investor Import & Migration
+
+The platform includes a comprehensive import system for migrating investors from external platforms like Wealthblock.
+
+**Key Features:**
+- CSV/Excel file upload with field mapping
+- Interactive data preview and editing
+- Bulk import with validation
+- Automated welcome email sending with password setup links
+- Support for complete investor profiles, investments, and transaction history
+
+**Setup & Usage:**
+See [docs/INVESTOR-IMPORT-SETUP.md](docs/INVESTOR-IMPORT-SETUP.md) for detailed setup instructions including:
+- Resend email service configuration
+- CSV format requirements
+- Field mapping guide
+- Testing procedures
+
+**Environment Variables Required:**
+```bash
+RESEND_API_KEY=your_api_key
+EMAIL_FROM=noreply@yourdomain.com
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+```

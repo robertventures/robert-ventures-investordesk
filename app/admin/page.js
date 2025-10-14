@@ -440,6 +440,12 @@ export default function AdminPage() {
     }
   }
 
+  const handleImportComplete = async (result) => {
+    console.log('Import completed:', result)
+    // Refresh users data to show newly imported investors
+    await refreshUsers()
+  }
+
   // Loading state
   if (isLoading) {
     return (
@@ -508,6 +514,7 @@ export default function AdminPage() {
               isDeletingAccounts={isDeletingAccounts}
               isSeedingAccounts={isSeedingAccounts}
               onRefreshWithdrawals={refreshWithdrawals}
+              onImportComplete={handleImportComplete}
             />
           )}
 
