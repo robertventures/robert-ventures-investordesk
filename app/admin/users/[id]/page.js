@@ -836,9 +836,11 @@ export default function AdminUserDetailsPage({ params }) {
                   case 'account_created':
                     return { icon: '👤', title: 'Account Created', color: '#0369a1', showAmount: false }
                   case 'investment_created':
-                    return { icon: '🧾', title: 'Investment Created', color: '#0369a1', showAmount: true }
+                    return { icon: '🧾', title: 'Investment Created', color: '#0369a1', showAmount: false }
+                  case 'investment_approved':
+                    return { icon: '✓', title: 'Investment Approved', color: '#0891b2', showAmount: false }
                   case 'investment_confirmed':
-                    return { icon: '✅', title: 'Investment Confirmed', color: '#065f46', showAmount: false }
+                    return { icon: '✅', title: 'Investment Confirmed', color: '#065f46', showAmount: true }
                   case 'investment_rejected':
                     return { icon: '❌', title: 'Investment Rejected', color: '#991b1b', showAmount: false }
                   case 'investment':

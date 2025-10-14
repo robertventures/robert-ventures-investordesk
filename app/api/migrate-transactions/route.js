@@ -259,7 +259,6 @@ export async function POST() {
             id: investmentCreatedEventId,
             type: 'investment_created',
             investmentId: inv.id,
-            amount: inv.amount || 0,
             date: investmentCreatedDate
           })
           eventsCreated++

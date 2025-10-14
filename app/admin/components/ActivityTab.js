@@ -96,6 +96,8 @@ export default function ActivityTab({ users }) {
         return { icon: '👤', title: 'Account Created', color: '#0369a1' }
       case 'investment_created':
         return { icon: '🧾', title: 'Investment Created', color: '#0369a1' }
+      case 'investment_approved':
+        return { icon: '✓', title: 'Investment Approved', color: '#0891b2' }
       case 'investment_confirmed':
         return { icon: '✅', title: 'Investment Confirmed', color: '#065f46' }
       case 'investment_rejected':

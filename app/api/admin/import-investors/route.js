@@ -254,7 +254,6 @@ function processInvestmentImport(investmentData, userId, user) {
       id: generateTransactionId('INV', investmentId, 'created'),
       type: 'investment_created',
       investmentId,
-      amount,
       date: submittedAt
     })
 
@@ -263,7 +262,6 @@ function processInvestmentImport(investmentData, userId, user) {
       id: generateTransactionId('INV', investmentId, 'approved'),
       type: 'investment_approved',
       investmentId,
-      amount,
       date: investmentData.adminApprovedAt || confirmedAt
     })
 
