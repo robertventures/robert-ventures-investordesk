@@ -51,6 +51,24 @@
   gap: 20px;
 }
 
+.yearSection {
+  grid-column: 1 / -1;
+  margin-bottom: 20px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 20px;
+}
+
+.yearTitle {
+  grid-column: 1 / -1;
+  font-size: 18px;
+  font-weight: 600;
+  color: #374151;
+  margin: 0 0 16px 0;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #e5e7eb;
+}
+
 .documentCard {
   background: #ffffff;
   border: 1px solid #e5e7eb;

@@ -89,6 +89,36 @@ export default function DocumentsView() {
     investment.documents?.agreement
   )
 
+  // Get tax documents and sort by upload date (most recent first)
+  const taxDocuments = (user?.documents || [])
+    .filter(doc => doc.type === 'tax_document')
+    .sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt))
+
+  const downloadTaxDocument = async (docId, fileName) => {
+    try {
+      const userId = localStorage.getItem('currentUserId')
+      const res = await fetch(`/api/users/${userId}/documents/${docId}?requestingUserId=${userId}`)
+      
+      if (!res.ok) {
+        alert('Failed to download document')
+        return
+      }
+
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = fileName
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Failed to download document:', error)
+      alert('Failed to download document')
+    }
+  }
+
   return (
     <div className={styles.documentsContainer}>
       <div className={styles.header}>
@@ -97,6 +127,38 @@ export default function DocumentsView() {
       </div>
 
       <div className={styles.content}>
+        {/* Tax Documents Section */}
+        {taxDocuments.length > 0 && (
+          <div className={styles.documentsList}>
+            <h3 className={styles.sectionTitle}>Tax Documents</h3>
+            <div className={styles.documentsGrid}>
+              {taxDocuments.map(doc => (
+                <div key={doc.id} className={styles.documentCard}>
+                  <div className={styles.documentIcon}>📄</div>
+                  <div className={styles.documentInfo}>
+                    <h4 className={styles.documentTitle}>
+                      Tax Document
+                    </h4>
+                    <div className={styles.documentDetails}>
+                      <p><strong>File:</strong> {doc.fileName}</p>
+                      <p><strong>Uploaded:</strong> {formatDate(doc.uploadedAt)}</p>
+                    </div>
+                  </div>
+                  <div className={styles.documentActions}>
+                    <button
+                      className={styles.downloadButton}
+                      onClick={() => downloadTaxDocument(doc.id, doc.fileName)}
+                    >
+                      📥 Download
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Investment Agreements Section */}
         {finalizedInvestments.length > 0 ? (
           <div className={styles.documentsList}>
             <h3 className={styles.sectionTitle}>Investment Agreements</h3>
@@ -129,7 +191,7 @@ export default function DocumentsView() {
               ))}
             </div>
           </div>
-        ) : (
+        ) : taxDocuments.length === 0 ? (
           <div className={styles.emptyState}>
             <div className={styles.emptyIcon}>📄</div>
             <h3 className={styles.emptyTitle}>No Documents Yet</h3>
@@ -143,7 +205,7 @@ export default function DocumentsView() {
               <li>Compliance Forms</li>
             </ul>
           </div>
-        )}
+        ) : null}
 
         <div className={styles.actions}>
           <button className={styles.uploadButton}>

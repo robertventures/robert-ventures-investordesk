@@ -1685,6 +1685,588 @@ This guide provides:
 - Onboarding: `/app/onboarding/page.js`
 - Use these to verify your implementation produces identical results
 
+---
+
+## Tax Document Management
+
+### Overview
+
+The tax document management system allows admins to bulk upload annual tax documents (1099 forms) to users. The system handles name matching, duplicate name scenarios, email notifications, and secure document delivery to users.
+
+### Core Features
+
+1. **Bulk Upload**: Upload a ZIP file containing PDFs named by first/last name
+2. **Name Matching**: Automatic matching to users by firstName + lastName
+3. **Duplicate Handling**: Manual assignment for users with same names
+4. **Single Upload**: Upload document to specific user
+5. **Email Notifications**: Automatic notifications when documents are available
+6. **Secure Download**: Users can only access their own documents
+7. **Document Management**: View all uploaded documents, delete individual or all
+
+### Data Model
+
+#### User Document Schema
+
+```javascript
+// Added to user object
+{
+  documents: [
+    {
+      id: "DOC-USR-1001-TAX-DOCUMENT-20250115103000",
+      type: "tax_document",  // or "statement", "agreement", etc.
+      fileName: "JosephRobert_1234.pdf",
+      year: "2025",  // Auto-set to current year
+      uploadedAt: "2025-01-15T10:30:00.000Z",
+      uploadedBy: "USR-1000",  // Admin user ID
+      blobKey: "tax-documents/2025/USR-1001-1705320600000.pdf"
+    }
+  ]
+}
+```
+
+### Storage Architecture
+
+#### Netlify Blobs
+
+**Store Name:** `documents` (separate from `users` store)
+
+**Key Format:** `{type}/{year}/{userId}-{timestamp}.{extension}`
+- Example: `tax-documents/2025/USR-1001-1705320600000.pdf`
+- Timestamp prevents overwrites when uploading multiple documents
+
+**Storage Functions** (`lib/documentStorage.js`):
+```javascript
+uploadDocument(key, data, contentType)     // Upload PDF to blob storage
+getDocument(key)                           // Retrieve PDF from storage
+deleteDocument(key)                        // Delete PDF from storage
+listDocuments(prefix)                      // List all documents with prefix
+generateDocumentKey(type, year, userId, fileName)  // Generate storage key
+isPDF(data)                               // Validate PDF file
+```
+
+### API Endpoints
+
+#### 1. Bulk Upload
+
+**Endpoint:** `POST /api/admin/documents/bulk-upload`
+
+**Authentication:** Admin only (checks `isAdmin` flag)
+
+**Request:**
+```javascript
+FormData {
+  file: ZIP file containing PDFs,
+  adminEmail: "admin@rv.com"
+}
+```
+
+**File Naming Convention:**
+- PDFs must be named: `FirstnameLastname_*.pdf`
+- Example: `JosephRobert_7273_2.pdf`
+- System extracts "Joseph" and "Robert" for matching
+- Everything after underscore is ignored
+
+**Matching Logic:**
+1. Extract firstName and lastName from filename (before first underscore)
+2. Search users by firstName + lastName (case-insensitive)
+3. Three scenarios:
+   - **1 match**: Auto-upload and send email
+   - **0 matches**: Report as "No Match"
+   - **Multiple matches**: Report as "Duplicate Names" for manual review
+
+**Response:**
+```javascript
+{
+  success: true,
+  summary: {
+    total: 10,
+    autoMatched: 7,
+    duplicateNames: 2,
+    noMatch: 1,
+    errors: 0
+  },
+  results: {
+    autoMatched: [
+      {
+        filename: "JosephRobert_1234.pdf",
+        userId: "USR-1001",
+        email: "joseph@example.com",
+        emailSent: true
+      }
+    ],
+    duplicateNames: [
+      {
+        filename: "JohnSmith_5678.pdf",
+        firstName: "John",
+        lastName: "Smith",
+        matchingUsers: [
+          {
+            id: "USR-1002",
+            email: "john.smith@example.com",
+            createdAt: "2024-01-15T00:00:00.000Z",
+            lastInvestmentDate: "2024-06-01T00:00:00.000Z"
+          },
+          {
+            id: "USR-1003",
+            email: "john.smith2@example.com",
+            createdAt: "2024-03-20T00:00:00.000Z",
+            lastInvestmentDate: null
+          }
+        ]
+      }
+    ],
+    noMatch: [
+      {
+        filename: "MaryJones_9999.pdf",
+        firstName: "Mary",
+        lastName: "Jones",
+        reason: "No user found with this name"
+      }
+    ],
+    errors: []
+  }
+}
+```
+
+**Implementation Details:**
+- Validates admin authentication
+- Parses ZIP file using `jszip` library
+- Validates each PDF with `isPDF()`
+- Processes files sequentially
+- Auto-sets year to current year
+- No duplicate prevention (allows multiple documents per user)
+- Uploads to blob storage: `tax-documents/{year}/{userId}-{timestamp}.pdf`
+- Updates user's `documents` array
+- Sends email notification via `sendTaxDocumentNotification()`
+
+#### 2. Single User Upload
+
+**Endpoint:** `POST /api/admin/documents/upload-single`
+
+**Authentication:** Admin only
+
+**Request:**
+```javascript
+FormData {
+  file: PDF file,
+  userId: "USR-1001",
+  adminEmail: "admin@rv.com"
+}
+```
+
+**Response:**
+```javascript
+{
+  success: true,
+  user: {
+    id: "USR-1001",
+    email: "user@example.com",
+    name: "Joseph Robert"
+  },
+  document: {
+    id: "DOC-USR-1001-TAX-DOCUMENT-20250115103000",
+    type: "tax_document",
+    fileName: "tax_form.pdf",
+    year: "2025",
+    uploadedAt: "2025-01-15T10:30:00.000Z",
+    uploadedBy: "USR-1000",
+    blobKey: "tax-documents/2025/USR-1001-1705320600000.pdf"
+  },
+  emailSent: true
+}
+```
+
+**Use Cases:**
+- Uploading to specific user after duplicate name scenario
+- Correcting a document for a user
+- Manual uploads outside bulk process
+
+#### 3. Assign Pending Document
+
+**Endpoint:** `POST /api/admin/documents/assign-pending`
+
+**Authentication:** Admin only
+
+**Request:**
+```javascript
+{
+  userId: "USR-1001",
+  fileName: "JohnSmith_5678.pdf",
+  pdfData: "base64_encoded_pdf_data",
+  adminEmail: "admin@rv.com"
+}
+```
+
+**Response:**
+```javascript
+{
+  success: true,
+  user: {
+    id: "USR-1001",
+    email: "john.smith@example.com"
+  },
+  emailSent: true
+}
+```
+
+**Use Case:**
+- Resolving duplicate name scenarios from bulk upload
+- Admin manually assigns document to correct user
+
+#### 4. List Documents
+
+**Endpoint:** `GET /api/admin/documents/list?adminEmail=admin@rv.com&type=tax_document`
+
+**Authentication:** Admin only
+
+**Response:**
+```javascript
+{
+  success: true,
+  documents: [
+    {
+      id: "DOC-USR-1001-TAX-DOCUMENT-20250115103000",
+      type: "tax_document",
+      fileName: "JosephRobert_1234.pdf",
+      year: "2025",
+      uploadedAt: "2025-01-15T10:30:00.000Z",
+      uploadedBy: "USR-1000",
+      blobKey: "tax-documents/2025/USR-1001-1705320600000.pdf",
+      user: {
+        id: "USR-1001",
+        email: "joseph@example.com",
+        firstName: "Joseph",
+        lastName: "Robert"
+      }
+    }
+  ],
+  total: 50
+}
+```
+
+**Query Parameters:**
+- `adminEmail` (required): Admin authentication
+- `type` (optional): Filter by document type (e.g., "tax_document")
+
+**Implementation:**
+- Returns all documents across all users
+- Sorted by uploadedAt (most recent first)
+- Includes user information for each document
+
+#### 5. Delete Documents
+
+**Endpoint:** `POST /api/admin/documents/delete`
+
+**Authentication:** Admin only
+
+**Modes:**
+
+**Single Document:**
+```javascript
+{
+  mode: "single",
+  userId: "USR-1001",
+  documentId: "DOC-USR-1001-TAX-DOCUMENT-20250115103000",
+  adminEmail: "admin@rv.com"
+}
+```
+
+**All Documents:**
+```javascript
+{
+  mode: "all",
+  adminEmail: "admin@rv.com"
+}
+```
+
+**Response:**
+```javascript
+{
+  success: true,
+  message: "Deleted 50 tax documents",
+  deleted: [
+    {
+      userId: "USR-1001",
+      email: "user@example.com",
+      documentId: "DOC-...",
+      fileName: "JosephRobert_1234.pdf"
+    }
+  ],
+  errors: []  // If any deletions failed
+}
+```
+
+**Implementation:**
+- Deletes from blob storage
+- Removes from user's documents array
+- Returns detailed report of deleted documents
+- Continues on individual failures, reports errors
+
+#### 6. User Download
+
+**Endpoint:** `GET /api/users/[id]/documents/[docId]?requestingUserId=USR-1001`
+
+**Authentication:** User must own the document
+
+**Response:** PDF file with proper headers
+```
+Content-Type: application/pdf
+Content-Disposition: attachment; filename="tax_form.pdf"
+```
+
+**Security:**
+- Validates `requestingUserId` matches user ID in URL
+- Users can ONLY access their own documents
+- Returns 403 Forbidden if attempting to access another user's document
+
+### Email Notifications
+
+#### Function: `sendTaxDocumentNotification()`
+
+**Location:** `lib/emailService.js`
+
+**Parameters:**
+```javascript
+{
+  email: "user@example.com",
+  firstName: "Joseph",
+  lastName: "Robert"
+}
+```
+
+**Email Content:**
+- **Subject:** "Your Tax Documents Are Ready - Robert Ventures"
+- **Body:** Professional HTML template with download link
+- **CTA:** Direct link to Documents page in investor portal
+- **Notes:** Instructions on downloading, saving, and tax filing
+
+**Template Features:**
+- Responsive HTML design
+- Gradient header
+- Clear call-to-action button
+- Important notes about tax filing
+- Plain text fallback
+- Direct link to documents: `${appUrl}/dashboard?view=documents`
+
+### Frontend Integration
+
+#### Admin UI
+
+**Location:** `app/admin/components/TaxDocumentsSection.js`
+
+**Three Sub-Tabs:**
+
+1. **Bulk Upload:**
+   - ZIP file selector
+   - Upload button
+   - Results display:
+     - Summary statistics
+     - Auto-matched list (with email status)
+     - Duplicate names (with user selection UI)
+     - No match list
+     - Errors list
+
+2. **Single User:**
+   - User dropdown (all non-admin users)
+   - PDF file selector
+   - Upload button
+   - Success message
+
+3. **Manage Documents:**
+   - Document table (user, email, filename, uploaded date)
+   - Delete individual document button
+   - Delete all documents button
+   - Refresh button
+
+**Integrated Into:** `app/admin/components/OperationsTab.js`
+
+#### User UI
+
+**Location:** `app/components/DocumentsView.js`
+
+**Features:**
+- Tax documents section at top
+- Chronological list (most recent first)
+- Each document shows:
+  - Document title: "Tax Document"
+  - Filename
+  - Upload date
+  - Download button
+- Secure download via API call
+- Empty state when no documents
+
+**Download Flow:**
+1. User clicks download button
+2. Frontend calls `/api/users/[userId]/documents/[docId]?requestingUserId=[userId]`
+3. API validates ownership
+4. Returns PDF as download
+5. Browser saves file with original filename
+
+### Security & Validation
+
+#### Admin Endpoints
+- **Authentication:** All admin endpoints verify `isAdmin` flag
+- **Email verification:** Admin email must match registered admin user
+- **Input validation:** File types, user IDs, document IDs
+
+#### User Endpoints
+- **Ownership validation:** Users can ONLY access their own documents
+- **Request validation:** `requestingUserId` must match URL user ID
+
+#### File Validation
+- **Type checking:** Only PDF files accepted (`isPDF()` function)
+- **Size limits:** Recommend 10MB per file (configurable)
+- **ZIP validation:** Validates ZIP structure before processing
+
+#### Blob Storage
+- **Separate store:** Documents in separate `documents` store from user data
+- **Unique keys:** Timestamp ensures no overwrites
+- **Secure access:** Keys not exposed to users
+- **Error handling:** Graceful failures with detailed error messages
+
+### Error Handling
+
+#### Bulk Upload Errors
+- Invalid ZIP file → Clear error message
+- Non-PDF files → Rejected with filename in error list
+- Blob storage failures → Reported per-file, doesn't block other uploads
+- Email failures → Logged but doesn't block upload (flagged in results)
+
+#### Common Error Responses
+```javascript
+// Unauthorized
+{ success: false, error: "Unauthorized", status: 401 }
+
+// User not found
+{ success: false, error: "User not found", status: 404 }
+
+// Invalid file type
+{ success: false, error: "File must be a PDF", status: 400 }
+
+// Blob storage error
+{ success: false, error: "Failed to upload document", status: 500 }
+```
+
+### Workflow Examples
+
+#### Example 1: Successful Bulk Upload
+
+1. Admin prepares ZIP with 10 PDFs named by user names
+2. Admin uploads ZIP via admin panel
+3. System processes:
+   - 8 files auto-matched → uploaded + emails sent
+   - 2 files have duplicate names → reported for manual assignment
+4. Admin reviews results
+5. Admin uses Single User tab to assign the 2 duplicate files
+6. All users receive email notifications
+7. Users log in and download their documents
+
+#### Example 2: User Downloading Document
+
+1. User receives email notification
+2. User logs into investor portal
+3. User navigates to Documents page
+4. User sees "Tax Document - Uploaded Jan 15, 2025"
+5. User clicks Download button
+6. API validates user ownership
+7. PDF downloads to user's device
+
+### Dependencies
+
+**NPM Packages:**
+- `jszip@^3.10.1` - ZIP file processing in Node.js
+- `@netlify/blobs` - Already in use for document storage
+- `resend` - Already in use for email notifications
+
+### File Structure
+
+```
+lib/
+  documentStorage.js              # NEW - Blob storage utilities
+
+app/
+  api/
+    admin/
+      documents/
+        bulk-upload/route.js      # NEW - Bulk ZIP upload
+        upload-single/route.js    # NEW - Single user upload
+        assign-pending/route.js   # NEW - Manual assignment
+        delete/route.js           # NEW - Delete documents
+        list/route.js             # NEW - List all documents
+    users/
+      [id]/
+        documents/
+          [docId]/route.js        # NEW - User document download
+  
+  admin/
+    components/
+      TaxDocumentsSection.js      # NEW - Admin UI component
+      TaxDocumentsSection.module.css # NEW - Styles
+      OperationsTab.js            # MODIFIED - Added tax section
+  
+  components/
+    DocumentsView.js              # MODIFIED - Added tax documents display
+    DocumentsView.module.css      # MODIFIED - Added styles
+```
+
+### Testing Checklist
+
+**Admin Features:**
+- [ ] Bulk upload with all matching names
+- [ ] Bulk upload with duplicate names
+- [ ] Bulk upload with non-matching names
+- [ ] Single user upload
+- [ ] Delete individual document
+- [ ] Delete all documents
+- [ ] View documents list
+- [ ] Email notifications sent
+
+**User Features:**
+- [ ] Receive email notification
+- [ ] View documents page
+- [ ] Download document
+- [ ] Multiple documents display correctly
+- [ ] Cannot access other user's documents
+
+**Error Cases:**
+- [ ] Upload non-PDF file (rejected)
+- [ ] Invalid ZIP file (error message)
+- [ ] Unauthorized access (403 error)
+- [ ] Missing user (404 error)
+- [ ] Blob storage failure (graceful handling)
+
+### Performance Considerations
+
+**Bulk Upload:**
+- Processes files sequentially (not parallel) to avoid overwhelming blob storage
+- 50ms delay between email sends (rate limiting)
+- Failed uploads don't block other files
+- Comprehensive results returned at end
+
+**Storage:**
+- Netlify Blobs is globally distributed CDN
+- Fast uploads/downloads worldwide
+- No size limits (within reasonable range)
+- Automatic caching
+
+**Scaling:**
+- Current implementation handles hundreds of users efficiently
+- For thousands of users: consider batch processing with queue system
+- Monitor blob storage usage and costs
+
+### Future Enhancements (Optional)
+
+1. **Preview functionality**: Preview PDF before download
+2. **Version history**: Track multiple versions of same document
+3. **Bulk email resend**: Resend notifications for specific year
+4. **Document expiration**: Auto-delete documents after X years
+5. **User uploads**: Allow users to upload documents to admin
+6. **Document categories**: Support more document types beyond tax forms
+7. **Search functionality**: Search documents by user/filename
+8. **Audit log**: Track all document operations for compliance
+
+---
+
 **Technology Notes:**
 - **Database:** Choose any (PostgreSQL, MongoDB, MySQL, etc.) - structure must support the JSON data models
 - **API Framework:** Any that supports REST/JSON (FastAPI, Express, Spring Boot, Django, etc.)

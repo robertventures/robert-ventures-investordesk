@@ -1,6 +1,7 @@
 import SectionCard from './SectionCard'
 import TimeMachineTab from './TimeMachineTab'
 import ImportInvestorsTab from './ImportInvestorsTab'
+import TaxDocumentsSection from './TaxDocumentsSection'
 import styles from './OperationsTab.module.css'
 
 /**
@@ -24,6 +25,19 @@ export default function OperationsTab({
 
   return (
     <div className={styles.operationsTab}>
+      {/* Tax Document Management Section */}
+      <SectionCard title="Tax Document Management">
+        <div className={styles.sectionHeader}>
+          <p className={styles.sectionDescription}>
+            Upload and manage annual tax documents (1099 forms). Bulk upload via ZIP or send to individual users.
+          </p>
+        </div>
+        <TaxDocumentsSection 
+          currentUser={currentUser}
+          onUploadComplete={onImportComplete}
+        />
+      </SectionCard>
+
       {/* Import Investors Section */}
       <SectionCard title="Import Investors">
         <div className={styles.sectionHeader}>
