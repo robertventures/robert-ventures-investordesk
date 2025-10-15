@@ -479,6 +479,11 @@ function ClientContent() {
                 }
               }
               
+              // Map frontend fundingMethod to backend paymentMethod
+              // 'bank-transfer' → 'ach'
+              // 'wire-transfer' → 'wire'
+              const paymentMethod = fundingMethod === 'bank-transfer' ? 'ach' : 'wire'
+              
               // Update the draft investment to pending status with compliance and banking data
               await fetch(`/api/users/${userId}`, {
                 method: 'PUT',
@@ -487,6 +492,8 @@ function ClientContent() {
                   _action: 'updateInvestment',
                   investmentId,
                   fields: {
+                    // Set payment method for backend auto-approval logic
+                    paymentMethod,
                     // For individual/IRA accounts, snapshot personalInfo and address at submission time
                     ...(investment.accountType === 'individual' || investment.accountType === 'ira' ? {
                       personalInfo: {
