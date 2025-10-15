@@ -73,7 +73,8 @@ export default function AccountCreationForm() {
       if (data.success && data.user) {
         localStorage.setItem('currentUserId', data.user.id)
         localStorage.setItem('signupEmail', form.email)
-        router.push('/confirmation')
+        // Pass user data via URL to ensure it's available in production
+        router.push(`/confirmation?email=${encodeURIComponent(form.email)}&userId=${data.user.id}`)
         return
       }
 

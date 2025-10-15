@@ -9,22 +9,34 @@ export default function ConfirmationPage() {
   const router = useRouter()
   const [code, setCode] = useState(['', '', '', '', '', ''])
   const [email, setEmail] = useState('')
+  const [userId, setUserId] = useState('')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [countdown, setCountdown] = useState(26)
   const inputRefs = useRef([])
 
   useEffect(() => {
-    // Get the email from localStorage
-    const signupEmail = localStorage.getItem('signupEmail')
-    const userId = localStorage.getItem('currentUserId')
+    // Try to get from URL parameters first (more reliable in production)
+    const params = new URLSearchParams(window.location.search)
+    const urlEmail = params.get('email')
+    const urlUserId = params.get('userId')
     
-    if (!signupEmail || !userId) {
+    // Fallback to localStorage
+    const signupEmail = urlEmail || localStorage.getItem('signupEmail')
+    const userIdFromStorage = urlUserId || localStorage.getItem('currentUserId')
+    
+    if (!signupEmail || !userIdFromStorage) {
       // If no email/user found, redirect to sign-in
       router.push('/sign-in')
       return
     }
+    
+    // Store in localStorage if it came from URL
+    if (urlEmail) localStorage.setItem('signupEmail', urlEmail)
+    if (urlUserId) localStorage.setItem('currentUserId', urlUserId)
+    
     setEmail(signupEmail)
+    setUserId(userIdFromStorage)
 
     // Start countdown timer
     const timer = setInterval(() => {
@@ -114,8 +126,7 @@ export default function ConfirmationPage() {
     setIsLoading(true)
     
     try {
-      // Get user ID from localStorage
-      const userId = localStorage.getItem('currentUserId')
+      // Use the userId from state
       if (!userId) {
         setError('Session expired. Please sign in again.')
         setTimeout(() => router.push('/'), 2000)
