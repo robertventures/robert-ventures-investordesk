@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
-import { getUsers } from '../../../../../../../lib/database'
-import { getDocument } from '../../../../../../../lib/documentStorage'
+import { getUsers } from '../../../../../lib/database'
+import { getDocument } from '../../../../../lib/documentStorage'
 
 /**
  * GET /api/users/[id]/documents/[docId]
