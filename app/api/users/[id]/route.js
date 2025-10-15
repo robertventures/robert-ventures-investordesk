@@ -121,15 +121,10 @@ export async function PUT(request, { params }) {
         return NextResponse.json({ success: false, error: 'Lockup period must be "1-year" or "3-year"' }, { status: 400 })
       }
 
-      // VALIDATION: Payment method must be valid
+      // VALIDATION: Payment method must be valid (if provided - it's set later during finalization)
       const validPaymentMethods = ['ach', 'wire']
       if (body.investment.paymentMethod && !validPaymentMethods.includes(body.investment.paymentMethod)) {
         return NextResponse.json({ success: false, error: 'Payment method must be "ach" or "wire"' }, { status: 400 })
-      }
-      
-      // Default to ACH if not specified
-      if (!body.investment.paymentMethod) {
-        body.investment.paymentMethod = 'ach'
       }
 
       // VALIDATION: IRA accounts cannot use monthly payment frequency (Bug #2)

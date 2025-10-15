@@ -7,8 +7,7 @@ export default function InvestmentForm({ onCompleted, onReviewSummary, disableAu
   const router = useRouter()
   const [formData, setFormData] = useState({
     investmentAmount: typeof initialAmount === 'number' ? initialAmount : 0,
-    paymentFrequency: initialPaymentFrequency === 'monthly' || initialPaymentFrequency === 'compounding' ? initialPaymentFrequency : 'compounding',
-    paymentMethod: 'ach' // Default to ACH
+    paymentFrequency: initialPaymentFrequency === 'monthly' || initialPaymentFrequency === 'compounding' ? initialPaymentFrequency : 'compounding'
   })
   const [errors, setErrors] = useState({})
   const [selectedLockup, setSelectedLockup] = useState(initialLockup === '1-year' || initialLockup === '3-year' ? initialLockup : '3-year')
@@ -89,8 +88,7 @@ export default function InvestmentForm({ onCompleted, onReviewSummary, disableAu
       paymentFrequency: formData.paymentFrequency,
       lockupPeriod: effectiveLockup,
       bonds,
-      accountType,
-      paymentMethod: formData.paymentMethod
+      accountType
     }
   }
 
@@ -184,10 +182,6 @@ export default function InvestmentForm({ onCompleted, onReviewSummary, disableAu
     if (!formData.paymentFrequency) {
       newErrors.paymentFrequency = 'Please select a payment frequency'
     }
-
-    if (!formData.paymentMethod) {
-      newErrors.paymentMethod = 'Please select a payment method'
-    }
     
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
@@ -207,8 +201,7 @@ export default function InvestmentForm({ onCompleted, onReviewSummary, disableAu
         amount: formData.investmentAmount,
         paymentFrequency: formData.paymentFrequency,
         lockupPeriod,
-        bonds,
-        paymentMethod: formData.paymentMethod
+        bonds
       }
 
       // Always start a fresh draft for a new investment flow
@@ -285,48 +278,9 @@ export default function InvestmentForm({ onCompleted, onReviewSummary, disableAu
           </div>
         </div>
 
-        {/* Step 2: Select Payment Method */}
+        {/* Step 2: Select Payment Frequency */}
         <div className={styles.section}>
-          <h2 className={styles.sectionTitle}>2. Select Payment Method</h2>
-          <div className={styles.radioGroup}>
-            <label className={`${styles.radioOption} ${formData.paymentMethod === 'ach' ? styles.radioOptionSelected : ''}`}>
-              <input
-                type="radio"
-                name="paymentMethod"
-                value="ach"
-                checked={formData.paymentMethod === 'ach'}
-                onChange={handleRadioChange}
-                className={styles.radioInput}
-              />
-              <div className={styles.radioContent}>
-                <span className={styles.radioLabel}>ACH Transfer</span>
-                <span className={styles.radioDescription}>Funds typically take 3-5 business days. Investment approved automatically.</span>
-              </div>
-            </label>
-            
-            <label className={`${styles.radioOption} ${formData.paymentMethod === 'wire' ? styles.radioOptionSelected : ''}`}>
-              <input
-                type="radio"
-                name="paymentMethod"
-                value="wire"
-                checked={formData.paymentMethod === 'wire'}
-                onChange={handleRadioChange}
-                className={styles.radioInput}
-              />
-              <div className={styles.radioContent}>
-                <span className={styles.radioLabel}>Wire Transfer</span>
-                <span className={styles.radioDescription}>Same-day processing. Requires manual approval by admin.</span>
-              </div>
-            </label>
-          </div>
-          {errors.paymentMethod && (
-            <div className={styles.errorMessage}>{errors.paymentMethod}</div>
-          )}
-        </div>
-
-        {/* Step 3: Enter Payment Frequency */}
-        <div className={styles.section}>
-          <h2 className={styles.sectionTitle}>3. Select Payment Frequency</h2>
+          <h2 className={styles.sectionTitle}>2. Select Payment Frequency</h2>
           <div className={styles.radioGroup}>
             <label className={`${styles.radioOption} ${formData.paymentFrequency === 'compounding' ? styles.radioOptionSelected : ''}`}>
               <input
@@ -367,9 +321,9 @@ export default function InvestmentForm({ onCompleted, onReviewSummary, disableAu
           )}
         </div>
 
-        {/* Step 4: Select Investment Option */}
+        {/* Step 3: Select Investment Option */}
         <div className={styles.section}>
-          <h2 className={styles.sectionTitle}>4. Select Investment Option</h2>
+          <h2 className={styles.sectionTitle}>3. Select Investment Option</h2>
           
           <div className={styles.investmentCards}>
             <div 
