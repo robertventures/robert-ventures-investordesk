@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server'
 import { updateUser, getUsers, saveUsers } from '../../../../lib/database'
 import { getCurrentAppTime } from '../../../../lib/appTime'
 import { generateGlobalInvestmentId, generateTransactionId } from '../../../../lib/idGenerator'
-import { hashPassword, comparePassword, isPasswordHashed } from '../../../../lib/auth'
+import { hashPassword, comparePassword, isPasswordHashed, signToken, signRefreshToken } from '../../../../lib/auth'
+import { setAuthCookies } from '../../../../lib/authMiddleware'
 
 // PUT - Update user data
 export async function PUT(request, { params }) {
@@ -230,7 +231,25 @@ export async function PUT(request, { params }) {
       if (!await saveUsers(usersData)) {
         return NextResponse.json({ success: false, error: 'Failed to verify account' }, { status: 500 })
       }
-      return NextResponse.json({ success: true, user: updatedUser })
+      
+      console.log('✅ Account verified and auto-logging in user:', updatedUser.email)
+      
+      // Automatically log the user in after successful verification
+      // Generate JWT tokens
+      const accessToken = signToken(updatedUser)
+      const refreshToken = signRefreshToken(updatedUser)
+      
+      // Create response with user data
+      const response = NextResponse.json({ 
+        success: true, 
+        user: updatedUser,
+        autoLoggedIn: true
+      })
+      
+      // Set authentication cookies so user is logged in
+      setAuthCookies(response, accessToken, refreshToken)
+      
+      return response
     }
 
     // Custom action: update existing investment fields by id

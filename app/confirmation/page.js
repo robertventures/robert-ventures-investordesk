@@ -160,7 +160,14 @@ export default function ConfirmationPage() {
         return
       }
 
-      // Verification successful, redirect to investment page
+      // Verification successful! User is now automatically logged in via auth cookies
+      // Update localStorage with user info for backward compatibility
+      localStorage.setItem('currentUserId', userId)
+      localStorage.setItem('signupEmail', email)
+      
+      console.log('✅ Verification successful, user auto-logged in, redirecting to investment page')
+      
+      // Redirect to investment page to continue the onboarding flow
       router.push('/investment')
     } catch (err) {
       console.error('Verification error:', err)
