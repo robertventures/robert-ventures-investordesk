@@ -9,7 +9,7 @@ export default function AuthWrapper({ children }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
 
   // Public routes that don't require authentication
-  const publicRoutes = ['/', '/sign-in', '/forgot-password', '/reset-password']
+  const publicRoutes = ['/', '/sign-in', '/forgot-password', '/reset-password', '/confirmation']
   
   // Check if current route is public
   const isPublicRoute = publicRoutes.includes(pathname) || pathname.startsWith('/reset-password')
