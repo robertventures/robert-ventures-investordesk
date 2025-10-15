@@ -142,10 +142,16 @@ export async function POST(request) {
     const result = await addUser(userData)
 
     if (result.success) {
+      console.log('✅ User created successfully:', {
+        id: result.user.id,
+        email: result.user.email,
+        timestamp: new Date().toISOString()
+      })
       // Don't return sensitive data
       const { password: _, ssn: __, ...safeUser } = result.user
       return NextResponse.json({ success: true, user: safeUser }, { status: 201 })
     } else {
+      console.error('❌ Failed to create user:', result.error)
       return NextResponse.json(
         { success: false, error: result.error },
         { status: 500 }

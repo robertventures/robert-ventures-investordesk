@@ -176,12 +176,42 @@ export async function PUT(request, { params }) {
 
     // Custom action: verify user account
     if (body._action === 'verifyAccount' && body.verificationCode) {
-      const usersData = await getUsers()
-      const userIndex = usersData.users.findIndex(u => u.id === id)
+      // Retry logic for Netlify Blobs eventual consistency
+      let usersData = await getUsers()
+      let userIndex = usersData.users.findIndex(u => u.id === id)
+      let retryCount = 0
+      const maxRetries = 3
+      
+      // If user not found, retry with delays to handle eventual consistency
+      while (userIndex === -1 && retryCount < maxRetries) {
+        retryCount++
+        console.log(`⏳ User ${id} not found, retry ${retryCount}/${maxRetries} after 1s delay...`)
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        usersData = await getUsers()
+        userIndex = usersData.users.findIndex(u => u.id === id)
+      }
+      
+      console.log('🔍 Verification attempt:', {
+        requestedUserId: id,
+        totalUsers: usersData.users.length,
+        userIds: usersData.users.map(u => u.id),
+        verificationCode: body.verificationCode,
+        retriesNeeded: retryCount
+      })
+      
       if (userIndex === -1) {
-        return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 })
+        console.error('❌ User not found for verification after retries:', {
+          requestedId: id,
+          availableIds: usersData.users.map(u => ({ id: u.id, email: u.email })),
+          totalRetries: retryCount
+        })
+        return NextResponse.json({ 
+          success: false, 
+          error: 'User not found. Please try again or contact support if the issue persists.' 
+        }, { status: 404 })
       }
       const user = usersData.users[userIndex]
+      console.log('✅ User found for verification:', { id: user.id, email: user.email, retriesNeeded: retryCount })
 
       // For now, accept '000000' as valid code. Later can implement real email verification
       if (body.verificationCode !== '000000') {

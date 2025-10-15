@@ -146,7 +146,15 @@ export default function ConfirmationPage() {
       const data = await res.json()
 
       if (!data.success) {
-        setError(data.error || 'Verification failed. Please try again.')
+        // Provide more helpful error messages
+        let errorMessage = data.error || 'Verification failed. Please try again.'
+        
+        // If user not found, suggest trying again (might be eventual consistency issue)
+        if (errorMessage.includes('User not found')) {
+          errorMessage = 'Account is being set up. Please wait a moment and try again.'
+        }
+        
+        setError(errorMessage)
         setCode(['', '', '', '', '', ''])
         inputRefs.current[0]?.focus()
         return
