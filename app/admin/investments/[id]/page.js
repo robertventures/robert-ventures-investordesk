@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import AdminHeader from '../../../components/AdminHeader'
+import { calculateInvestmentValue } from '../../../../lib/investmentCalculations'
 import styles from './page.module.css'
 
 export default function AdminInvestmentDetailsPage({ params }) {
@@ -13,6 +14,10 @@ export default function AdminInvestmentDetailsPage({ params }) {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
+  const [showTerminateModal, setShowTerminateModal] = useState(false)
+  const [isTerminating, setIsTerminating] = useState(false)
+  const [overrideLockupConfirmed, setOverrideLockupConfirmed] = useState(false)
+  const [appTime, setAppTime] = useState(null)
   const [form, setForm] = useState({
     amount: '',
     status: '',
@@ -74,6 +79,11 @@ export default function AdminInvestmentDetailsPage({ params }) {
           accountType: foundInvestment.accountType || '',
           paymentMethod: foundInvestment.paymentMethod || 'ach'
         })
+
+        // Fetch app time for withdrawal calculations
+        if (usersData.appTime) {
+          setAppTime(usersData.appTime)
+        }
       } catch (e) {
         console.error('Failed to load investment', e)
       } finally {
@@ -215,6 +225,65 @@ export default function AdminInvestmentDetailsPage({ params }) {
     } finally {
       setIsSaving(false)
     }
+  }
+
+  const handleTerminateClick = () => {
+    setShowTerminateModal(true)
+    setOverrideLockupConfirmed(false)
+  }
+
+  const handleTerminateConfirm = async () => {
+    if (!user || !investment || !currentUser) return
+
+    // Check if lockup override is needed
+    const now = new Date(appTime || new Date().toISOString())
+    const needsOverride = investment.lockupEndDate && now < new Date(investment.lockupEndDate)
+    
+    if (needsOverride && !overrideLockupConfirmed) {
+      alert('Please confirm that you understand you are overriding the lockup period.')
+      return
+    }
+
+    if (!confirm('Are you sure you want to terminate this investment? This action cannot be undone. The withdrawal will be processed immediately.')) {
+      return
+    }
+
+    setIsTerminating(true)
+    try {
+      const res = await fetch('/api/admin/withdrawals/terminate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          investmentId: investment.id,
+          adminUserId: currentUser.id,
+          overrideLockup: needsOverride && overrideLockupConfirmed
+        })
+      })
+
+      const data = await res.json()
+      
+      if (!data.success) {
+        alert(data.error || 'Failed to terminate investment')
+        return
+      }
+
+      alert(`Investment terminated successfully!\n\nFinal Payout: $${data.finalPayout.finalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\nPrincipal: $${data.finalPayout.principalAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\nEarnings: $${data.finalPayout.totalEarnings.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)
+      
+      // Reload the page to show updated data
+      window.location.reload()
+    } catch (e) {
+      console.error('Failed to terminate investment', e)
+      alert('An error occurred. Please try again.')
+    } finally {
+      setIsTerminating(false)
+      setShowTerminateModal(false)
+    }
+  }
+
+  const handleTerminateCancel = () => {
+    setShowTerminateModal(false)
+    setOverrideLockupConfirmed(false)
   }
 
   if (isLoading) {
@@ -656,6 +725,297 @@ export default function AdminInvestmentDetailsPage({ params }) {
               </div>
             )}
           </div>
+
+          {/* Admin Actions Section - Only show for active or withdrawal_notice investments */}
+          {(investment.status === 'active' || investment.status === 'withdrawal_notice') && (
+            <div className={styles.sectionCard} style={{ borderColor: '#dc2626', borderWidth: '2px' }}>
+              <div className={styles.sectionHeader}>
+                <h2 className={styles.sectionTitle} style={{ color: '#dc2626' }}>⚠️ Admin Actions</h2>
+                <p className={styles.subtitle} style={{ color: '#991b1b' }}>
+                  Danger Zone - Immediate investment termination
+                </p>
+              </div>
+              
+              <div style={{ padding: '20px' }}>
+                {/* Current Investment Value */}
+                <div style={{ 
+                  background: '#f8fafc', 
+                  border: '1px solid #e2e8f0', 
+                  borderRadius: '8px', 
+                  padding: '16px',
+                  marginBottom: '20px'
+                }}>
+                  <h3 style={{ fontSize: '14px', fontWeight: '600', color: '#64748b', marginBottom: '12px' }}>
+                    Current Investment Value
+                  </h3>
+                  {(() => {
+                    const currentValue = calculateInvestmentValue(investment, appTime)
+                    return (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+                        <div>
+                          <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>Principal</div>
+                          <div style={{ fontSize: '18px', fontWeight: '700', color: '#1f2937' }}>
+                            ${(investment.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>Earnings</div>
+                          <div style={{ fontSize: '18px', fontWeight: '700', color: '#059669' }}>
+                            ${currentValue.totalEarnings.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>Total Value</div>
+                          <div style={{ fontSize: '18px', fontWeight: '700', color: '#0369a1' }}>
+                            ${currentValue.currentValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })()}
+                </div>
+
+                {/* Lockup Status */}
+                <div style={{ marginBottom: '20px' }}>
+                  {(() => {
+                    const now = new Date(appTime || new Date().toISOString())
+                    const lockupEnd = investment.lockupEndDate ? new Date(investment.lockupEndDate) : null
+                    const isLockupExpired = !lockupEnd || now >= lockupEnd
+
+                    return isLockupExpired ? (
+                      <div style={{ 
+                        padding: '12px', 
+                        background: '#dcfce7', 
+                        border: '1px solid #86efac',
+                        borderRadius: '6px',
+                        color: '#166534',
+                        fontSize: '14px',
+                        fontWeight: '500'
+                      }}>
+                        ✓ Lockup period expired - Can terminate without override
+                      </div>
+                    ) : (
+                      <div style={{ 
+                        padding: '12px', 
+                        background: '#fef3c7', 
+                        border: '1px solid #fbbf24',
+                        borderRadius: '6px',
+                        color: '#92400e',
+                        fontSize: '14px',
+                        fontWeight: '500'
+                      }}>
+                        ⏳ Lockup ends on {lockupEnd.toLocaleDateString('en-US', { 
+                          month: 'long', 
+                          day: 'numeric', 
+                          year: 'numeric' 
+                        })} - Override confirmation required
+                      </div>
+                    )
+                  })()}
+                </div>
+
+                {/* Terminate Button */}
+                <button
+                  className={styles.terminateButton}
+                  onClick={handleTerminateClick}
+                  style={{
+                    width: '100%',
+                    padding: '12px 24px',
+                    background: '#dc2626',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => e.target.style.background = '#b91c1c'}
+                  onMouseLeave={(e) => e.target.style.background = '#dc2626'}
+                >
+                  Terminate Investment Immediately
+                </button>
+
+                <div style={{ 
+                  marginTop: '12px', 
+                  fontSize: '12px', 
+                  color: '#6b7280',
+                  lineHeight: '1.5'
+                }}>
+                  This will immediately process the withdrawal and return all funds (principal + accrued earnings) to the investor. 
+                  This action bypasses the standard 90-day notice period and cannot be undone.
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Termination Confirmation Modal */}
+          {showTerminateModal && (
+            <div className={styles.modalOverlay} onClick={handleTerminateCancel}>
+              <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+                <div className={styles.modalContent}>
+                  <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#111827', marginBottom: '16px' }}>
+                    Confirm Investment Termination
+                  </h2>
+
+                  {/* Investment Summary */}
+                  <div style={{ 
+                    background: '#f8fafc', 
+                    border: '1px solid #e2e8f0', 
+                    borderRadius: '8px', 
+                    padding: '16px',
+                    marginBottom: '20px'
+                  }}>
+                    <h3 style={{ fontSize: '14px', fontWeight: '600', color: '#64748b', marginBottom: '12px' }}>
+                      Investment #{investment.id}
+                    </h3>
+                    {(() => {
+                      const currentValue = calculateInvestmentValue(investment, appTime)
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span style={{ color: '#64748b' }}>Investor:</span>
+                            <span style={{ fontWeight: '600' }}>{user.firstName} {user.lastName}</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span style={{ color: '#64748b' }}>Principal:</span>
+                            <span style={{ fontWeight: '600' }}>
+                              ${(investment.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span style={{ color: '#64748b' }}>Earnings:</span>
+                            <span style={{ fontWeight: '600', color: '#059669' }}>
+                              ${currentValue.totalEarnings.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                          <div style={{ 
+                            display: 'flex', 
+                            justifyContent: 'space-between',
+                            paddingTop: '8px',
+                            marginTop: '8px',
+                            borderTop: '1px solid #e2e8f0'
+                          }}>
+                            <span style={{ fontWeight: '600', color: '#64748b' }}>Total Payout:</span>
+                            <span style={{ fontSize: '18px', fontWeight: '700', color: '#0369a1' }}>
+                              ${currentValue.currentValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    })()}
+                  </div>
+
+                  {/* Lockup Override Warning */}
+                  {(() => {
+                    const now = new Date(appTime || new Date().toISOString())
+                    const lockupEnd = investment.lockupEndDate ? new Date(investment.lockupEndDate) : null
+                    const needsOverride = lockupEnd && now < lockupEnd
+
+                    return needsOverride ? (
+                      <div className={styles.warningBox} style={{
+                        background: '#fef3c7',
+                        border: '2px solid #f59e0b',
+                        borderRadius: '8px',
+                        padding: '16px',
+                        marginBottom: '20px'
+                      }}>
+                        <div style={{ 
+                          fontSize: '16px', 
+                          fontWeight: '700', 
+                          color: '#92400e',
+                          marginBottom: '12px'
+                        }}>
+                          ⚠️ Lockup Period Override Required
+                        </div>
+                        <p style={{ fontSize: '14px', color: '#92400e', marginBottom: '12px' }}>
+                          This investment is still in its lockup period, which ends on{' '}
+                          <strong>
+                            {lockupEnd.toLocaleDateString('en-US', { 
+                              month: 'long', 
+                              day: 'numeric', 
+                              year: 'numeric' 
+                            })}
+                          </strong>
+                          . Terminating now will override the lockup agreement.
+                        </p>
+                        <label style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: '8px',
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                          fontWeight: '500',
+                          color: '#92400e'
+                        }}>
+                          <input
+                            type="checkbox"
+                            checked={overrideLockupConfirmed}
+                            onChange={(e) => setOverrideLockupConfirmed(e.target.checked)}
+                            className={styles.confirmCheckbox}
+                            style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                          />
+                          I understand I am overriding the lockup period
+                        </label>
+                      </div>
+                    ) : null
+                  })()}
+
+                  {/* Final Confirmation */}
+                  <div style={{
+                    background: '#fee2e2',
+                    border: '1px solid #fca5a5',
+                    borderRadius: '8px',
+                    padding: '16px',
+                    marginBottom: '20px',
+                    fontSize: '14px',
+                    color: '#991b1b',
+                    lineHeight: '1.6'
+                  }}>
+                    <strong>This action is immediate and cannot be undone.</strong> The investment will be terminated, 
+                    all funds will be marked for payout, and the investor will receive their principal plus all accrued earnings.
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                    <button
+                      onClick={handleTerminateCancel}
+                      disabled={isTerminating}
+                      style={{
+                        padding: '10px 20px',
+                        background: '#f3f4f6',
+                        color: '#374151',
+                        border: '1px solid #d1d5db',
+                        borderRadius: '6px',
+                        fontSize: '14px',
+                        fontWeight: '500',
+                        cursor: isTerminating ? 'not-allowed' : 'pointer',
+                        opacity: isTerminating ? 0.5 : 1
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleTerminateConfirm}
+                      disabled={isTerminating}
+                      style={{
+                        padding: '10px 20px',
+                        background: isTerminating ? '#9ca3af' : '#dc2626',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        fontSize: '14px',
+                        fontWeight: '600',
+                        cursor: isTerminating ? 'not-allowed' : 'pointer'
+                      }}
+                    >
+                      {isTerminating ? 'Processing...' : 'Confirm Termination'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
