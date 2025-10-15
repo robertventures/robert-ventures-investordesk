@@ -40,6 +40,11 @@ next-env.d.ts
 # database files
 /data
 
+# Real user data - NEVER commit (contains real PII for local testing only)
+lib/seedWealthblockAccounts.js
+RESTORE-REAL-DATA.md
+PRE-COMMIT-CHECKLIST.txt
+
 # testing and documentation
 /testing-docs
 /docs/backend-integration
