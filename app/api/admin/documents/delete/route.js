@@ -1,35 +1,33 @@
 import { NextResponse } from 'next/server'
 import { getUsers, updateUser, saveUsers } from '../../../../../lib/database'
 import { deleteDocument } from '../../../../../lib/documentStorage'
+import { requireAdmin, authErrorResponse } from '../../../../../lib/authMiddleware'
 
 /**
  * POST /api/admin/documents/delete
  * 
- * Delete tax documents
- * Supports: single user document, all documents for a year
+ * Delete documents
+ * Supports: single user document, all documents
  */
 export async function POST(request) {
   try {
-    const body = await request.json()
-    const { mode, userId, documentId, year, adminEmail } = body
+    // Verify admin authentication
+    const admin = await requireAdmin(request)
+    if (!admin) {
+      return authErrorResponse('Admin access required', 403)
+    }
 
-    if (!mode || !adminEmail) {
+    const body = await request.json()
+    const { mode, userId, documentId, year } = body
+
+    if (!mode) {
       return NextResponse.json(
         { success: false, error: 'Missing required fields' },
         { status: 400 }
       )
     }
 
-    // Verify admin authentication
     const usersData = await getUsers()
-    const adminUser = usersData.users.find(u => u.email === adminEmail && u.isAdmin)
-    
-    if (!adminUser) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
 
     if (mode === 'single') {
       // Delete single document for a specific user
@@ -76,16 +74,16 @@ export async function POST(request) {
       })
 
     } else if (mode === 'all') {
-      // Delete all tax documents
+      // Delete all documents
       const deletedDocs = []
       const errors = []
 
       for (const user of usersData.users) {
         if (!user.documents || user.documents.length === 0) continue
 
-        const taxDocs = user.documents.filter(d => d.type === 'tax_document')
+        const docs = user.documents.filter(d => d.type === 'document')
 
-        for (const doc of taxDocs) {
+        for (const doc of docs) {
           try {
             // Delete from blob storage
             await deleteDocument(doc.blobKey)
@@ -114,7 +112,7 @@ export async function POST(request) {
 
       return NextResponse.json({
         success: true,
-        message: `Deleted ${deletedDocs.length} tax documents`,
+        message: `Deleted ${deletedDocs.length} documents`,
         deleted: deletedDocs,
         errors: errors.length > 0 ? errors : undefined
       })

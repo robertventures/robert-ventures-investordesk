@@ -1,12 +1,13 @@
 'use client'
 import { useState, useEffect } from 'react'
-import styles from './TaxDocumentsSection.module.css'
+import styles from './DocumentManagerSection.module.css'
 
 /**
- * Tax Documents Management Section
+ * Document Manager Section
  * Handles bulk upload, single upload, and document management
+ * Used to send documents to users and manage/delete them
  */
-export default function TaxDocumentsSection({ currentUser, onUploadComplete }) {
+export default function DocumentManagerSection({ currentUser, onUploadComplete }) {
   const [activeSubTab, setActiveSubTab] = useState('bulk')
   const [bulkFile, setBulkFile] = useState(null)
   const [bulkUploading, setBulkUploading] = useState(false)
@@ -48,7 +49,7 @@ export default function TaxDocumentsSection({ currentUser, onUploadComplete }) {
     try {
       const params = new URLSearchParams({
         adminEmail: currentUser.email,
-        type: 'tax_document'
+        type: 'document'
       })
       
       const res = await fetch(`/api/admin/documents/list?${params}`)
@@ -174,7 +175,7 @@ export default function TaxDocumentsSection({ currentUser, onUploadComplete }) {
   }
 
   const handleDeleteAll = async () => {
-    if (!confirm('Are you sure you want to delete ALL tax documents? This cannot be undone.')) {
+    if (!confirm('Are you sure you want to delete ALL documents? This cannot be undone.')) {
       return
     }
 
@@ -238,7 +239,7 @@ export default function TaxDocumentsSection({ currentUser, onUploadComplete }) {
   }
 
   return (
-    <div className={styles.taxDocumentsSection}>
+    <div className={styles.documentManagerSection}>
       <div className={styles.subTabs}>
         <button
           className={activeSubTab === 'bulk' ? styles.activeSubTab : styles.subTab}

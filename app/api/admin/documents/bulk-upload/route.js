@@ -1,21 +1,27 @@
 import { NextResponse } from 'next/server'
 import { getUsers, updateUser } from '../../../../../lib/database'
 import { uploadDocument, generateDocumentKey, isPDF } from '../../../../../lib/documentStorage'
-import { sendTaxDocumentNotification } from '../../../../../lib/emailService'
+import { sendDocumentNotification } from '../../../../../lib/emailService'
 import { generateTransactionId } from '../../../../../lib/idGenerator'
+import { requireAdmin, authErrorResponse } from '../../../../../lib/authMiddleware'
 import JSZip from 'jszip'
 
 /**
  * POST /api/admin/documents/bulk-upload
  * 
- * Bulk upload tax documents from a ZIP file
+ * Bulk upload documents from a ZIP file
  * Files should be named: FirstnameLastname_*.pdf (e.g., JosephRobert_7273_2.pdf)
  */
 export async function POST(request) {
   try {
+    // Verify admin authentication
+    const admin = await requireAdmin(request)
+    if (!admin) {
+      return authErrorResponse('Admin access required', 403)
+    }
+
     const formData = await request.formData()
     const zipFile = formData.get('file')
-    const adminEmail = formData.get('adminEmail')
 
     if (!zipFile) {
       return NextResponse.json(
@@ -27,16 +33,7 @@ export async function POST(request) {
     // Auto-set year to current year for organizational purposes
     const year = new Date().getFullYear().toString()
 
-    // Verify admin authentication
     const usersData = await getUsers()
-    const adminUser = usersData.users.find(u => u.email === adminEmail && u.isAdmin)
-    
-    if (!adminUser) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
 
     // Parse ZIP file
     const arrayBuffer = await zipFile.arrayBuffer()
@@ -116,7 +113,7 @@ export async function POST(request) {
           // No duplicate checking - allow multiple documents per user
           
           // Upload to blob storage
-          const blobKey = generateDocumentKey('tax-documents', year, user.id, baseName)
+          const blobKey = generateDocumentKey('documents', year, user.id, baseName)
           const uploadResult = await uploadDocument(blobKey, pdfData, 'application/pdf')
 
           if (!uploadResult.success) {
@@ -129,10 +126,10 @@ export async function POST(request) {
           }
 
           // Update user record
-          const documentId = generateTransactionId('DOC', user.id, 'tax_document')
+          const documentId = generateTransactionId('DOC', user.id, 'document')
           const newDocument = {
             id: documentId,
-            type: 'tax_document',
+            type: 'document',
             fileName: baseName,
             year,
             uploadedAt: new Date().toISOString(),
@@ -146,7 +143,7 @@ export async function POST(request) {
           await updateUser(user.id, { documents })
 
           // Send email notification
-          const emailResult = await sendTaxDocumentNotification({
+          const emailResult = await sendDocumentNotification({
             email: user.email,
             firstName: user.firstName,
             lastName: user.lastName

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getUsers, saveUsers } from '../../../../lib/database'
+import { requireAdmin, authErrorResponse } from '../../../../lib/authMiddleware'
 
 // GET - Get current app time
 export async function GET(request) {
@@ -22,22 +23,23 @@ export async function GET(request) {
 // POST - Set app time (time machine)
 export async function POST(request) {
   try {
+    // Verify admin authentication
+    const admin = await requireAdmin(request)
+    if (!admin) {
+      return authErrorResponse('Admin access required', 403)
+    }
+
     const body = await request.json()
-    const { appTime, adminUserId } = body
+    const { appTime } = body
     
-    if (!adminUserId || !appTime) {
+    if (!appTime) {
       return NextResponse.json(
-        { success: false, error: 'adminUserId and appTime are required' },
+        { success: false, error: 'appTime is required' },
         { status: 400 }
       )
     }
 
-    // Verify admin permissions
     const usersData = await getUsers()
-    const admin = usersData.users.find(u => u.id === adminUserId && u.isAdmin)
-    if (!admin) {
-      return NextResponse.json({ success: false, error: 'Admin access required' }, { status: 403 })
-    }
 
     // Validate the date
     const newAppTime = new Date(appTime)
@@ -47,7 +49,7 @@ export async function POST(request) {
 
     // Set the app time
     usersData.appTime = newAppTime.toISOString()
-    usersData.timeMachineSetBy = adminUserId
+    usersData.timeMachineSetBy = admin.userId
     usersData.timeMachineSetAt = new Date().toISOString()
 
     if (!await saveUsers(usersData)) {
@@ -81,22 +83,13 @@ export async function POST(request) {
 // DELETE - Reset app time to real time
 export async function DELETE(request) {
   try {
-    const { searchParams } = new URL(request.url)
-    const adminUserId = searchParams.get('adminUserId')
-    
-    if (!adminUserId) {
-      return NextResponse.json(
-        { success: false, error: 'adminUserId is required' },
-        { status: 400 }
-      )
+    // Verify admin authentication
+    const admin = await requireAdmin(request)
+    if (!admin) {
+      return authErrorResponse('Admin access required', 403)
     }
 
-    // Verify admin permissions
     const usersData = await getUsers()
-    const admin = usersData.users.find(u => u.id === adminUserId && u.isAdmin)
-    if (!admin) {
-      return NextResponse.json({ success: false, error: 'Admin access required' }, { status: 403 })
-    }
 
     // Reset to real time
     delete usersData.appTime

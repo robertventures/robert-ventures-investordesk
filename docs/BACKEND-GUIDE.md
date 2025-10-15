@@ -134,6 +134,153 @@ def validate_ira_restrictions(account_type, payment_frequency, payment_method):
 
 ## Authentication & Security
 
+### JWT-Based Authentication
+
+The platform uses **JWT (JSON Web Tokens)** for secure, stateless authentication with HTTP-only cookies.
+
+#### Authentication Flow
+```python
+# 1. User Login
+POST /api/auth/login
+{
+    "email": "user@example.com",
+    "password": "SecurePass123!"
+}
+
+# Response: Sets HTTP-only cookies (auth-token, refresh-token)
+# Returns user data without sensitive fields
+
+# 2. Subsequent Requests
+# Frontend automatically sends cookies with each request
+# Backend validates JWT on protected routes
+
+# 3. Token Refresh
+POST /api/auth/refresh
+# Uses refresh-token cookie to get new access token
+# Returns new access token, updates cookie
+
+# 4. Logout
+POST /api/auth/logout
+# Clears authentication cookies
+```
+
+#### Password Hashing
+```python
+import bcrypt
+
+def hash_password(password):
+    """Hash password with bcrypt (10 salt rounds)"""
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt(10))
+
+def verify_password(password, hashed):
+    """Verify password against bcrypt hash"""
+    return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
+
+# CRITICAL: All new passwords must be hashed
+# Existing plain-text passwords are automatically migrated on first login
+```
+
+#### JWT Token Structure
+```python
+# Access Token (7 days expiry)
+{
+    "userId": "USR-1001",
+    "email": "user@example.com",
+    "isAdmin": false,
+    "exp": 1234567890  # Unix timestamp
+}
+
+# Refresh Token (30 days expiry)
+{
+    "userId": "USR-1001",
+    "email": "user@example.com",
+    "exp": 1234567890
+}
+
+# Environment Variables (REQUIRED)
+JWT_SECRET = "your-secure-secret-here"  # Generate with crypto.randomBytes(32)
+JWT_REFRESH_SECRET = "your-refresh-secret-here"  # Different from JWT_SECRET
+```
+
+#### HTTP-Only Cookie Security
+```python
+# Cookies set by backend with these flags:
+{
+    "httpOnly": True,      # Prevents JavaScript access (XSS protection)
+    "secure": True,        # HTTPS only in production
+    "sameSite": "lax",     # CSRF protection
+    "maxAge": 604800       # 7 days for access token
+}
+
+# Frontend never directly accesses tokens
+# All authentication state managed server-side
+```
+
+### Master Password System (Admin Testing)
+
+Admins can generate temporary master passwords to access any investor account for testing.
+
+```python
+def generate_master_password(admin_user_id):
+    """
+    Generate 16-character secure password valid for 30 minutes.
+    Allows admin to login as any investor using: investor_email + master_password
+    """
+    import secrets
+    import string
+    
+    # Generate secure random password
+    chars = string.ascii_letters + string.digits + "!@#$%^&*"
+    password = ''.join(secrets.choice(chars) for _ in range(16))
+    
+    # Hash and store with expiration
+    hashed = hash_password(password)
+    expires_at = now() + timedelta(minutes=30)
+    
+    store_master_password({
+        'masterPassword': hashed,
+        'expiresAt': expires_at.isoformat(),
+        'generatedBy': admin_user_id,
+        'generatedAt': now().isoformat()
+    })
+    
+    return {
+        'password': password,  # Return plain text once
+        'expiresAt': expires_at.isoformat()
+    }
+
+def verify_master_password(password):
+    """Check if password matches active master password"""
+    data = get_master_password_data()
+    
+    if not data:
+        return False
+    
+    # Check expiration
+    if now() > parse_datetime(data['expiresAt']):
+        return False
+    
+    # Verify password
+    return verify_password(password, data['masterPassword'])
+
+# Login Flow Enhancement
+def authenticate_user(email, password):
+    user = get_user_by_email(email)
+    if not user:
+        raise AuthError("Invalid credentials")
+    
+    # Check master password first
+    if verify_master_password(password):
+        # Admin using master password to access investor account
+        return create_session(user)
+    
+    # Check user's actual password
+    if verify_password(password, user.password):
+        return create_session(user)
+    
+    raise AuthError("Invalid credentials")
+```
+
 ### User Sign-Up Flow
 1. User creates account → `isVerified: false`
 2. User immediately logged in → redirected to `/confirmation`
@@ -160,36 +307,568 @@ def reset_password(token, new_password):
     if not user or is_token_expired(token):
         raise ValueError("Invalid or expired token")
 
-    user.password = hash_password(new_password)
+    user.password = hash_password(new_password)  # MUST hash password
     user.is_verified = True  # Auto-verify
     user.verified_at = user.verified_at or now()
     user.reset_token = None
     save_user(user)
 ```
 
-### Session Timeout
-- **Inactivity timeout:** 10 minutes
-- **Warning:** 1 minute before logout
-- **Implementation:** Frontend activity tracking + optional backend session validation
-
-### Admin 2FA
+### Seamless Password Migration
 ```python
-# All admin sign-ins require 2FA
-# Preferred: Google Identity Platform / Firebase Auth MFA
-
-def authenticate_admin(email, password):
+def login_with_migration(email, password):
+    """
+    Automatically migrates plain-text passwords to hashed on first login.
+    Ensures backward compatibility with existing users.
+    """
     user = get_user_by_email(email)
-    if not user or not user.is_admin:
+    if not user:
         raise AuthError("Invalid credentials")
-
-    if not verify_password(password, user.password):
-        raise AuthError("Invalid credentials")
-
-    if user.mfa_enabled:
-        challenge_id = start_mfa_challenge(user)
-        return {"mfa_required": True, "challenge_id": challenge_id}
-
+    
+    # Check if password is already hashed (starts with $2a$ or $2b$)
+    if user.password.startswith('$2'):
+        # Already hashed - use bcrypt compare
+        if not verify_password(password, user.password):
+            raise AuthError("Invalid credentials")
+    else:
+        # Plain text - compare directly, then hash
+        if user.password != password:
+            raise AuthError("Invalid credentials")
+        
+        # Migrate to hashed
+        user.password = hash_password(password)
+        save_user(user)
+        print(f"Migrated password for user: {user.email}")
+    
     return create_session(user)
+```
+
+### Protected Route Middleware
+```python
+def require_auth(request):
+    """
+    Middleware to protect routes requiring authentication.
+    Extracts JWT from HTTP-only cookie and validates.
+    """
+    token = extract_token_from_cookie(request)
+    
+    if not token:
+        raise AuthError("Not authenticated", 401)
+    
+    try:
+        payload = verify_jwt(token, JWT_SECRET)
+        return payload  # Contains userId, email, isAdmin
+    except JWTExpiredError:
+        raise AuthError("Token expired", 401)
+    except JWTInvalidError:
+        raise AuthError("Invalid token", 401)
+
+def require_admin(request):
+    """
+    Middleware to protect admin-only routes.
+    Validates JWT and checks isAdmin flag.
+    """
+    user = require_auth(request)
+    
+    if not user.get('isAdmin'):
+        raise AuthError("Admin access required", 403)
+    
+    return user
+
+# Usage in route handlers:
+def get_admin_accounts(request):
+    admin = require_admin(request)  # Throws if not admin
+    users = get_all_users()
+    return {"accounts": users}
+```
+
+### Session Management
+- **Access Token:** 7 days expiry (can be refreshed)
+- **Refresh Token:** 30 days expiry (longer-lived)
+- **Logout:** Clears both tokens via HTTP-only cookies
+- **Token Refresh:** Automatic on frontend, or manual via `/api/auth/refresh`
+- **Cross-tab Sync:** localStorage event listeners for logout coordination
+
+### Security Best Practices
+
+#### Password Requirements
+```python
+MIN_PASSWORD_LENGTH = 8
+
+def validate_password(password):
+    """Validate password strength"""
+    if len(password) < MIN_PASSWORD_LENGTH:
+        raise ValueError(f"Password must be at least {MIN_PASSWORD_LENGTH} characters")
+    
+    # Optional: Add complexity requirements
+    has_upper = any(c.isupper() for c in password)
+    has_lower = any(c.islower() for c in password)
+    has_digit = any(c.isdigit() for c in password)
+    
+    if not (has_upper and has_lower and has_digit):
+        raise ValueError("Password must contain uppercase, lowercase, and numbers")
+    
+    return True
+```
+
+#### Token Security
+```python
+# Environment Configuration
+JWT_SECRET = os.getenv('JWT_SECRET')  # MUST be set in production
+JWT_REFRESH_SECRET = os.getenv('JWT_REFRESH_SECRET')
+
+if not JWT_SECRET or not JWT_REFRESH_SECRET:
+    raise RuntimeError("JWT secrets not configured - REQUIRED for production")
+
+# Rotate secrets periodically (every 90 days recommended)
+# Use strong secrets: crypto.randomBytes(32).toString('hex')
+```
+
+#### Rate Limiting (Recommended)
+```python
+# Prevent brute force attacks
+LOGIN_ATTEMPTS_LIMIT = 5
+LOGIN_LOCKOUT_MINUTES = 15
+
+def check_rate_limit(email):
+    """Track failed login attempts"""
+    attempts = get_failed_attempts(email)
+
+    if attempts >= LOGIN_ATTEMPTS_LIMIT:
+        lockout_until = get_lockout_time(email)
+        if now() < lockout_until:
+            raise AuthError(f"Too many failed attempts. Try again in {minutes_remaining} minutes")
+        else:
+            reset_failed_attempts(email)
+
+    return True
+
+def record_failed_login(email):
+    """Increment failed attempts counter"""
+    increment_failed_attempts(email)
+    attempts = get_failed_attempts(email)
+
+    if attempts >= LOGIN_ATTEMPTS_LIMIT:
+        set_lockout_time(email, now() + timedelta(minutes=LOGIN_LOCKOUT_MINUTES))
+```
+
+#### CORS (Cross-Origin Resource Sharing)
+
+The platform includes secure CORS configuration to control which origins can access the API.
+
+**Automatic Configuration:**
+```python
+# CORS is automatically handled by Next.js middleware (middleware.js)
+# All /api/* routes get CORS headers automatically
+# No changes needed to individual API routes
+```
+
+**Allowed Origins:**
+```python
+# Production domains
+ALLOWED_ORIGINS = [
+    process.env.NEXT_PUBLIC_APP_URL,
+    'https://invest.robertventures.com',
+    'https://www.invest.robertventures.com',
+    # Netlify deploy URLs
+    process.env.DEPLOY_PRIME_URL,
+    process.env.DEPLOY_URL,
+]
+
+# Development (NODE_ENV !== 'production')
+ALLOWED_ORIGINS += [
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:3001',
+    # Pattern matching for:
+    # - https://*.netlify.app
+    # - http://(localhost|127.0.0.1):*
+]
+```
+
+**CORS Headers:**
+```python
+# For allowed origins:
+Access-Control-Allow-Origin: <origin>
+Access-Control-Allow-Credentials: true
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS, PATCH
+Access-Control-Allow-Headers: Content-Type, Authorization, ...
+Access-Control-Max-Age: 86400  # 24 hours
+
+# For blocked origins:
+# - No CORS headers
+# - Browser blocks response
+```
+
+**Preflight Requests (OPTIONS):**
+```python
+# Browser automatically sends OPTIONS request before:
+# - Requests with credentials (cookies)
+# - Requests with custom headers
+# - Non-simple requests (PUT, DELETE, etc.)
+
+# Server responds with:
+204 No Content  # If origin allowed
+403 Forbidden   # If origin blocked
+```
+
+**Environment Configuration:**
+```bash
+# Required for CORS origin validation
+NEXT_PUBLIC_APP_URL=https://your-domain.com
+
+# Optional for Netlify
+DEPLOY_PRIME_URL=https://main--your-site.netlify.app
+DEPLOY_URL=https://deploy-preview-123--your-site.netlify.app
+```
+
+**Testing:**
+```python
+def test_cors():
+    # Test allowed origin
+    response = get('/api/users', headers={
+        'Origin': 'https://invest.robertventures.com'
+    })
+    assert 'Access-Control-Allow-Origin' in response.headers
+    assert response.headers['Access-Control-Allow-Origin'] == 'https://invest.robertventures.com'
+
+    # Test blocked origin
+    response = get('/api/users', headers={
+        'Origin': 'https://malicious-site.com'
+    })
+    assert 'Access-Control-Allow-Origin' not in response.headers
+```
+
+#### HTTPS Enforcement
+
+The platform automatically enforces HTTPS in production with HSTS (HTTP Strict Transport Security).
+
+**Automatic Redirect (Production Only):**
+```python
+# Middleware automatically redirects HTTP to HTTPS
+# http://invest.robertventures.com/dashboard
+# → 301 Redirect →
+# https://invest.robertventures.com/dashboard
+```
+
+**Implementation:**
+```python
+# Check protocol from proxy/load balancer
+protocol = request.headers.get('x-forwarded-proto') or 'http'
+
+if process.env.NODE_ENV == 'production' and protocol == 'http':
+    # Build HTTPS URL
+    https_url = f"https://{host}{path}{query_string}"
+
+    # 301 Permanent Redirect with HSTS header
+    return Response(status=301, headers={
+        'Location': https_url,
+        'Strict-Transport-Security': 'max-age=31536000; includeSubDomains; preload'
+    })
+```
+
+**HSTS Header (Production Only):**
+```python
+# Added to ALL responses in production
+Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+
+# Parameters:
+# - max-age=31536000: Browser enforces HTTPS for 1 year
+# - includeSubDomains: Applies to all subdomains
+# - preload: Eligible for browser preload lists
+```
+
+**How HSTS Works:**
+```python
+# First Visit:
+1. User types: http://invest.robertventures.com
+2. Server redirects: 301 → https://invest.robertventures.com
+3. Browser receives: Strict-Transport-Security header
+4. Browser remembers: "Always use HTTPS for this domain"
+
+# Subsequent Visits:
+1. User types: http://invest.robertventures.com
+2. Browser automatically uses: https://invest.robertventures.com
+3. No HTTP request sent (protected from SSL stripping)
+```
+
+**Environment Configuration:**
+```bash
+# Production: HTTPS enforced
+NODE_ENV=production
+
+# Development: HTTP allowed (no SSL certificate needed)
+NODE_ENV=development
+```
+
+**Security Benefits:**
+- All traffic encrypted (TLS/SSL)
+- Man-in-the-middle attack prevention
+- SSL stripping attack prevention
+- Browser-level enforcement via HSTS
+- Eligible for HSTS preload lists
+
+**Testing:**
+```python
+def test_https_redirect():
+    # Production: HTTP → HTTPS
+    os.environ['NODE_ENV'] = 'production'
+    response = get('http://invest.robertventures.com/dashboard')
+    assert response.status_code == 301
+    assert response.headers['Location'] == 'https://invest.robertventures.com/dashboard'
+    assert 'Strict-Transport-Security' in response.headers
+
+def test_hsts_header():
+    # HTTPS requests get HSTS header
+    response = get('https://invest.robertventures.com/dashboard')
+    assert response.headers['Strict-Transport-Security'] == 'max-age=31536000; includeSubDomains; preload'
+```
+
+#### Audit Logging (Compliance)
+
+The platform includes comprehensive audit logging for privileged operations, security events, and compliance requirements (SOC 2, HIPAA, GDPR).
+
+**Architecture:**
+```python
+# Audit Log Entry Structure
+{
+    "id": "AUDIT-1705320600000-a3k9x7",
+    "timestamp": "2025-01-15T10:30:00.000Z",
+    "eventType": "master_password_login",  # Event classification
+    "actorId": "USR-1001",                 # Who performed the action
+    "actorEmail": "admin@rv.com",
+    "actorIP": "192.168.1.100",
+    "targetUserId": "USR-1002",            # Who was affected (if applicable)
+    "targetEmail": "investor@example.com",
+    "details": {},                          # Event-specific metadata
+    "severity": "high",                     # low, medium, high, critical
+    "metadata": {
+        "userAgent": "Mozilla/5.0...",
+        "requestId": "req-123"
+    }
+}
+```
+
+**Event Types:**
+```python
+# Authentication Events
+- master_password_login           # Admin logged in as investor using master password
+- master_password_generated       # Admin generated new master password
+- password_reset_requested        # User requested password reset
+- password_reset_completed        # User completed password reset
+
+# Administrative Events
+- admin_impersonation            # Admin accessed user account
+- user_data_accessed             # Admin viewed sensitive user data
+- investment_approved            # Admin approved investment
+- investment_rejected            # Admin rejected investment
+- withdrawal_approved            # Admin approved withdrawal
+- document_uploaded              # Admin uploaded document for user
+- document_deleted               # Admin deleted document
+
+# Security Events
+- rate_limit_exceeded            # User/IP exceeded rate limit
+- invalid_token_used             # Invalid JWT token attempted
+- unauthorized_access_attempt    # Access to protected resource denied
+```
+
+**Logging Functions:**
+```python
+def log_audit_event(event):
+    """
+    Log security/compliance event to audit log.
+    Append-only, immutable after creation.
+    """
+    audit_entry = {
+        'id': generate_audit_id(),
+        'timestamp': get_current_time().isoformat(),
+        'eventType': event.event_type,
+        'actorId': event.actor_id,
+        'actorEmail': event.actor_email,
+        'actorIP': event.actor_ip,
+        'targetUserId': event.target_user_id,
+        'targetEmail': event.target_email,
+        'details': event.details or {},
+        'severity': event.severity or 'medium',
+        'metadata': {
+            'userAgent': event.user_agent,
+            'requestId': event.request_id
+        }
+    }
+
+    append_to_audit_log(audit_entry)
+    return audit_entry
+
+def query_audit_logs(filters=None):
+    """
+    Query audit logs with filtering.
+
+    Filters:
+    - event_type: Filter by event type
+    - actor_id: Filter by who performed action
+    - target_user_id: Filter by affected user
+    - start_date: From date (inclusive)
+    - end_date: To date (inclusive)
+    - severity: Filter by severity level
+    - limit: Max results (default 100, max 1000)
+    """
+    logs = load_audit_logs()
+
+    if filters:
+        if filters.get('event_type'):
+            logs = [l for l in logs if l['eventType'] == filters['event_type']]
+        if filters.get('actor_id'):
+            logs = [l for l in logs if l['actorId'] == filters['actor_id']]
+        if filters.get('target_user_id'):
+            logs = [l for l in logs if l['targetUserId'] == filters['target_user_id']]
+        if filters.get('start_date'):
+            logs = [l for l in logs if l['timestamp'] >= filters['start_date']]
+        if filters.get('end_date'):
+            logs = [l for l in logs if l['timestamp'] <= filters['end_date']]
+        if filters.get('severity'):
+            logs = [l for l in logs if l['severity'] == filters['severity']]
+
+    # Sort by timestamp descending (most recent first)
+    logs = sorted(logs, key=lambda l: l['timestamp'], reverse=True)
+
+    # Apply limit
+    limit = min(filters.get('limit', 100), 1000) if filters else 100
+    return logs[:limit]
+```
+
+**Storage:**
+```python
+# Audit logs stored separately from user data
+# Options:
+# 1. Dedicated file: data/audit-log.json
+# 2. Separate database table: audit_logs
+# 3. Netlify Blobs: store name "audit-logs"
+
+# Auto-rotation: Keep last 10,000 entries or 1 year
+# Archive older logs to cold storage for compliance
+```
+
+**Integration Examples:**
+
+**Master Password Login:**
+```python
+def authenticate_user(email, password):
+    user = get_user_by_email(email)
+
+    # Check master password first
+    if verify_master_password(password):
+        # Log audit event
+        log_audit_event({
+            'event_type': 'master_password_login',
+            'actor_id': None,  # Admin not logged in yet
+            'actor_email': None,
+            'actor_ip': get_client_ip(),
+            'target_user_id': user.id,
+            'target_email': user.email,
+            'severity': 'high',
+            'details': {'method': 'master_password'}
+        })
+
+        return create_session(user)
+
+    # Regular password check...
+```
+
+**Master Password Generation:**
+```python
+def generate_master_password(admin_user):
+    password = generate_secure_password()
+    expires_at = now() + timedelta(minutes=30)
+
+    # Store hashed password
+    store_master_password({
+        'masterPassword': hash_password(password),
+        'expiresAt': expires_at.isoformat(),
+        'generatedBy': admin_user.id
+    })
+
+    # Log audit event
+    log_audit_event({
+        'event_type': 'master_password_generated',
+        'actor_id': admin_user.id,
+        'actor_email': admin_user.email,
+        'actor_ip': get_client_ip(),
+        'severity': 'critical',
+        'details': {
+            'expires_at': expires_at.isoformat(),
+            'valid_for_minutes': 30
+        }
+    })
+
+    return {'password': password, 'expiresAt': expires_at}
+```
+
+**API Endpoint:**
+```python
+GET /api/admin/audit-logs
+# Query audit logs (admin only)
+
+Query Parameters:
+- eventType: string (optional)
+- actorId: string (optional)
+- targetUserId: string (optional)
+- startDate: ISO date (optional)
+- endDate: ISO date (optional)
+- severity: "low" | "medium" | "high" | "critical" (optional)
+- limit: number (optional, default 100, max 1000)
+
+Response:
+{
+    "success": true,
+    "logs": [
+        {
+            "id": "AUDIT-1705320600000-a3k9x7",
+            "timestamp": "2025-01-15T10:30:00.000Z",
+            "eventType": "master_password_login",
+            "actorEmail": "admin@rv.com",
+            "targetEmail": "investor@example.com",
+            "severity": "high",
+            "actorIP": "192.168.1.100"
+        }
+    ],
+    "total": 1
+}
+```
+
+**Compliance Features:**
+- **Immutable logs**: Events cannot be modified or deleted after creation
+- **Append-only**: All events are logged, no overwrites
+- **Automatic rotation**: Keeps last 10,000 entries by default
+- **Comprehensive tracking**: Who did what, when, to whom, from where
+- **Query capabilities**: Filter by event type, user, date range, severity
+- **Retention policy**: 1 year minimum for compliance (configurable)
+
+**Testing:**
+```python
+def test_audit_logging():
+    # Generate master password
+    admin = login_as_admin()
+    response = post('/api/admin/generate-master-password', cookies=admin.cookies)
+
+    # Verify audit log created
+    logs = query_audit_logs({'event_type': 'master_password_generated'})
+    assert len(logs) == 1
+    assert logs[0]['actorId'] == admin.user_id
+    assert logs[0]['severity'] == 'critical'
+
+    # Use master password
+    master_password = response.json['password']
+    investor_login = post('/api/auth/login', {
+        'email': 'investor@example.com',
+        'password': master_password
+    })
+
+    # Verify master password usage logged
+    logs = query_audit_logs({'event_type': 'master_password_login'})
+    assert len(logs) == 1
+    assert logs[0]['targetEmail'] == 'investor@example.com'
+    assert logs[0]['severity'] == 'high'
 ```
 
 ---
@@ -819,14 +1498,35 @@ def process_withdrawal(investment, admin_id):
 ### Authentication
 ```python
 POST /api/users
-# Sign up
+# Sign up (hashes password automatically)
 Request: {"email": "user@example.com", "password": "Pass123!"}
 Response: {"success": true, "user": {...}}
+Note: Password is hashed with bcrypt before storage
 
-POST /api/auth/sign-in
-# Sign in
+POST /api/auth/login
+# Login (JWT-based, sets HTTP-only cookies)
 Request: {"email": "user@example.com", "password": "Pass123!"}
-Response: {"success": true, "user": {...}, "redirect": "/dashboard"}
+Response: {"success": true, "user": {...}}
+Cookies: auth-token (7 days), refresh-token (30 days)
+Note: Also accepts master password for any investor account
+
+POST /api/auth/logout
+# Logout (clears cookies)
+Request: {} (no body required)
+Response: {"success": true, "message": "Logged out successfully"}
+Cookies: Cleared
+
+POST /api/auth/refresh
+# Refresh access token using refresh token
+Request: {} (uses refresh-token cookie)
+Response: {"success": true, "message": "Token refreshed"}
+Cookies: Updated auth-token
+
+GET /api/auth/me
+# Get current user from JWT
+Request: {} (uses auth-token cookie)
+Response: {"success": true, "user": {...}}
+Note: Used to verify session and get user data
 
 POST /api/auth/request-reset
 # Request password reset
@@ -834,7 +1534,7 @@ Request: {"email": "user@example.com"}
 Response: {"success": true}
 
 POST /api/auth/reset-password
-# Reset password (auto-verifies account)
+# Reset password (auto-verifies account, hashes password)
 Request: {"token": "abc123", "newPassword": "NewPass123!"}
 Response: {"success": true, "message": "Password reset successful. Your account has been verified."}
 ```
@@ -896,22 +1596,49 @@ Response: {"success": true, "user": {...}}
 
 ### Admin Endpoints
 ```python
+# All admin endpoints require JWT with isAdmin=true
+
 GET /api/admin/accounts
 # Get all users (admin only)
+Headers: Cookie: auth-token=<jwt>
 Response: {"success": true, "accounts": [...], "appTime": "..."}
 
 POST /api/admin/time-machine
 # Set app time (testing/demos)
-Request: {"targetDate": "2024-11-01T00:00:00.000Z"}
+Headers: Cookie: auth-token=<jwt>
+Request: {"appTime": "2024-11-01T00:00:00.000Z"}
 Response: {"success": true, "appTime": "2024-11-01T00:00:00.000Z"}
 
 POST /api/admin/seed
 # Seed test accounts
+Headers: Cookie: auth-token=<jwt>
 Response: {"success": true, "accounts": [...]}
 
 POST /api/migrate-transactions
 # Generate transactions for all investments
 Response: {"success": true, "processed": 5}
+
+POST /api/admin/generate-master-password
+# Generate temporary master password (30 min expiry)
+Headers: Cookie: auth-token=<jwt> (admin only)
+Response: {
+    "success": true,
+    "password": "Xt9mK2#pQ5rL8wN$",  # Shown only once
+    "expiresAt": "2024-01-15T11:30:00.000Z",
+    "message": "Master password generated successfully..."
+}
+
+GET /api/admin/generate-master-password
+# Get current master password info (not the actual password)
+Headers: Cookie: auth-token=<jwt> (admin only)
+Response: {
+    "success": true,
+    "hasPassword": true,
+    "expiresAt": "2024-01-15T11:30:00.000Z",
+    "generatedAt": "2024-01-15T11:00:00.000Z",
+    "isExpired": false,
+    "timeRemainingMs": 1800000
+}
 ```
 
 ---
@@ -972,6 +1699,235 @@ def get_current_app_time():
 ---
 
 ## Testing Requirements
+
+### JWT Authentication Testing
+
+#### Test Scenario: JWT Login Flow
+```python
+def test_jwt_login_flow():
+    # 1. User login
+    response = post('/api/auth/login', {
+        'email': 'user@example.com',
+        'password': 'Pass123!'
+    })
+    assert response.status == 200
+    assert 'auth-token' in response.cookies
+    assert 'refresh-token' in response.cookies
+    
+    # 2. Verify session
+    me_response = get('/api/auth/me', cookies=response.cookies)
+    assert me_response.status == 200
+    assert me_response.json['user']['email'] == 'user@example.com'
+    
+    # 3. Access protected route
+    accounts_response = get('/api/admin/accounts', cookies=response.cookies)
+    if response.json['user']['isAdmin']:
+        assert accounts_response.status == 200
+    else:
+        assert accounts_response.status == 403  # Forbidden
+```
+
+#### Test Scenario: Password Migration
+```python
+def test_password_migration():
+    # Create user with plain-text password
+    user = create_user({
+        'email': 'test@example.com',
+        'password': 'PlainText123'
+    })
+    assert not user.password.startswith('$2')  # Plain text
+    
+    # Login (triggers migration)
+    response = post('/api/auth/login', {
+        'email': 'test@example.com',
+        'password': 'PlainText123'
+    })
+    assert response.status == 200
+    
+    # Verify password is now hashed
+    updated_user = get_user_by_email('test@example.com')
+    assert updated_user.password.startswith('$2')  # Hashed
+    
+    # Verify can still login with same password
+    response2 = post('/api/auth/login', {
+        'email': 'test@example.com',
+        'password': 'PlainText123'
+    })
+    assert response2.status == 200
+```
+
+#### Test Scenario: Master Password System
+```python
+def test_master_password():
+    # 1. Generate master password (admin only)
+    admin = authenticate_admin()
+    response = post('/api/admin/generate-master-password', 
+                    cookies=admin.cookies)
+    
+    assert response.status == 200
+    master_password = response.json['password']
+    expires_at = response.json['expiresAt']
+    assert len(master_password) == 16
+    
+    # 2. Use master password to access investor account
+    investor_response = post('/api/auth/login', {
+        'email': 'investor@example.com',
+        'password': master_password
+    })
+    assert investor_response.status == 200
+    assert investor_response.json['user']['email'] == 'investor@example.com'
+    
+    # 3. Verify expiration after 30 minutes
+    time.sleep(1801)  # 30 minutes + 1 second
+    expired_response = post('/api/auth/login', {
+        'email': 'investor@example.com',
+        'password': master_password
+    })
+    assert expired_response.status == 401
+```
+
+#### Test Scenario: Protected Routes
+```python
+def test_protected_routes():
+    # Without authentication
+    response = get('/api/admin/accounts')
+    assert response.status == 401
+    
+    # With user authentication (not admin)
+    user_cookies = login_as_user()
+    response = get('/api/admin/accounts', cookies=user_cookies)
+    assert response.status == 403
+    
+    # With admin authentication
+    admin_cookies = login_as_admin()
+    response = get('/api/admin/accounts', cookies=admin_cookies)
+    assert response.status == 200
+```
+
+#### Test Scenario: Token Refresh
+```python
+def test_token_refresh():
+    # Login
+    login_response = post('/api/auth/login', {
+        'email': 'user@example.com',
+        'password': 'Pass123!'
+    })
+    
+    # Extract tokens
+    refresh_token = login_response.cookies['refresh-token']
+    
+    # Simulate access token expiration (7 days later)
+    time.travel(days=8)
+    
+    # Refresh token still valid (30 days)
+    refresh_response = post('/api/auth/refresh', 
+                           cookies={'refresh-token': refresh_token})
+    assert refresh_response.status == 200
+    assert 'auth-token' in refresh_response.cookies
+    
+    # New access token works
+    me_response = get('/api/auth/me', cookies=refresh_response.cookies)
+    assert me_response.status == 200
+```
+
+#### Test Scenario: Logout
+```python
+def test_logout():
+    # Login
+    login_response = post('/api/auth/login', {
+        'email': 'user@example.com',
+        'password': 'Pass123!'
+    })
+    cookies = login_response.cookies
+    
+    # Verify authenticated
+    me_response = get('/api/auth/me', cookies=cookies)
+    assert me_response.status == 200
+    
+    # Logout
+    logout_response = post('/api/auth/logout', cookies=cookies)
+    assert logout_response.status == 200
+    
+    # Verify cookies cleared
+    assert logout_response.cookies['auth-token'] == ''
+    assert logout_response.cookies['refresh-token'] == ''
+    
+    # Verify cannot access protected routes
+    protected_response = get('/api/auth/me', cookies=logout_response.cookies)
+    assert protected_response.status == 401
+```
+
+### Troubleshooting Guide
+
+#### Common Issues
+
+**Issue: "Invalid email or password" on login**
+```python
+# Check JWT secrets are configured
+assert os.getenv('JWT_SECRET') is not None
+assert os.getenv('JWT_REFRESH_SECRET') is not None
+
+# Verify user exists
+user = get_user_by_email(email)
+assert user is not None
+
+# Check password hash format
+if user.password.startswith('$2'):
+    # Properly hashed - use bcrypt.compare()
+    assert bcrypt.compare(password, user.password)
+else:
+    # Plain text - should match exactly
+    assert user.password == password
+```
+
+**Issue: Master password not working**
+```python
+# Verify master password exists and not expired
+data = get_master_password_data()
+assert data is not None
+assert datetime.now() < parse_datetime(data['expiresAt'])
+
+# Check password verification
+assert verify_master_password(entered_password) == True
+```
+
+**Issue: Cookies not being set**
+```python
+# Verify cookie configuration
+response.cookies.set('auth-token', token, {
+    'httpOnly': True,
+    'secure': True if PRODUCTION else False,  # HTTPS only in prod
+    'sameSite': 'lax',
+    'path': '/',
+    'maxAge': 604800  # 7 days
+})
+
+# Frontend must include credentials
+fetch('/api/auth/login', {
+    credentials: 'include'  # REQUIRED for cookies
+})
+```
+
+**Issue: Token expired errors**
+```python
+# This is normal behavior - tokens should expire
+# Access token: 7 days
+# Refresh token: 30 days
+
+# Implement token refresh on frontend
+if (response.status === 401) {
+    // Try to refresh token
+    const refreshResponse = await fetch('/api/auth/refresh', {
+        credentials: 'include'
+    })
+    
+    if (refreshResponse.ok) {
+        // Retry original request
+    } else {
+        // Redirect to login
+    }
+}
+```
 
 ### Test Scenarios
 
@@ -1568,16 +2524,24 @@ Response: {
 ### Environment Configuration
 
 ```python
+# JWT Authentication (REQUIRED)
+JWT_SECRET = "your-secret-32-byte-hex"  # Generate: crypto.randomBytes(32).toString('hex')
+JWT_REFRESH_SECRET = "your-refresh-secret-32-byte-hex"  # Must be different from JWT_SECRET
+
 # Email Service (Resend)
 RESEND_API_KEY = "re_abc123..."
 EMAIL_FROM = "noreply@robertventures.com"
 
 # Application
 NEXT_PUBLIC_APP_URL = "https://invest.robertventures.com"
+NODE_ENV = "production"  # or "development"
 
 # Security
 PASSWORD_MIN_LENGTH = 8
-TOKEN_EXPIRY_HOURS = 24
+TOKEN_EXPIRY_HOURS = 24  # For password reset tokens
+JWT_ACCESS_TOKEN_EXPIRY = "7d"  # 7 days
+JWT_REFRESH_TOKEN_EXPIRY = "30d"  # 30 days
+MASTER_PASSWORD_EXPIRY_MINUTES = 30  # Master password expiration
 ```
 
 ### Testing Migration System
@@ -1666,17 +2630,25 @@ This guide provides:
 
 **Implementation Approach:**
 1. Choose your technology stack (Python/FastAPI, Node.js/Express, Java/Spring, etc.)
-2. Implement data models matching the JSON structure documented above
-3. Build sequential ID generators (not UUIDs - format must match exactly)
-4. Implement interest calculation formulas (test against reference implementation)
-5. Create immutable transaction system for complete audit trail
-6. Build REST API endpoints matching the specifications
-7. Implement migration & onboarding system with email integration
-8. Add historical transaction import support
-9. Validate calculations match reference implementation penny-for-penny
-10. Test against all provided scenarios
+2. Implement JWT authentication system:
+   - Install JWT library (`jsonwebtoken`, `PyJWT`, etc.)
+   - Install bcrypt library for password hashing
+   - Set up JWT secrets in environment variables
+   - Implement authentication middleware
+   - Protect all admin routes with JWT validation
+3. Implement data models matching the JSON structure documented above
+4. Build sequential ID generators (not UUIDs - format must match exactly)
+5. Implement interest calculation formulas (test against reference implementation)
+6. Create immutable transaction system for complete audit trail
+7. Build REST API endpoints matching the specifications
+8. Implement migration & onboarding system with email integration
+9. Add historical transaction import support
+10. Validate calculations match reference implementation penny-for-penny
+11. Test against all provided scenarios (including JWT authentication tests)
 
 **Reference Implementation:**
+- JWT Authentication: `/lib/auth.js`, `/lib/authMiddleware.js`, `/lib/masterPassword.js`
+- Authentication routes: `/app/api/auth/*`
 - Interest calculations: `/lib/investmentCalculations.js`
 - ID generation: `/lib/idGenerator.js`
 - API routes: `/app/api/users/[id]/route.js`
@@ -1685,13 +2657,21 @@ This guide provides:
 - Onboarding: `/app/onboarding/page.js`
 - Use these to verify your implementation produces identical results
 
+**Quick Start (Next.js Reference Implementation):**
+1. Install dependencies: `npm install jsonwebtoken bcryptjs cookie`
+2. Generate JWT secrets: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
+3. Create `.env.local` with `JWT_SECRET` and `JWT_REFRESH_SECRET`
+4. Start dev server: `npm run dev`
+5. Login as admin, generate master password from Operations tab
+6. Test by logging into any investor account with master password
+
 ---
 
-## Tax Document Management
+## Document Manager
 
 ### Overview
 
-The tax document management system allows admins to bulk upload annual tax documents (1099 forms) to users. The system handles name matching, duplicate name scenarios, email notifications, and secure document delivery to users.
+The document manager system allows admins to send documents to users via bulk upload or individual upload. It can be used for statements, notices, or any other documents that need to be distributed to users. The system handles name matching, duplicate name scenarios, email notifications, and secure document delivery to users.
 
 ### Core Features
 
@@ -1712,8 +2692,8 @@ The tax document management system allows admins to bulk upload annual tax docum
 {
   documents: [
     {
-      id: "DOC-USR-1001-TAX-DOCUMENT-20250115103000",
-      type: "tax_document",  // or "statement", "agreement", etc.
+      id: "DOC-USR-1001-DOCUMENT-20250115103000",
+      type: "document",  // Document type
       fileName: "JosephRobert_1234.pdf",
       year: "2025",  // Auto-set to current year
       uploadedAt: "2025-01-15T10:30:00.000Z",
@@ -1731,7 +2711,7 @@ The tax document management system allows admins to bulk upload annual tax docum
 **Store Name:** `documents` (separate from `users` store)
 
 **Key Format:** `{type}/{year}/{userId}-{timestamp}.{extension}`
-- Example: `tax-documents/2025/USR-1001-1705320600000.pdf`
+- Example: `documents/2025/USR-1001-1705320600000.pdf`
 - Timestamp prevents overwrites when uploading multiple documents
 
 **Storage Functions** (`lib/documentStorage.js`):
@@ -1835,9 +2815,9 @@ FormData {
 - Processes files sequentially
 - Auto-sets year to current year
 - No duplicate prevention (allows multiple documents per user)
-- Uploads to blob storage: `tax-documents/{year}/{userId}-{timestamp}.pdf`
+- Uploads to blob storage: `documents/{year}/{userId}-{timestamp}.pdf`
 - Updates user's `documents` array
-- Sends email notification via `sendTaxDocumentNotification()`
+- Sends email notification via `sendDocumentNotification()`
 
 #### 2. Single User Upload
 
@@ -1864,9 +2844,9 @@ FormData {
     name: "Joseph Robert"
   },
   document: {
-    id: "DOC-USR-1001-TAX-DOCUMENT-20250115103000",
-    type: "tax_document",
-    fileName: "tax_form.pdf",
+    id: "DOC-USR-1001-DOCUMENT-20250115103000",
+    type: "document",
+    fileName: "document.pdf",
     year: "2025",
     uploadedAt: "2025-01-15T10:30:00.000Z",
     uploadedBy: "USR-1000",
@@ -1915,7 +2895,7 @@ FormData {
 
 #### 4. List Documents
 
-**Endpoint:** `GET /api/admin/documents/list?adminEmail=admin@rv.com&type=tax_document`
+**Endpoint:** `GET /api/admin/documents/list?adminEmail=admin@rv.com&type=document`
 
 **Authentication:** Admin only
 
@@ -1925,13 +2905,13 @@ FormData {
   success: true,
   documents: [
     {
-      id: "DOC-USR-1001-TAX-DOCUMENT-20250115103000",
-      type: "tax_document",
+      id: "DOC-USR-1001-DOCUMENT-20250115103000",
+      type: "document",
       fileName: "JosephRobert_1234.pdf",
       year: "2025",
       uploadedAt: "2025-01-15T10:30:00.000Z",
       uploadedBy: "USR-1000",
-      blobKey: "tax-documents/2025/USR-1001-1705320600000.pdf",
+      blobKey: "documents/2025/USR-1001-1705320600000.pdf",
       user: {
         id: "USR-1001",
         email: "joseph@example.com",
@@ -1946,7 +2926,7 @@ FormData {
 
 **Query Parameters:**
 - `adminEmail` (required): Admin authentication
-- `type` (optional): Filter by document type (e.g., "tax_document")
+- `type` (optional): Filter by document type (e.g., "document")
 
 **Implementation:**
 - Returns all documents across all users
@@ -1966,7 +2946,7 @@ FormData {
 {
   mode: "single",
   userId: "USR-1001",
-  documentId: "DOC-USR-1001-TAX-DOCUMENT-20250115103000",
+  documentId: "DOC-USR-1001-DOCUMENT-20250115103000",
   adminEmail: "admin@rv.com"
 }
 ```
@@ -1983,7 +2963,7 @@ FormData {
 ```javascript
 {
   success: true,
-  message: "Deleted 50 tax documents",
+  message: "Deleted 50 documents",
   deleted: [
     {
       userId: "USR-1001",
@@ -2011,7 +2991,7 @@ FormData {
 **Response:** PDF file with proper headers
 ```
 Content-Type: application/pdf
-Content-Disposition: attachment; filename="tax_form.pdf"
+Content-Disposition: attachment; filename="document.pdf"
 ```
 
 **Security:**
@@ -2021,7 +3001,7 @@ Content-Disposition: attachment; filename="tax_form.pdf"
 
 ### Email Notifications
 
-#### Function: `sendTaxDocumentNotification()`
+#### Function: `sendDocumentNotification()`
 
 **Location:** `lib/emailService.js`
 
@@ -2035,16 +3015,16 @@ Content-Disposition: attachment; filename="tax_form.pdf"
 ```
 
 **Email Content:**
-- **Subject:** "Your Tax Documents Are Ready - Robert Ventures"
+- **Subject:** "Your Documents Are Ready - Robert Ventures"
 - **Body:** Professional HTML template with download link
 - **CTA:** Direct link to Documents page in investor portal
-- **Notes:** Instructions on downloading, saving, and tax filing
+- **Notes:** Instructions on downloading and saving documents
 
 **Template Features:**
 - Responsive HTML design
 - Gradient header
 - Clear call-to-action button
-- Important notes about tax filing
+- Important notes about document storage
 - Plain text fallback
 - Direct link to documents: `${appUrl}/dashboard?view=documents`
 
@@ -2052,7 +3032,7 @@ Content-Disposition: attachment; filename="tax_form.pdf"
 
 #### Admin UI
 
-**Location:** `app/admin/components/TaxDocumentsSection.js`
+**Location:** `app/admin/components/DocumentManagerSection.js`
 
 **Three Sub-Tabs:**
 
@@ -2085,10 +3065,10 @@ Content-Disposition: attachment; filename="tax_form.pdf"
 **Location:** `app/components/DocumentsView.js`
 
 **Features:**
-- Tax documents section at top
+- Documents section at top
 - Chronological list (most recent first)
 - Each document shows:
-  - Document title: "Tax Document"
+  - Document title: "Document"
   - Filename
   - Upload date
   - Download button
@@ -2166,7 +3146,7 @@ Content-Disposition: attachment; filename="tax_form.pdf"
 1. User receives email notification
 2. User logs into investor portal
 3. User navigates to Documents page
-4. User sees "Tax Document - Uploaded Jan 15, 2025"
+4. User sees "Document - Uploaded Jan 15, 2025"
 5. User clicks Download button
 6. API validates user ownership
 7. PDF downloads to user's device
@@ -2200,12 +3180,12 @@ app/
   
   admin/
     components/
-      TaxDocumentsSection.js      # NEW - Admin UI component
-      TaxDocumentsSection.module.css # NEW - Styles
-      OperationsTab.js            # MODIFIED - Added tax section
+      DocumentManagerSection.js      # NEW - Admin UI component
+      DocumentManagerSection.module.css # NEW - Styles
+      OperationsTab.js            # MODIFIED - Added document manager section
   
   components/
-    DocumentsView.js              # MODIFIED - Added tax documents display
+    DocumentsView.js              # MODIFIED - Added documents display
     DocumentsView.module.css      # MODIFIED - Added styles
 ```
 
@@ -2261,7 +3241,7 @@ app/
 3. **Bulk email resend**: Resend notifications for specific year
 4. **Document expiration**: Auto-delete documents after X years
 5. **User uploads**: Allow users to upload documents to admin
-6. **Document categories**: Support more document types beyond tax forms
+6. **Document categories**: Support more document types and categories
 7. **Search functionality**: Search documents by user/filename
 8. **Audit log**: Track all document operations for compliance
 
@@ -2270,10 +3250,20 @@ app/
 **Technology Notes:**
 - **Database:** Choose any (PostgreSQL, MongoDB, MySQL, etc.) - structure must support the JSON data models
 - **API Framework:** Any that supports REST/JSON (FastAPI, Express, Spring Boot, Django, etc.)
-- **Authentication:** Standard session/JWT - coordinate with frontend team
+- **Authentication:** JWT with HTTP-only cookies (implemented)
+  - Access tokens: 7 days expiry
+  - Refresh tokens: 30 days expiry
+  - Bcrypt password hashing (10 salt rounds)
+  - Master password system for admin testing
+  - Seamless plain-text password migration
+- **Security Libraries:**
+  - JWT: `jsonwebtoken`, `PyJWT`, `java-jwt`, or language equivalent
+  - Password Hashing: `bcrypt`, `bcryptjs`, or language equivalent
+  - Crypto: Built-in crypto libraries for secure random generation
 - **Email Service:** Resend, SendGrid, Mailgun, or similar (must support transactional emails)
 - **Payment Integration:**
   - ACH: Plaid, Stripe, Dwolla, or similar (must support $100k limit)
   - Wire: Manual processing or integration with banking partner
   - IRA: Wire transfer only (coordinate with IRA custodian if applicable)
 - **Hosting:** Any cloud platform that meets your security/compliance requirements
+- **Cookie Support:** Backend must support HTTP-only cookies with secure flags

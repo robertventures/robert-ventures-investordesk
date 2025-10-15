@@ -1,9 +1,15 @@
 import { NextResponse } from 'next/server'
 import { getUsers, saveUsers } from '../../../../lib/database'
+import { requireAdmin, authErrorResponse } from '../../../../lib/authMiddleware'
 
 // GET - List all pending payouts across all users
-export async function GET() {
+export async function GET(request) {
   try {
+    // Verify admin authentication
+    const admin = await requireAdmin(request)
+    if (!admin) {
+      return authErrorResponse('Admin access required', 403)
+    }
     const usersData = await getUsers()
     const pendingPayouts = []
 
@@ -60,6 +66,12 @@ export async function GET() {
 // Body: { action: 'retry' | 'complete' | 'fail', userId, transactionId, failureReason? }
 export async function POST(request) {
   try {
+    // Verify admin authentication
+    const admin = await requireAdmin(request)
+    if (!admin) {
+      return authErrorResponse('Admin access required', 403)
+    }
+
     const body = await request.json()
     const { action, userId, transactionId, failureReason } = body
 

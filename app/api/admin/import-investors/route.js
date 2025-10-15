@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getUsers, saveUsers } from '../../../../lib/database'
 import { generateUserId, generateTransactionId } from '../../../../lib/idGenerator'
+import { requireAdmin, authErrorResponse } from '../../../../lib/authMiddleware'
 
 /**
  * Import investors from CSV/Wealthblock migration
@@ -8,18 +9,16 @@ import { generateUserId, generateTransactionId } from '../../../../lib/idGenerat
  */
 export async function POST(request) {
   try {
-    const body = await request.json()
-    const { adminUserId, investors } = body
-
-    // Verify admin access
-    const usersData = await getUsers()
-    const admin = usersData.users?.find(u => u.id === adminUserId && u.isAdmin)
+    // Verify admin authentication
+    const admin = await requireAdmin(request)
     if (!admin) {
-      return NextResponse.json(
-        { success: false, error: 'Admin access required' },
-        { status: 403 }
-      )
+      return authErrorResponse('Admin access required', 403)
     }
+
+    const body = await request.json()
+    const { investors } = body
+
+    const usersData = await getUsers()
 
     if (!investors || investors.length === 0) {
       return NextResponse.json(

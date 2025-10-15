@@ -3,10 +3,16 @@ import { getUsers, saveUsers } from '../../../../lib/database'
 import { getCurrentAppTime } from '../../../../lib/appTime'
 import { calculateFinalWithdrawalPayout } from '../../../../lib/investmentCalculations'
 import { generateTransactionId } from '../../../../lib/idGenerator'
+import { requireAdmin, authErrorResponse } from '../../../../lib/authMiddleware'
 
 // GET - list all withdrawals pending admin action
-export async function GET() {
+export async function GET(request) {
   try {
+    // Verify admin authentication
+    const admin = await requireAdmin(request)
+    if (!admin) {
+      return authErrorResponse('Admin access required', 403)
+    }
     const usersData = await getUsers()
     const all = []
     for (const user of usersData.users) {
@@ -27,6 +33,12 @@ export async function GET() {
 // POST - admin action { action: 'approve'|'complete'|'reject', userId, withdrawalId }
 export async function POST(request) {
   try {
+    // Verify admin authentication
+    const admin = await requireAdmin(request)
+    if (!admin) {
+      return authErrorResponse('Admin access required', 403)
+    }
+
     const body = await request.json()
     const { action, userId, withdrawalId } = body
     if (!action || !userId || !withdrawalId) {

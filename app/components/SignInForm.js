@@ -55,53 +55,49 @@ export default function SignInForm() {
     setIsLoading(true)
 
     try {
-      // Find user by email
-      const res = await fetch('/api/users')
-      const data = await res.json()
-      
-      if (!data.success) {
-        alert('Error: Failed to connect to server')
-        return
-      }
-
-      const users = data.users || []
-      // Handle potential duplicate records by email. Prefer the most recently updated
-      // user that also has a password set.
-      const matches = users.filter(u => u.email && u.email.toLowerCase() === formData.email.toLowerCase())
-      const sorted = matches.sort((a, b) => {
-        const da = a.updatedAt ? new Date(a.updatedAt).getTime() : 0
-        const db = b.updatedAt ? new Date(b.updatedAt).getTime() : 0
-        return db - da
+      // Call login API
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          email: formData.email,
+          password: formData.password
+        }),
+        credentials: 'include' // Important for cookies
       })
-      const user = sorted.find(u => typeof u.password === 'string' && u.password.length > 0) || sorted[0]
 
-      if (!user) {
-        setErrors({ email: 'No account found with this email address' })
+      const data = await res.json()
+
+      if (!data.success) {
+        // Handle specific error messages
+        if (res.status === 401) {
+          setErrors({ password: 'Invalid email or password' })
+        } else {
+          alert('Error: ' + (data.error || 'Failed to sign in'))
+        }
         setIsLoading(false)
         return
       }
 
-      if (user.password !== formData.password) {
-        setErrors({ password: 'Incorrect password' })
-        setIsLoading(false)
-        return
-      }
+      // Login successful - user data is in data.user
+      const user = data.user
 
-      // Store user session
+      // Store minimal user info in localStorage for backward compatibility
       localStorage.setItem('currentUserId', user.id)
       localStorage.setItem('signupEmail', user.email)
 
-      // Redirect admins to admin dashboard
+      // Redirect based on user type
       if (user.isAdmin) {
         router.push('/admin')
       } else if (!user.isVerified) {
-        // Redirect unverified users to verification page
         router.push('/confirmation')
       } else {
         router.push('/dashboard')
       }
     } catch (err) {
-      console.error(err)
+      console.error('Login error:', err)
       alert('An error occurred. Please try again.')
     } finally {
       setIsLoading(false)

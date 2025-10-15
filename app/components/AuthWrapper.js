@@ -9,29 +9,56 @@ export default function AuthWrapper({ children }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
 
   // Public routes that don't require authentication
-  const publicRoutes = ['/', '/sign-in']
+  const publicRoutes = ['/', '/sign-in', '/forgot-password', '/reset-password']
   
   // Check if current route is public
-  const isPublicRoute = publicRoutes.includes(pathname)
+  const isPublicRoute = publicRoutes.includes(pathname) || pathname.startsWith('/reset-password')
 
   useEffect(() => {
-    const checkAuth = () => {
-      const userId = localStorage.getItem('currentUserId')
-      const isLoggedIn = !!userId
-      
-      setIsAuthenticated(isLoggedIn)
-      setIsLoading(false)
+    const checkAuth = async () => {
+      try {
+        // Verify authentication via API
+        const res = await fetch('/api/auth/me', {
+          credentials: 'include' // Important for cookies
+        })
 
-      // If user is not logged in and trying to access protected route
-      if (!isLoggedIn && !isPublicRoute) {
-        router.push('/')
-        return
-      }
+        const isLoggedIn = res.ok
 
-      // If user is logged in and on public routes, redirect to dashboard
-      if (isLoggedIn && isPublicRoute && pathname !== '/') {
-        router.push('/dashboard')
-        return
+        if (isLoggedIn) {
+          const data = await res.json()
+          if (data.success && data.user) {
+            // Store user ID in localStorage for backward compatibility
+            localStorage.setItem('currentUserId', data.user.id)
+            localStorage.setItem('signupEmail', data.user.email)
+          }
+        } else {
+          // Clear localStorage if not authenticated
+          localStorage.removeItem('currentUserId')
+          localStorage.removeItem('signupEmail')
+        }
+        
+        setIsAuthenticated(isLoggedIn)
+        setIsLoading(false)
+
+        // If user is not logged in and trying to access protected route
+        if (!isLoggedIn && !isPublicRoute) {
+          router.push('/sign-in')
+          return
+        }
+
+        // If user is logged in and on sign-in route, redirect to dashboard
+        if (isLoggedIn && pathname === '/sign-in') {
+          router.push('/dashboard')
+          return
+        }
+      } catch (error) {
+        console.error('Auth check error:', error)
+        setIsAuthenticated(false)
+        setIsLoading(false)
+        
+        if (!isPublicRoute) {
+          router.push('/sign-in')
+        }
       }
     }
 
@@ -42,7 +69,7 @@ export default function AuthWrapper({ children }) {
       if (e.key === 'currentUserId' && !e.newValue) {
         setIsAuthenticated(false)
         if (!isPublicRoute) {
-          router.push('/')
+          router.push('/sign-in')
         }
       }
     }

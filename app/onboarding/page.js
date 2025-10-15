@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import Header from '../components/Header'
 import styles from './page.module.css'
 
 const ONBOARDING_STEPS = {
@@ -170,10 +171,13 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className={styles.container}>
-      <div className={styles.onboardingBox}>
-        <h1 className={styles.title}>Welcome to Robert Ventures</h1>
-        <p className={styles.subtitle}>Complete your account setup</p>
+    <div className={styles.main}>
+      <Header />
+      
+      <div className={styles.container}>
+        <div className={styles.onboardingBox}>
+          <h1 className={styles.title}>Welcome to Robert Ventures</h1>
+          <p className={styles.subtitle}>Complete your account setup</p>
 
         {/* Progress Indicator */}
         <div className={styles.progressBar}>
@@ -236,7 +240,7 @@ export default function OnboardingPage() {
         {currentStep === ONBOARDING_STEPS.SSN && (
           <form onSubmit={handleSSNSubmit} className={styles.form}>
             <h2>Verify Your Identity</h2>
-            <p>Please provide your Social Security Number for tax compliance</p>
+            <p>Please provide your Social Security Number for identity verification</p>
             
             <div className={styles.formGroup}>
               <label>Social Security Number</label>
@@ -249,7 +253,7 @@ export default function OnboardingPage() {
                 maxLength={11}
               />
               <small className={styles.helpText}>
-                This information is required for tax reporting (IRS Form 1099)
+                This information is required for identity verification
               </small>
             </div>
             
@@ -359,6 +363,7 @@ export default function OnboardingPage() {
             </button>
           </div>
         )}
+        </div>
       </div>
     </div>
   )

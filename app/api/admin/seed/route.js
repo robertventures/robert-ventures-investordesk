@@ -1,20 +1,14 @@
 import { NextResponse } from 'next/server'
 import { getUsers } from '../../../../lib/database'
 import { seedTestAccounts } from '../../../../lib/seedAccounts.js'
+import { requireAdmin, authErrorResponse } from '../../../../lib/authMiddleware'
 
 export async function POST(request) {
   try {
-    const body = await request.json()
-    const { adminUserId } = body || {}
-
-    if (!adminUserId) {
-      return NextResponse.json({ success: false, error: 'adminUserId is required' }, { status: 400 })
-    }
-
-    const usersData = await getUsers()
-    const admin = usersData.users?.find(u => u.id === adminUserId && u.isAdmin)
+    // Verify admin authentication
+    const admin = await requireAdmin(request)
     if (!admin) {
-      return NextResponse.json({ success: false, error: 'Admin access required' }, { status: 403 })
+      return authErrorResponse('Admin access required', 403)
     }
 
     await seedTestAccounts()

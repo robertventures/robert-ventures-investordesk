@@ -1,7 +1,8 @@
+import { useState, useEffect } from 'react'
 import SectionCard from './SectionCard'
 import TimeMachineTab from './TimeMachineTab'
 import ImportInvestorsTab from './ImportInvestorsTab'
-import TaxDocumentsSection from './TaxDocumentsSection'
+import DocumentManagerSection from './DocumentManagerSection'
 import styles from './OperationsTab.module.css'
 
 /**
@@ -22,17 +23,140 @@ export default function OperationsTab({
   onRefreshWithdrawals,
   onImportComplete
 }) {
+  const [masterPassword, setMasterPassword] = useState(null)
+  const [masterPasswordInfo, setMasterPasswordInfo] = useState(null)
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  // Fetch current master password info
+  useEffect(() => {
+    fetchMasterPasswordInfo()
+  }, [])
+
+  const fetchMasterPasswordInfo = async () => {
+    try {
+      const res = await fetch('/api/admin/generate-master-password', {
+        credentials: 'include'
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.success && data.hasPassword) {
+          setMasterPasswordInfo(data)
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching master password info:', error)
+    }
+  }
+
+  const handleGenerateMasterPassword = async () => {
+    setIsGenerating(true)
+    setCopied(false)
+    try {
+      const res = await fetch('/api/admin/generate-master-password', {
+        method: 'POST',
+        credentials: 'include'
+      })
+      
+      const data = await res.json()
+      
+      if (data.success) {
+        setMasterPassword(data.password)
+        setMasterPasswordInfo({
+          hasPassword: true,
+          expiresAt: data.expiresAt,
+          isExpired: false
+        })
+        
+        // Auto-copy to clipboard
+        try {
+          await navigator.clipboard.writeText(data.password)
+          setCopied(true)
+        } catch (err) {
+          console.error('Failed to copy to clipboard:', err)
+        }
+      } else {
+        alert('Failed to generate master password: ' + (data.error || 'Unknown error'))
+      }
+    } catch (error) {
+      console.error('Error generating master password:', error)
+      alert('Failed to generate master password')
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
+  const copyToClipboard = async () => {
+    if (masterPassword) {
+      try {
+        await navigator.clipboard.writeText(masterPassword)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      } catch (err) {
+        console.error('Failed to copy:', err)
+      }
+    }
+  }
+
+  const formatTimeRemaining = (ms) => {
+    if (!ms || ms <= 0) return 'Expired'
+    const minutes = Math.floor(ms / 60000)
+    const seconds = Math.floor((ms % 60000) / 1000)
+    return `${minutes}m ${seconds}s`
+  }
 
   return (
     <div className={styles.operationsTab}>
-      {/* Tax Document Management Section */}
-      <SectionCard title="Tax Document Management">
+      {/* Master Password Section */}
+      <SectionCard title="Master Password Generator">
         <div className={styles.sectionHeader}>
           <p className={styles.sectionDescription}>
-            Upload and manage annual tax documents (1099 forms). Bulk upload via ZIP or send to individual users.
+            Generate a temporary master password to access any investor account for testing. Password expires in 30 minutes.
           </p>
         </div>
-        <TaxDocumentsSection 
+        <div className={styles.masterPasswordSection}>
+          <button
+            onClick={handleGenerateMasterPassword}
+            disabled={isGenerating}
+            className={styles.generateButton}
+          >
+            {isGenerating ? 'Generating...' : 'Generate Master Password'}
+          </button>
+          
+          {masterPassword && (
+            <div className={styles.masterPasswordDisplay}>
+              <div className={styles.passwordBox}>
+                <code className={styles.passwordText}>{masterPassword}</code>
+                <button 
+                  onClick={copyToClipboard}
+                  className={styles.copyButton}
+                >
+                  {copied ? '✓ Copied' : 'Copy'}
+                </button>
+              </div>
+              <p className={styles.passwordNote}>
+                ⚠️ This password can be used to login to ANY investor account. Save it securely and use within 30 minutes.
+              </p>
+            </div>
+          )}
+          
+          {masterPasswordInfo && masterPasswordInfo.hasPassword && !masterPasswordInfo.isExpired && (
+            <div className={styles.masterPasswordStatus}>
+              <p className={styles.statusText}>
+                ✓ Active master password expires in {formatTimeRemaining(masterPasswordInfo.timeRemainingMs)}
+              </p>
+            </div>
+          )}
+        </div>
+      </SectionCard>
+      {/* Document Manager Section */}
+      <SectionCard title="Document Manager">
+        <div className={styles.sectionHeader}>
+          <p className={styles.sectionDescription}>
+            Send documents to users via bulk upload (ZIP) or individual upload. Manage and delete documents as needed.
+          </p>
+        </div>
+        <DocumentManagerSection 
           currentUser={currentUser}
           onUploadComplete={onImportComplete}
         />

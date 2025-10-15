@@ -1,20 +1,16 @@
 import { NextResponse } from 'next/server'
 import { getUsers, saveUsers } from '../../../../lib/database'
+import { requireAdmin, authErrorResponse } from '../../../../lib/authMiddleware'
 
 export async function DELETE(request) {
   try {
-    const body = await request.json()
-    const { adminUserId } = body || {}
-
-    if (!adminUserId) {
-      return NextResponse.json({ success: false, error: 'adminUserId is required' }, { status: 400 })
+    // Verify admin authentication
+    const admin = await requireAdmin(request)
+    if (!admin) {
+      return authErrorResponse('Admin access required', 403)
     }
 
     const usersData = await getUsers()
-    const admin = usersData.users?.find(u => u.id === adminUserId && u.isAdmin)
-    if (!admin) {
-      return NextResponse.json({ success: false, error: 'Admin access required' }, { status: 403 })
-    }
 
     const beforeCount = usersData.users?.length || 0
     usersData.users = (usersData.users || []).filter(user => user.isAdmin)

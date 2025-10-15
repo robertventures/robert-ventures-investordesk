@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
 import { getUsers, updateUser } from '../../../../../lib/database'
 import { uploadDocument, generateDocumentKey, isPDF } from '../../../../../lib/documentStorage'
-import { sendTaxDocumentNotification } from '../../../../../lib/emailService'
+import { sendDocumentNotification } from '../../../../../lib/emailService'
 import { generateTransactionId } from '../../../../../lib/idGenerator'
+import { requireAdmin, authErrorResponse } from '../../../../../lib/authMiddleware'
 
 /**
  * POST /api/admin/documents/assign-pending
@@ -12,8 +13,14 @@ import { generateTransactionId } from '../../../../../lib/idGenerator'
  */
 export async function POST(request) {
   try {
+    // Verify admin authentication
+    const admin = await requireAdmin(request)
+    if (!admin) {
+      return authErrorResponse('Admin access required', 403)
+    }
+
     const body = await request.json()
-    const { userId, fileName, pdfData, adminEmail } = body
+    const { userId, fileName, pdfData } = body
 
     if (!userId || !fileName || !pdfData) {
       return NextResponse.json(
@@ -25,16 +32,7 @@ export async function POST(request) {
     // Auto-set year to current year for organizational purposes
     const year = new Date().getFullYear().toString()
 
-    // Verify admin authentication
     const usersData = await getUsers()
-    const adminUser = usersData.users.find(u => u.email === adminEmail && u.isAdmin)
-    
-    if (!adminUser) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
 
     // Find target user
     const user = usersData.users.find(u => u.id === userId)
@@ -59,7 +57,7 @@ export async function POST(request) {
     }
 
     // Upload to blob storage
-    const blobKey = generateDocumentKey('tax-documents', year, user.id, fileName)
+    const blobKey = generateDocumentKey('documents', year, user.id, fileName)
     const uploadResult = await uploadDocument(blobKey, buffer, 'application/pdf')
 
     if (!uploadResult.success) {
@@ -70,10 +68,10 @@ export async function POST(request) {
     }
 
     // Update user record
-    const documentId = generateTransactionId('DOC', user.id, 'tax_document')
+    const documentId = generateTransactionId('DOC', user.id, 'document')
     const newDocument = {
       id: documentId,
-      type: 'tax_document',
+      type: 'document',
       fileName,
       year,
       uploadedAt: new Date().toISOString(),
@@ -87,7 +85,7 @@ export async function POST(request) {
     await updateUser(user.id, { documents })
 
     // Send email notification
-    const emailResult = await sendTaxDocumentNotification({
+    const emailResult = await sendDocumentNotification({
       email: user.email,
       firstName: user.firstName,
       lastName: user.lastName

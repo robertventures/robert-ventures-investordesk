@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { updateUser, getUsers, saveUsers } from '../../../../lib/database'
 import { getCurrentAppTime } from '../../../../lib/appTime'
 import { generateGlobalInvestmentId, generateTransactionId } from '../../../../lib/idGenerator'
+import { hashPassword, comparePassword, isPasswordHashed } from '../../../../lib/auth'
 
 // PUT - Update user data
 export async function PUT(request, { params }) {
@@ -26,22 +27,53 @@ export async function PUT(request, { params }) {
       }
       const user = usersData.users[userIndex]
       const { currentPassword, newPassword } = body
+
       if (!currentPassword || !newPassword) {
         return NextResponse.json({ success: false, error: 'Missing password fields' }, { status: 400 })
       }
-      // Basic current password check (plaintext in demo). In production, use hashing.
-      if ((user.password || '') !== currentPassword) {
-        return NextResponse.json({ success: false, error: 'Current password is incorrect' }, { status: 400 })
-      }
+
+      // Validate new password strength
       if (newPassword.length < 8) {
         return NextResponse.json({ success: false, error: 'Password must be at least 8 characters' }, { status: 400 })
       }
-      const updatedUser = { ...user, password: newPassword, updatedAt: new Date().toISOString() }
+
+      // Verify current password using bcrypt
+      let isCurrentPasswordValid = false
+
+      if (!user.password) {
+        return NextResponse.json({ success: false, error: 'No password set for this account' }, { status: 400 })
+      }
+
+      if (isPasswordHashed(user.password)) {
+        // Password is hashed, use bcrypt compare
+        isCurrentPasswordValid = await comparePassword(currentPassword, user.password)
+      } else {
+        // Legacy: Password is still plaintext, compare directly but we'll migrate it
+        isCurrentPasswordValid = currentPassword === user.password
+        console.warn('⚠️  Password migration: User', user.email, 'still has plaintext password')
+      }
+
+      if (!isCurrentPasswordValid) {
+        return NextResponse.json({ success: false, error: 'Current password is incorrect' }, { status: 400 })
+      }
+
+      // Hash the new password before storing
+      const hashedNewPassword = await hashPassword(newPassword)
+
+      const updatedUser = {
+        ...user,
+        password: hashedNewPassword,
+        updatedAt: new Date().toISOString()
+      }
       usersData.users[userIndex] = updatedUser
+
       if (!await saveUsers(usersData)) {
         return NextResponse.json({ success: false, error: 'Failed to update password' }, { status: 500 })
       }
-      return NextResponse.json({ success: true, user: updatedUser })
+
+      // Don't return password in response
+      const { password: _, ssn: __, ...safeUser } = updatedUser
+      return NextResponse.json({ success: true, user: safeUser })
     }
 
     // Custom action: start investment intent (append to user's investments array)

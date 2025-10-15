@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getUsers } from '../../../../../lib/database'
+import { requireAdmin, authErrorResponse } from '../../../../../lib/authMiddleware'
 
 /**
  * GET /api/admin/documents/list
@@ -9,21 +10,17 @@ import { getUsers } from '../../../../../lib/database'
  */
 export async function GET(request) {
   try {
+    // Verify admin authentication
+    const admin = await requireAdmin(request)
+    if (!admin) {
+      return authErrorResponse('Admin access required', 403)
+    }
+
     const { searchParams } = new URL(request.url)
-    const adminEmail = searchParams.get('adminEmail')
     const year = searchParams.get('year')
     const type = searchParams.get('type')
 
-    // Verify admin authentication
     const usersData = await getUsers()
-    const adminUser = usersData.users.find(u => u.email === adminEmail && u.isAdmin)
-    
-    if (!adminUser) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
 
     const allDocuments = []
 

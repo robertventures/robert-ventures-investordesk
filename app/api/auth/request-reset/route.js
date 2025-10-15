@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getUserByEmail, updateUser } from '../../../../lib/database'
 import crypto from 'crypto'
+import { rateLimit, RATE_LIMIT_CONFIGS } from '../../../../lib/rateLimit'
 
 // POST /api/auth/request-reset
 // Request a password reset link
@@ -14,6 +15,12 @@ export async function POST(request) {
         { success: false, error: 'Email is required' },
         { status: 400 }
       )
+    }
+
+    // Apply rate limiting for password reset requests
+    const rateLimitResponse = rateLimit(request, RATE_LIMIT_CONFIGS.passwordReset, email)
+    if (rateLimitResponse) {
+      return rateLimitResponse
     }
 
     // Find user by email

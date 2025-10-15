@@ -1,33 +1,46 @@
-.container {
+.main {
   min-height: 100vh;
+  background: #f8fafc;
   display: flex;
+  flex-direction: column;
+}
+
+.container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  padding: 20px;
+  padding: 32px 24px;
+  max-width: 600px;
+  margin: 0 auto;
+  width: 100%;
 }
 
 .onboardingBox {
-  background: white;
-  border-radius: 12px;
+  background: #ffffff;
+  border-radius: 8px;
   padding: 40px;
-  max-width: 600px;
   width: 100%;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03);
 }
 
 .title {
-  margin: 0 0 10px 0;
+  margin: 0 0 8px 0;
   font-size: 28px;
-  color: #333;
+  font-weight: 700;
+  color: #1a1a1a;
   text-align: center;
+  font-family: 'Inter', sans-serif;
 }
 
 .subtitle {
-  margin: 0 0 30px 0;
+  margin: 0 0 32px 0;
   font-size: 16px;
-  color: #666;
+  color: #6b7280;
   text-align: center;
+  font-family: 'Inter', sans-serif;
 }
 
 /* Progress Bar */
@@ -36,16 +49,17 @@
   justify-content: space-between;
   margin-bottom: 40px;
   position: relative;
+  padding: 0 20px;
 }
 
 .progressBar::before {
   content: '';
   position: absolute;
   top: 20px;
-  left: 0;
-  right: 0;
+  left: 20%;
+  right: 20%;
   height: 2px;
-  background: #e0e0e0;
+  background: #e5e7eb;
   z-index: 0;
 }
 
@@ -62,46 +76,57 @@
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: #e0e0e0;
-  color: #999;
+  background: #f3f4f6;
+  color: #9ca3af;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 700;
+  font-weight: 600;
   margin-bottom: 8px;
   transition: all 0.3s ease;
+  font-family: 'Inter', sans-serif;
+  border: 2px solid #e5e7eb;
 }
 
 .step.active .stepNumber {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #1a1a1a;
   color: white;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  border-color: #1a1a1a;
 }
 
 .step.completed .stepNumber {
-  background: #28a745;
+  background: #10b981;
   color: white;
+  border-color: #10b981;
 }
 
 .stepLabel {
   font-size: 12px;
-  color: #666;
-  font-weight: 600;
+  color: #9ca3af;
+  font-weight: 500;
+  font-family: 'Inter', sans-serif;
 }
 
 .step.active .stepLabel {
-  color: #667eea;
+  color: #1a1a1a;
+  font-weight: 600;
+}
+
+.step.completed .stepLabel {
+  color: #10b981;
+  font-weight: 600;
 }
 
 /* Error Message */
 .error {
-  background: #fee;
-  border: 1px solid #fcc;
-  color: #c00;
-  padding: 12px 15px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+  padding: 12px 16px;
   border-radius: 6px;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
   font-size: 14px;
+  font-family: 'Inter', sans-serif;
 }
 
 /* Form Styles */
@@ -110,15 +135,18 @@
 }
 
 .form h2 {
-  margin: 0 0 10px 0;
-  font-size: 22px;
-  color: #333;
+  margin: 0 0 8px 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: #1a1a1a;
+  font-family: 'Inter', sans-serif;
 }
 
 .form p {
-  margin: 0 0 25px 0;
-  color: #666;
+  margin: 0 0 24px 0;
+  color: #6b7280;
   font-size: 14px;
+  font-family: 'Inter', sans-serif;
 }
 
 .formGroup {
@@ -127,99 +155,128 @@
 
 .formGroup label {
   display: block;
-  font-weight: 600;
-  color: #333;
+  font-weight: 500;
+  color: #374151;
   margin-bottom: 8px;
   font-size: 14px;
+  font-family: 'Inter', sans-serif;
 }
 
 .formGroup input,
 .formGroup select {
   width: 100%;
-  padding: 12px 15px;
-  border: 1px solid #ddd;
+  padding: 12px 16px;
+  border: 1px solid #d1d5db;
   border-radius: 6px;
-  font-size: 14px;
-  transition: border-color 0.2s;
+  font-size: 16px;
+  transition: all 0.2s ease;
+  font-family: 'Inter', sans-serif;
+  background: #ffffff;
 }
 
 .formGroup input:focus,
 .formGroup select:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  border-color: #1e40af;
+  box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.1);
+}
+
+.formGroup input:disabled,
+.formGroup select:disabled {
+  background: #f9fafb;
+  color: #6b7280;
+  cursor: not-allowed;
 }
 
 .helpText {
   display: block;
   margin-top: 6px;
   font-size: 12px;
-  color: #888;
-  font-style: italic;
+  color: #6b7280;
+  font-family: 'Inter', sans-serif;
 }
 
 .submitButton {
   width: 100%;
-  padding: 14px 20px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 14px 24px;
+  background: #1a1a1a;
   color: white;
   border: none;
   border-radius: 6px;
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition: all 0.2s ease;
+  font-family: 'Inter', sans-serif;
+  margin-top: 8px;
 }
 
 .submitButton:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+  background: #374151;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.submitButton:active:not(:disabled) {
+  transform: translateY(0);
 }
 
 .submitButton:disabled {
-  opacity: 0.6;
+  background: #9ca3af;
   cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 /* Bank Method Selector */
 .bankMethodSelector {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin-bottom: 25px;
+  gap: 12px;
+  margin-bottom: 24px;
 }
 
 .methodButton {
   padding: 12px 20px;
-  border: 2px solid #ddd;
+  border: 2px solid #e5e7eb;
   background: white;
   border-radius: 6px;
   cursor: pointer;
-  font-weight: 600;
+  font-weight: 500;
   font-size: 14px;
   transition: all 0.2s;
+  font-family: 'Inter', sans-serif;
+  color: #374151;
 }
 
 .methodButton:hover {
-  border-color: #667eea;
+  border-color: #1a1a1a;
+  background: #f9fafb;
 }
 
 .methodButton.active {
-  border-color: #667eea;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-color: #1a1a1a;
+  background: #1a1a1a;
   color: white;
 }
 
 .comingSoon {
   text-align: center;
   padding: 40px 20px;
-  color: #666;
+  color: #6b7280;
+  font-family: 'Inter', sans-serif;
 }
 
 .comingSoon p:first-child {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
+  color: #374151;
+}
+
+.comingSoon p {
+  margin: 0;
+  font-size: 14px;
 }
 
 /* Complete Step */
@@ -232,25 +289,71 @@
   width: 80px;
   height: 80px;
   border-radius: 50%;
-  background: #28a745;
+  background: #10b981;
   color: white;
   font-size: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0 auto 20px auto;
-  box-shadow: 0 8px 20px rgba(40, 167, 69, 0.3);
+  margin: 0 auto 24px auto;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
 }
 
 .complete h2 {
-  margin: 0 0 10px 0;
+  margin: 0 0 12px 0;
   font-size: 24px;
-  color: #333;
+  font-weight: 700;
+  color: #1a1a1a;
+  font-family: 'Inter', sans-serif;
 }
 
 .complete p {
-  margin: 0 0 30px 0;
-  color: #666;
+  margin: 0 0 32px 0;
+  color: #6b7280;
   font-size: 16px;
+  font-family: 'Inter', sans-serif;
 }
 
+@media (max-width: 768px) {
+  .container {
+    padding: 24px 16px;
+  }
+  
+  .onboardingBox {
+    padding: 24px;
+  }
+  
+  .title {
+    font-size: 24px;
+  }
+  
+  .subtitle {
+    font-size: 14px;
+  }
+  
+  .progressBar {
+    padding: 0 10px;
+  }
+  
+  .stepNumber {
+    width: 36px;
+    height: 36px;
+  }
+  
+  .stepLabel {
+    font-size: 11px;
+  }
+  
+  .form h2 {
+    font-size: 18px;
+  }
+  
+  .bankMethodSelector {
+    grid-template-columns: 1fr;
+  }
+  
+  .formGroup input,
+  .formGroup select {
+    font-size: 16px; /* Prevents zoom on iOS */
+  }
+}

@@ -1,10 +1,16 @@
 import { NextResponse } from 'next/server'
 import { getUsers, saveUsers } from '../../../../lib/database'
+import { requireAdmin, authErrorResponse } from '../../../../lib/authMiddleware'
 
 // POST - Update bank connection status for testing
 // Body: { userId, bankId, connectionStatus: 'connected' | 'disconnected' | 'error' }
 export async function POST(request) {
   try {
+    // Verify admin authentication
+    const admin = await requireAdmin(request)
+    if (!admin) {
+      return authErrorResponse('Admin access required', 403)
+    }
     const body = await request.json()
     const { userId, bankId, connectionStatus } = body
 
@@ -99,6 +105,11 @@ export async function POST(request) {
 // GET - Get bank connection status for a user
 export async function GET(request) {
   try {
+    // Verify admin authentication
+    const admin = await requireAdmin(request)
+    if (!admin) {
+      return authErrorResponse('Admin access required', 403)
+    }
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get('userId')
 

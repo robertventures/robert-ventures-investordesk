@@ -89,12 +89,12 @@ export default function DocumentsView() {
     investment.documents?.agreement
   )
 
-  // Get tax documents and sort by upload date (most recent first)
-  const taxDocuments = (user?.documents || [])
-    .filter(doc => doc.type === 'tax_document')
+  // Get documents and sort by upload date (most recent first)
+  const userDocuments = (user?.documents || [])
+    .filter(doc => doc.type === 'document')
     .sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt))
 
-  const downloadTaxDocument = async (docId, fileName) => {
+  const downloadDocument = async (docId, fileName) => {
     try {
       const userId = localStorage.getItem('currentUserId')
       const res = await fetch(`/api/users/${userId}/documents/${docId}?requestingUserId=${userId}`)
@@ -127,17 +127,17 @@ export default function DocumentsView() {
       </div>
 
       <div className={styles.content}>
-        {/* Tax Documents Section */}
-        {taxDocuments.length > 0 && (
+        {/* Documents Section */}
+        {userDocuments.length > 0 && (
           <div className={styles.documentsList}>
-            <h3 className={styles.sectionTitle}>Tax Documents</h3>
+            <h3 className={styles.sectionTitle}>Documents</h3>
             <div className={styles.documentsGrid}>
-              {taxDocuments.map(doc => (
+              {userDocuments.map(doc => (
                 <div key={doc.id} className={styles.documentCard}>
                   <div className={styles.documentIcon}>📄</div>
                   <div className={styles.documentInfo}>
                     <h4 className={styles.documentTitle}>
-                      Tax Document
+                      Document
                     </h4>
                     <div className={styles.documentDetails}>
                       <p><strong>File:</strong> {doc.fileName}</p>
@@ -147,7 +147,7 @@ export default function DocumentsView() {
                   <div className={styles.documentActions}>
                     <button
                       className={styles.downloadButton}
-                      onClick={() => downloadTaxDocument(doc.id, doc.fileName)}
+                      onClick={() => downloadDocument(doc.id, doc.fileName)}
                     >
                       📥 Download
                     </button>
@@ -191,7 +191,7 @@ export default function DocumentsView() {
               ))}
             </div>
           </div>
-        ) : taxDocuments.length === 0 ? (
+        ) : userDocuments.length === 0 ? (
           <div className={styles.emptyState}>
             <div className={styles.emptyIcon}>📄</div>
             <h3 className={styles.emptyTitle}>No Documents Yet</h3>
@@ -201,7 +201,7 @@ export default function DocumentsView() {
             <ul className={styles.documentTypes}>
               <li>Investment Agreements</li>
               <li>Account Statements</li>
-              <li>Tax Documents</li>
+              <li>Important Notices</li>
               <li>Compliance Forms</li>
             </ul>
           </div>

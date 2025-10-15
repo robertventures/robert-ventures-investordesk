@@ -29,11 +29,29 @@ export default function AdminHeader({ onTabChange, activeTab }) {
     loadUser()
   }, [router])
 
-  const handleLogout = () => {
-    localStorage.removeItem('currentUserId')
-    localStorage.removeItem('signupEmail')
-    localStorage.removeItem('currentInvestmentId')
-    router.push('/')
+  const handleLogout = async () => {
+    try {
+      // Call logout API to clear cookies
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include'
+      })
+      
+      // Clear localStorage
+      localStorage.removeItem('currentUserId')
+      localStorage.removeItem('signupEmail')
+      localStorage.removeItem('currentInvestmentId')
+      
+      // Redirect to home
+      router.push('/')
+    } catch (error) {
+      console.error('Logout error:', error)
+      // Still redirect even if API call fails
+      localStorage.removeItem('currentUserId')
+      localStorage.removeItem('signupEmail')
+      localStorage.removeItem('currentInvestmentId')
+      router.push('/')
+    }
   }
 
   const toggleMobileNav = () => {

@@ -1,35 +1,37 @@
 import { NextResponse } from 'next/server'
 import { getUsers, addUser, getUserByEmail, cleanupDuplicateUsers } from '../../../lib/database'
 import { getCurrentAppTime } from '../../../lib/appTime'
+import { hashPassword } from '../../../lib/auth'
+import { requireAdmin, requireAuth, authErrorResponse } from '../../../lib/authMiddleware'
+import { rateLimit, RATE_LIMIT_CONFIGS } from '../../../lib/rateLimit'
+import { validateEmail, validatePassword, ValidationError } from '../../../lib/validation'
 
 // GET - Retrieve all users or a specific user by email
+// REQUIRES AUTHENTICATION: Admin for all users, or authenticated user for their own data
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url)
     const email = searchParams.get('email')
-    
-    if (email) {
-      // Get specific user by email
-      const user = await getUserByEmail(email)
-      if (user) {
-        return NextResponse.json({ success: true, user })
-      } else {
-        return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 })
+    const action = searchParams.get('action')
+
+    // Admin-only operations: cleanup and listing all users
+    if (action === 'cleanup' || !email) {
+      const admin = await requireAdmin(request)
+      if (!admin) {
+        return authErrorResponse('Admin access required', 403)
       }
-    } else {
-      // Check if this is a cleanup request
-      const action = searchParams.get('action')
+
       if (action === 'cleanup') {
         const result = await cleanupDuplicateUsers()
         return NextResponse.json({ success: true, message: `Cleaned up ${result.removed} duplicate users` })
       }
-      
-      // Get all users
+
+      // Get all users (admin only)
       const usersData = await getUsers()
       const appTime = await getCurrentAppTime()
-      
-      return NextResponse.json({ 
-        success: true, 
+
+      return NextResponse.json({
+        success: true,
         users: usersData.users,
         timeMachine: {
           appTime: appTime || new Date().toISOString(),
@@ -38,6 +40,43 @@ export async function GET(request) {
         }
       })
     }
+
+    // Get specific user by email - require authentication
+    const authUser = await requireAuth(request)
+    if (!authUser) {
+      return authErrorResponse('Authentication required', 401)
+    }
+
+    // Validate email format
+    let validatedEmail
+    try {
+      validatedEmail = validateEmail(email)
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        return NextResponse.json(
+          { success: false, error: error.message },
+          { status: 400 }
+        )
+      }
+      throw error
+    }
+
+    // Users can only access their own data unless they're admin
+    if (validatedEmail !== authUser.email && !authUser.isAdmin) {
+      return authErrorResponse('You can only access your own user data', 403)
+    }
+
+    const user = await getUserByEmail(validatedEmail)
+    if (user) {
+      // Don't expose sensitive fields to non-admin users
+      if (!authUser.isAdmin) {
+        const { password, ssn, ...safeUser } = user
+        return NextResponse.json({ success: true, user: safeUser })
+      }
+      return NextResponse.json({ success: true, user })
+    } else {
+      return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 })
+    }
   } catch (error) {
     console.error('Error in GET /api/users:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
@@ -45,33 +84,67 @@ export async function GET(request) {
 }
 
 // POST - Create a new user
+// Public endpoint for user registration
+// Admin-created users can be created via the import system
 export async function POST(request) {
   try {
+    // Apply rate limiting for user creation
+    const rateLimitResponse = rateLimit(request, RATE_LIMIT_CONFIGS.userCreation)
+    if (rateLimitResponse) {
+      return rateLimitResponse
+    }
+
     const body = await request.json()
     const { email, password } = body
-    
-    // Validate required fields - only email is required for initial creation
-    if (!email) {
-      return NextResponse.json(
-        { success: false, error: 'Email is required' },
-        { status: 400 }
-      )
+
+    // Validate and normalize email
+    let validatedEmail
+    try {
+      validatedEmail = validateEmail(email)
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        return NextResponse.json(
+          { success: false, error: error.message },
+          { status: 400 }
+        )
+      }
+      throw error
     }
-    
+
     // Check if user already exists
-    const existingUser = await getUserByEmail(email)
+    const existingUser = await getUserByEmail(validatedEmail)
     if (existingUser) {
       return NextResponse.json(
         { success: false, error: 'User with this email already exists' },
         { status: 409 }
       )
     }
-    
+
+    // Hash password if provided
+    let userData = { email: validatedEmail }
+    if (password) {
+      // Validate password strength
+      try {
+        validatePassword(password, true)
+        userData.password = await hashPassword(password)
+      } catch (error) {
+        if (error instanceof ValidationError) {
+          return NextResponse.json(
+            { success: false, error: error.message },
+            { status: 400 }
+          )
+        }
+        throw error
+      }
+    }
+
     // Add new user
-    const result = await addUser({ email, password })
-    
+    const result = await addUser(userData)
+
     if (result.success) {
-      return NextResponse.json({ success: true, user: result.user }, { status: 201 })
+      // Don't return sensitive data
+      const { password: _, ssn: __, ...safeUser } = result.user
+      return NextResponse.json({ success: true, user: safeUser }, { status: 201 })
     } else {
       return NextResponse.json(
         { success: false, error: result.error },

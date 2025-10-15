@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getUsers, saveUsers } from '../../../../lib/database'
+import { hashPassword } from '../../../../lib/auth'
 
 // POST /api/auth/reset-password
 // Reset password with a valid token
@@ -49,11 +50,14 @@ export async function POST(request) {
       )
     }
 
+    // Hash the new password before storing
+    const hashedPassword = await hashPassword(newPassword)
+
     // Update password and verify account (since they received the email)
     const timestamp = new Date().toISOString()
     usersData.users[userIndex] = {
       ...user,
-      password: newPassword,
+      password: hashedPassword,
       isVerified: true,
       verifiedAt: user.verifiedAt || timestamp, // Set verifiedAt if not already set
       resetToken: null,
