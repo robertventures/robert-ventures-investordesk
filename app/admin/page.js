@@ -50,7 +50,6 @@ export default function AdminPage() {
   const [accountsSearch, setAccountsSearch] = useState('')
   const [isDeletingAccounts, setIsDeletingAccounts] = useState(false)
   const [isSeedingAccounts, setIsSeedingAccounts] = useState(false)
-  const [isSeedingWealthblock, setIsSeedingWealthblock] = useState(false)
   
   // State for account filters
   const [showFilters, setShowFilters] = useState(false)
@@ -441,29 +440,6 @@ export default function AdminPage() {
     }
   }
 
-  const seedWealthblockAccounts = async () => {
-    if (!confirm('Seed Real Users from Wealthblock? This will add production-like test accounts.')) return
-    setIsSeedingWealthblock(true)
-    try {
-      const res = await fetch('/api/admin/seed-wealthblock', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include'
-      })
-      const data = await res.json()
-      if (!data.success) {
-        alert(data.error || 'Failed to seed Wealthblock accounts')
-        return
-      }
-      alert('Wealthblock accounts seeded successfully! Reloading users...')
-      await refreshUsers()
-    } catch (error) {
-      console.error('Failed to seed Wealthblock accounts', error)
-      alert('An error occurred while seeding Wealthblock accounts')
-    } finally {
-      setIsSeedingWealthblock(false)
-    }
-  }
 
   const handleImportComplete = async (result) => {
     console.log('Import completed:', result)
@@ -536,10 +512,8 @@ export default function AdminPage() {
               onTimeMachineReset={resetAppTime}
               onDeleteAccounts={deleteAllAccounts}
               onSeedTestAccounts={seedTestAccounts}
-              onSeedWealthblockAccounts={seedWealthblockAccounts}
               isDeletingAccounts={isDeletingAccounts}
               isSeedingAccounts={isSeedingAccounts}
-              isSeedingWealthblock={isSeedingWealthblock}
               onRefreshWithdrawals={refreshWithdrawals}
               onImportComplete={handleImportComplete}
             />

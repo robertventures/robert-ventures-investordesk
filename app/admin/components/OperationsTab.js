@@ -18,10 +18,8 @@ export default function OperationsTab({
   onTimeMachineReset,
   onDeleteAccounts,
   onSeedTestAccounts,
-  onSeedWealthblockAccounts,
   isDeletingAccounts,
   isSeedingAccounts,
-  isSeedingWealthblock,
   onRefreshWithdrawals,
   onImportComplete
 }) {
@@ -186,10 +184,8 @@ export default function OperationsTab({
           currentUser={currentUser}
           onDeleteAccounts={onDeleteAccounts}
           onSeedTestAccounts={onSeedTestAccounts}
-          onSeedWealthblockAccounts={onSeedWealthblockAccounts}
           isDeletingAccounts={isDeletingAccounts}
           isSeedingAccounts={isSeedingAccounts}
-          isSeedingWealthblock={isSeedingWealthblock}
         />
       </SectionCard>
 

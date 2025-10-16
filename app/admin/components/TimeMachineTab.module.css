@@ -93,8 +93,7 @@
 .buttonGroup { display: flex; flex-direction: column; gap: 10px; }
 
 .deleteAccountsButton,
-.seedAccountsButton,
-.seedWealthblockButton {
+.seedAccountsButton {
   border: none;
   padding: 12px 16px;
   border-radius: var(--radius-sm);
@@ -129,20 +128,6 @@
 
 .seedAccountsButton:disabled {
   background: #6ee7b7;
-  cursor: not-allowed;
-}
-
-.seedWealthblockButton {
-  background: #8b5cf6;
-  color: white;
-}
-
-.seedWealthblockButton:hover:not(:disabled) {
-  background: #7c3aed;
-}
-
-.seedWealthblockButton:disabled {
-  background: #c4b5fd;
   cursor: not-allowed;
 }
 

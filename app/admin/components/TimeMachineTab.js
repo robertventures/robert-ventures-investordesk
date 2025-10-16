@@ -11,10 +11,8 @@ export default function TimeMachineTab({
   currentUser,
   onDeleteAccounts,
   onSeedTestAccounts,
-  onSeedWealthblockAccounts,
   isDeletingAccounts,
-  isSeedingAccounts,
-  isSeedingWealthblock
+  isSeedingAccounts
 }) {
   const [newAppTime, setNewAppTime] = useState(
     timeMachineData.appTime ? new Date(timeMachineData.appTime).toISOString().slice(0, 16) : ''
@@ -67,11 +65,6 @@ export default function TimeMachineTab({
   const handleSeedAccounts = async () => {
     if (!confirm('Seed test accounts now? This will overwrite existing non-admin data.')) return
     await onSeedTestAccounts()
-  }
-
-  const handleSeedWealthblockAccounts = async () => {
-    if (!confirm('Seed Real Users from Wealthblock data? This adds production-like test accounts.')) return
-    await onSeedWealthblockAccounts()
   }
 
   return (
@@ -156,21 +149,14 @@ export default function TimeMachineTab({
             <div className={styles.quickActions}>
               <button
                 onClick={handleSeedAccounts}
-                disabled={isDeletingAccounts || isSeedingAccounts || isSeedingWealthblock}
+                disabled={isDeletingAccounts || isSeedingAccounts}
                 className={styles.seedAccountsButton}
               >
                 {isSeedingAccounts ? 'Seeding…' : 'Seed Test Accounts'}
               </button>
               <button
-                onClick={handleSeedWealthblockAccounts}
-                disabled={isDeletingAccounts || isSeedingAccounts || isSeedingWealthblock}
-                className={styles.seedWealthblockButton}
-              >
-                {isSeedingWealthblock ? 'Seeding…' : 'Seed Real Users'}
-              </button>
-              <button
                 onClick={handleDeleteAccounts}
-                disabled={isDeletingAccounts || isSeedingAccounts || isSeedingWealthblock}
+                disabled={isDeletingAccounts || isSeedingAccounts}
                 className={styles.deleteAccountsButton}
               >
                 {isDeletingAccounts ? 'Deleting…' : 'Delete All Accounts'}
