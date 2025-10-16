@@ -216,15 +216,9 @@ export async function POST(request) {
     }
 
     // Sync transactions to update activity events
-    try {
-      await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/migrate-transactions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      })
-    } catch (err) {
-      console.error('Failed to sync transactions after termination:', err)
-      // Non-blocking: don't fail the request if transaction sync fails
-    }
+    // Direct call to transaction sync (no HTTP needed, works in all environments)
+    const { syncTransactionsNonBlocking } = await import('../../../../../lib/transactionSync.js')
+    await syncTransactionsNonBlocking()
 
     return NextResponse.json({
       success: true,

@@ -65,12 +65,11 @@ export async function POST(request) {
 
     // Sync transactions in background (non-blocking)
     // This regenerates all distributions/contributions based on the new app time
-    // Don't await this - let it run after response is sent
-    fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/migrate-transactions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
-    }).catch(err => {
-      console.error('Failed to sync transactions after time machine update:', err)
+    // Fire-and-forget: run in background without blocking response
+    import('../../../../lib/transactionSync.js').then(({ syncTransactionsNonBlocking }) => {
+      syncTransactionsNonBlocking().catch(err => {
+        console.error('Failed to sync transactions after time machine update:', err)
+      })
     })
 
     return response
@@ -109,12 +108,11 @@ export async function DELETE(request) {
 
     // Sync transactions in background (non-blocking)
     // This regenerates all distributions/contributions based on real time
-    // Don't await this - let it run after response is sent
-    fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/migrate-transactions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
-    }).catch(err => {
-      console.error('Failed to sync transactions after time machine reset:', err)
+    // Fire-and-forget: run in background without blocking response
+    import('../../../../lib/transactionSync.js').then(({ syncTransactionsNonBlocking }) => {
+      syncTransactionsNonBlocking().catch(err => {
+        console.error('Failed to sync transactions after time machine reset:', err)
+      })
     })
 
     return response

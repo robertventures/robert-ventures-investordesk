@@ -561,15 +561,9 @@ export async function PUT(request, { params }) {
       // Sync transactions immediately after investment status change
       // This ensures distributions, contributions, and activity events are generated
       if (body.fields.status === 'active' || body.fields.status === 'rejected' || body.fields.status === 'withdrawn') {
-        try {
-          await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/migrate-transactions`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-          })
-        } catch (err) {
-          console.error('Failed to sync transactions after investment update:', err)
-          // Non-blocking: don't fail the request if transaction sync fails
-        }
+        // Direct call to transaction sync (no HTTP needed, works in all environments)
+        const { syncTransactionsNonBlocking } = await import('../../../../lib/transactionSync.js')
+        await syncTransactionsNonBlocking()
       }
 
       return NextResponse.json({ success: true, user: updatedUser, investment: updatedInvestment })

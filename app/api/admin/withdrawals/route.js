@@ -205,15 +205,9 @@ export async function POST(request) {
 
     // Sync transactions immediately after withdrawal action
     // This updates redemption transaction status and activity events
-    try {
-      await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/migrate-transactions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      })
-    } catch (err) {
-      console.error('Failed to sync transactions after withdrawal action:', err)
-      // Non-blocking: don't fail the request if transaction sync fails
-    }
+    // Direct call to transaction sync (no HTTP needed, works in all environments)
+    const { syncTransactionsNonBlocking } = await import('../../../../lib/transactionSync.js')
+    await syncTransactionsNonBlocking()
 
     return NextResponse.json({ success: true, withdrawal: wd })
   } catch (e) {
