@@ -26,7 +26,12 @@ export default function PortfolioSummary() {
 
     try {
       // Ensure transaction events (distributions/compounding) are generated
-      await fetch('/api/migrate-transactions', { method: 'POST' })
+      // Don't block on this - if it fails, still show user data
+      try {
+        await fetch('/api/migrate-transactions', { method: 'POST' })
+      } catch (migrationError) {
+        console.warn('Transaction migration failed, continuing anyway:', migrationError)
+      }
       
       // Get current app time for calculations
       const timeRes = await fetch('/api/admin/time-machine')
@@ -231,7 +236,9 @@ export default function PortfolioSummary() {
         setChartSeries(points)
       }
     } catch (e) {
-      console.error('Failed to load portfolio data', e)
+      console.error('Failed to load portfolio data:', e)
+      // Set error state so user knows something went wrong
+      alert('Failed to load portfolio data. Please refresh the page. If the problem persists, contact support.')
     }
   }, [])
 

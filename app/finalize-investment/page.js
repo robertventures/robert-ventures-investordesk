@@ -451,15 +451,20 @@ function ClientContent() {
             if (investment?.paymentFrequency === 'monthly' && payoutMethod !== 'bank-account') {
               errors.push('Select a payout method for monthly earnings.')
             }
+            if (!agreeToTerms) {
+              errors.push('Please review and agree to the investment agreement terms.')
+            }
             if (errors.length) {
               setValidationErrors(errors)
               return
             }
+            console.log('Starting investment submission...')
             setIsSaving(true)
             try {
               const userId = user.id
               const investmentId = investment.id
               const earningsMethod = investment.paymentFrequency === 'monthly' ? payoutMethod : 'compounding'
+              console.log('Investment details:', { userId, investmentId, paymentMethod: fundingMethod, earningsMethod })
 
               // Determine bank account to use when bank-transfer is selected
               let bankToUse = null
@@ -485,6 +490,7 @@ function ClientContent() {
               const paymentMethod = fundingMethod === 'bank-transfer' ? 'ach' : 'wire'
               
               // Update the draft investment to pending status with compliance and banking data
+              console.log('Making API call to update investment status...')
               const investmentUpdateRes = await fetch(`/api/users/${userId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
@@ -579,11 +585,15 @@ function ClientContent() {
                 })
               })
 
+              console.log('Investment update API response received')
               const investmentUpdateData = await investmentUpdateRes.json()
+              console.log('Investment update result:', investmentUpdateData)
               if (!investmentUpdateData.success) {
+                console.error('Investment update failed:', investmentUpdateData.error)
                 alert(`Failed to submit investment: ${investmentUpdateData.error || 'Unknown error'}`)
                 return
               }
+              console.log('Investment updated successfully, proceeding to banking update...')
               
               // Store banking details and bank accounts on user account
               const nextBankAccounts = (() => {
@@ -607,6 +617,7 @@ function ClientContent() {
               })
 
               const bankingUpdateData = await bankingUpdateRes.json()
+              console.log('Banking update result:', bankingUpdateData)
               if (!bankingUpdateData.success) {
                 console.warn('Banking details update failed:', bankingUpdateData.error)
                 // Don't block redirect for banking update failure since investment was submitted successfully
@@ -614,8 +625,10 @@ function ClientContent() {
               
               // Add a small delay to help with Netlify Blobs eventual consistency
               // This ensures the data has time to propagate before the dashboard reads it
+              console.log('Waiting for data propagation before redirect...')
               await new Promise(resolve => setTimeout(resolve, 1000))
               
+              console.log('Redirecting to dashboard...')
               window.location.href = '/dashboard'
             } catch (e) {
               console.error('Failed to save finalization data', e)

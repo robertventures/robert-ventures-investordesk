@@ -77,10 +77,12 @@ export default function TransactionsList({ limit = null, showViewAll = true, fil
               investmentAmount: inv.amount || 0
             }))
           })
-          const combined = [...baseEvents, ...investmentEvents]
-          // Sort ascending (oldest first) so activity tells a chronological story:
-          // Account Created → Investment Created → Confirmed → Distributions
-          const sorted = combined.slice().sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0))
+          // Filter out redundant events:
+          // - investment_created: redundant with 'investment' transaction
+          const filteredBase = baseEvents.filter(ev => ev.type !== 'investment_created')
+          const combined = [...filteredBase, ...investmentEvents]
+          // Sort descending (newest first) to show most recent activity at the top
+          const sorted = combined.slice().sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))
           setEvents(sorted)
         }
       } finally {
@@ -121,7 +123,8 @@ export default function TransactionsList({ limit = null, showViewAll = true, fil
           const amountClass = isWithdrawal ? styles.negative : styles.positive
           const isExpanded = expandable && expandedId === ev.id
           // Only show amount for events that have a monetary value
-          const shouldShowAmount = ev.type !== 'account_created'
+          // Exclude account_created and investment_created as they don't represent transactions
+          const shouldShowAmount = ev.type !== 'account_created' && ev.type !== 'investment_created'
           return (
             <div className={styles.event} key={ev.id} onClick={() => { if (expandable) setExpandedId(prev => prev === ev.id ? null : ev.id) }} style={{ cursor: expandable ? 'pointer' : 'default' }}>
               <div className={`${styles.icon} ${meta.iconClass}`}>{meta.icon}</div>
