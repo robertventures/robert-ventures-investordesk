@@ -1,17 +1,23 @@
 import { NextResponse } from 'next/server'
-import { clearAuthCookies } from '../../../../lib/authMiddleware.js'
+import { createServiceClient } from '../../../../lib/supabaseClient.js'
 
 export async function POST(request) {
   try {
-    const response = NextResponse.json({
+    const supabase = createServiceClient()
+
+    // Get token from header if present
+    const authHeader = request.headers.get('authorization')
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.replace('Bearer ', '')
+      
+      // Sign out from Supabase
+      await supabase.auth.admin.signOut(token)
+    }
+    
+    return NextResponse.json({
       success: true,
       message: 'Logged out successfully'
     })
-    
-    // Clear authentication cookies
-    clearAuthCookies(response)
-    
-    return response
   } catch (error) {
     console.error('Error in POST /api/auth/logout:', error)
     return NextResponse.json(

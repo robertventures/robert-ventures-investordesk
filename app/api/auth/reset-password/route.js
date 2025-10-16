@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getUsers, saveUsers } from '../../../../lib/database'
+import { createServiceClient } from '../../../../lib/supabaseClient.js'
 import { hashPassword } from '../../../../lib/auth'
 
 // POST /api/auth/reset-password
@@ -29,21 +29,24 @@ export async function POST(request) {
       )
     }
 
-    // Find user with this reset token
-    const usersData = await getUsers()
-    const userIndex = usersData.users.findIndex(u => u.resetToken === token)
+    const supabase = createServiceClient()
 
-    if (userIndex === -1) {
+    // Find user with this reset token
+    const { data: user, error: findError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('reset_token', token)
+      .single()
+
+    if (findError || !user) {
       return NextResponse.json(
         { success: false, error: 'Invalid or expired reset token' },
         { status: 400 }
       )
     }
 
-    const user = usersData.users[userIndex]
-
     // Check if token is expired
-    if (user.resetTokenExpiry && new Date(user.resetTokenExpiry) < new Date()) {
+    if (user.reset_token_expiry && new Date(user.reset_token_expiry) < new Date()) {
       return NextResponse.json(
         { success: false, error: 'Reset token has expired' },
         { status: 400 }
@@ -53,21 +56,35 @@ export async function POST(request) {
     // Hash the new password before storing
     const hashedPassword = await hashPassword(newPassword)
 
-    // Update password and verify account (since they received the email)
-    const timestamp = new Date().toISOString()
-    usersData.users[userIndex] = {
-      ...user,
-      password: hashedPassword,
-      isVerified: true,
-      verifiedAt: user.verifiedAt || timestamp, // Set verifiedAt if not already set
-      resetToken: null,
-      resetTokenExpiry: null,
-      updatedAt: timestamp
+    // Update password via Supabase Auth
+    const { error: authError } = await supabase.auth.admin.updateUserById(
+      user.auth_id,
+      { password: newPassword }
+    )
+
+    if (authError) {
+      console.error('Error updating password in Supabase Auth:', authError)
+      return NextResponse.json(
+        { success: false, error: 'Failed to update password' },
+        { status: 500 }
+      )
     }
 
-    // Save updated users
-    const saved = await saveUsers(usersData)
-    if (!saved) {
+    // Update user record and verify account
+    const timestamp = new Date().toISOString()
+    const { error: updateError } = await supabase
+      .from('users')
+      .update({
+        is_verified: true,
+        verified_at: user.verified_at || timestamp,
+        reset_token: null,
+        reset_token_expiry: null,
+        updated_at: timestamp
+      })
+      .eq('id', user.id)
+
+    if (updateError) {
+      console.error('Error updating user record:', updateError)
       return NextResponse.json(
         { success: false, error: 'Failed to update password' },
         { status: 500 }

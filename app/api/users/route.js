@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getUsers, addUser, getUserByEmail, cleanupDuplicateUsers } from '../../../lib/database'
+import { getUsers, addUser, getUserByEmail } from '../../../lib/supabaseDatabase.js'
 import { getCurrentAppTime } from '../../../lib/appTime'
 import { hashPassword } from '../../../lib/auth'
 import { requireAdmin, requireAuth, authErrorResponse } from '../../../lib/authMiddleware'
@@ -22,17 +22,37 @@ export async function GET(request) {
       }
 
       if (action === 'cleanup') {
-        const result = await cleanupDuplicateUsers()
-        return NextResponse.json({ success: true, message: `Cleaned up ${result.removed} duplicate users` })
+        // Cleanup is no longer needed with Supabase (database enforces uniqueness)
+        return NextResponse.json({ success: true, message: 'Cleanup not needed with Supabase' })
       }
 
       // Get all users (admin only)
       const usersData = await getUsers()
       const appTime = await getCurrentAppTime()
 
+      // Convert snake_case to camelCase for frontend compatibility
+      const users = (usersData.users || []).map(u => ({
+        id: u.id,
+        email: u.email,
+        firstName: u.first_name,
+        lastName: u.last_name,
+        phoneNumber: u.phone_number,
+        dob: u.dob,
+        address: u.address,
+        isAdmin: u.is_admin,
+        isVerified: u.is_verified,
+        verifiedAt: u.verified_at,
+        createdAt: u.created_at,
+        updatedAt: u.updated_at,
+        investments: u.investments || [],
+        withdrawals: u.withdrawals || [],
+        bankAccounts: u.bank_accounts || [],
+        activity: u.activity || []
+      }))
+
       return NextResponse.json({
         success: true,
-        users: usersData.users,
+        users,
         timeMachine: {
           appTime: appTime || new Date().toISOString(),
           isActive: !!appTime,
@@ -66,11 +86,28 @@ export async function GET(request) {
       return authErrorResponse('You can only access your own user data', 403)
     }
 
-    const user = await getUserByEmail(validatedEmail)
-    if (user) {
+    const dbUser = await getUserByEmail(validatedEmail)
+    if (dbUser) {
+      // Convert snake_case to camelCase
+      const user = {
+        id: dbUser.id,
+        email: dbUser.email,
+        firstName: dbUser.first_name,
+        lastName: dbUser.last_name,
+        phoneNumber: dbUser.phone_number,
+        dob: dbUser.dob,
+        ssn: dbUser.ssn,
+        address: dbUser.address,
+        isAdmin: dbUser.is_admin,
+        isVerified: dbUser.is_verified,
+        verifiedAt: dbUser.verified_at,
+        createdAt: dbUser.created_at,
+        updatedAt: dbUser.updated_at
+      }
+      
       // Don't expose sensitive fields to non-admin users
       if (!authUser.isAdmin) {
-        const { password, ssn, ...safeUser } = user
+        const { ssn, ...safeUser } = user
         return NextResponse.json({ success: true, user: safeUser })
       }
       return NextResponse.json({ success: true, user })
@@ -147,8 +184,15 @@ export async function POST(request) {
         email: result.user.email,
         timestamp: new Date().toISOString()
       })
-      // Don't return sensitive data
-      const { password: _, ssn: __, ...safeUser } = result.user
+      // Convert snake_case to camelCase and don't return sensitive data
+      const safeUser = {
+        id: result.user.id,
+        email: result.user.email,
+        firstName: result.user.first_name,
+        lastName: result.user.last_name,
+        isVerified: result.user.is_verified,
+        createdAt: result.user.created_at
+      }
       return NextResponse.json({ success: true, user: safeUser }, { status: 201 })
     } else {
       console.error('❌ Failed to create user:', result.error)

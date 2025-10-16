@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getUsers } from '../../../../../lib/database'
+import { getUsers } from '../../../../../lib/supabaseDatabase.js'
 import { requireAdmin, authErrorResponse } from '../../../../../lib/authMiddleware'
 
 /**

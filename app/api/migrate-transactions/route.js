@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getUsers, saveUsers } from '../../../lib/database'
+import { getUsers, saveUsers } from '../../../lib/supabaseDatabase.js'
 import { getCurrentAppTime, getAutoApproveDistributions } from '../../../lib/appTime'
 import { generateTransactionId } from '../../../lib/idGenerator'
 

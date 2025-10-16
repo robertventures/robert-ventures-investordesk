@@ -20,7 +20,12 @@ export default function DashboardPage() {
       const userId = localStorage.getItem('currentUserId')
       if (!userId) { router.push('/'); return }
       try {
-        const res = await fetch(`/api/users/${userId}`)
+        // Check if we're coming from investment finalization
+        // If so, request fresh data with extended retries to handle Netlify Blobs consistency
+        const fromFinalize = searchParams.get('from') === 'finalize'
+        const freshParam = fromFinalize ? '?fresh=true' : ''
+        
+        const res = await fetch(`/api/users/${userId}${freshParam}`)
         const data = await res.json()
         if (!data.success || !data.user) {
           localStorage.removeItem('currentUserId')
@@ -33,7 +38,7 @@ export default function DashboardPage() {
       }
     }
     verify()
-  }, [router])
+  }, [router, searchParams])
 
   // Initialize activeView from URL params and sync URL with activeView
   useEffect(() => {

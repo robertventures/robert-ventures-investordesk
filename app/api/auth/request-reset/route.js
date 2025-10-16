@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getUserByEmail, updateUser } from '../../../../lib/database'
+import { getUserByEmail, updateUser } from '../../../../lib/supabaseDatabase.js'
 import crypto from 'crypto'
 import { rateLimit, RATE_LIMIT_CONFIGS } from '../../../../lib/rateLimit'
 

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { verifyRefreshToken, signToken } from '../../../../lib/auth.js'
-import { getUsers } from '../../../../lib/database.js'
+import { getUser } from '../../../../lib/supabaseDatabase.js'
 
 export async function POST(request) {
   try {
@@ -38,19 +38,22 @@ export async function POST(request) {
       )
     }
     
-    // Fetch user from database to ensure they still exist
-    const usersData = await getUsers()
-    const user = usersData.users.find(u => u.id === payload.userId)
+    // Fetch user from Supabase to ensure they still exist
+    const dbUser = await getUser(payload.userId)
     
-    if (!user) {
+    if (!dbUser) {
       return NextResponse.json(
         { success: false, error: 'User not found' },
         { status: 404 }
       )
     }
     
-    // Generate new access token
-    const newAccessToken = signToken(user)
+    // Generate new access token (convert snake_case to camelCase for signToken)
+    const newAccessToken = signToken({
+      id: dbUser.id,
+      email: dbUser.email,
+      isAdmin: dbUser.is_admin || false
+    })
     
     // Create response and set new access token cookie
     const response = NextResponse.json({

@@ -628,14 +628,14 @@ function ClientContent() {
                 // Don't block redirect for banking update failure since investment was submitted successfully
               }
               
-              // Add delay to help with Netlify Blobs eventual consistency
-              // This ensures the data has time to propagate before the dashboard reads it
-              // Using 2 seconds to match backend save delay
-              console.log('Waiting for data propagation before redirect...')
-              await new Promise(resolve => setTimeout(resolve, 2000))
+              // Backend now handles consistency verification with read-after-write checks
+              // Small delay to ensure UI doesn't flash before redirect
+              console.log('Investment submitted successfully, redirecting to dashboard...')
+              await new Promise(resolve => setTimeout(resolve, 500))
               
+              // Redirect to dashboard with 'from=finalize' param to trigger fresh data fetch
               console.log('Redirecting to dashboard...')
-              window.location.href = '/dashboard'
+              window.location.href = '/dashboard?from=finalize'
             } catch (e) {
               console.error('Failed to save finalization data', e)
               alert('An error occurred while submitting your investment. Please try again. If the problem persists, contact support.')

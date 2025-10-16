@@ -8,12 +8,14 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "seed-test-accounts": "node scripts/seed-test-accounts.js"
+    "seed-test-accounts": "node scripts/seed-test-accounts.js",
+    "seed-supabase": "node --env-file=.env.local scripts/seed-supabase.js"
   },
   "dependencies": {
-    "@netlify/blobs": "^10.0.11",
+    "@supabase/supabase-js": "^2.39.0",
     "bcryptjs": "^3.0.2",
     "cookie": "^1.0.2",
+    "dotenv": "^17.2.3",
     "jsonwebtoken": "^9.0.2",
     "jszip": "^3.10.1",
     "next": "^14.2.32",

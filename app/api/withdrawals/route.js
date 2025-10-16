@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getUsers, saveUsers } from '../../../lib/database'
+import { getUsers, saveUsers } from '../../../lib/supabaseDatabase.js'
 import { calculateInvestmentValue, calculateWithdrawalAmount } from '../../../lib/investmentCalculations'
 import { getCurrentAppTime } from '../../../lib/appTime'
 import { generateWithdrawalId, generateTransactionId } from '../../../lib/idGenerator'

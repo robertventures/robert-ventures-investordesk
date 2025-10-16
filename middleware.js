@@ -133,14 +133,20 @@ export function middleware(request) {
   response.headers.set('X-Permitted-Cross-Domain-Policies', 'none')
 
   // Content Security Policy (CSP) - restrictive for security
+  // Build CSP with dynamic Supabase URL
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+  const connectSrc = supabaseUrl 
+    ? `'self' ${supabaseUrl}` 
+    : `'self'`
+  
   response.headers.set(
     'Content-Security-Policy',
     "default-src 'self'; " +
     "script-src 'self' 'unsafe-eval' 'unsafe-inline'; " +
-    "style-src 'self' 'unsafe-inline'; " +
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
     "img-src 'self' data: https:; " +
-    "font-src 'self' data:; " +
-    "connect-src 'self'; " +
+    "font-src 'self' data: https://fonts.gstatic.com; " +
+    `connect-src ${connectSrc}; ` +
     "frame-ancestors 'self'; " +
     "base-uri 'self'; " +
     "form-action 'self'"

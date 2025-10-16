@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { getUsers, updateUser } from '../../../../lib/database'
+import { getUser, updateUser } from '../../../../lib/supabaseDatabase.js'
+import { createServiceClient } from '../../../../lib/supabaseClient.js'
 import { sendWelcomeEmail, sendBulkWelcomeEmails } from '../../../../lib/emailService'
 import crypto from 'crypto'
 
@@ -13,9 +14,8 @@ export async function POST(request) {
     const { adminUserId, userIds, single = false } = body
 
     // Verify admin access
-    const usersData = await getUsers()
-    const admin = usersData.users?.find(u => u.id === adminUserId && u.isAdmin)
-    if (!admin) {
+    const admin = await getUser(adminUserId)
+    if (!admin || !admin.is_admin) {
       return NextResponse.json(
         { success: false, error: 'Admin access required' },
         { status: 403 }
@@ -33,7 +33,7 @@ export async function POST(request) {
     const results = []
     
     for (const userId of userIds) {
-      const user = usersData.users?.find(u => u.id === userId)
+      const user = await getUser(userId)
       
       if (!user) {
         results.push({
@@ -65,11 +65,11 @@ export async function POST(request) {
         continue
       }
 
-      // Send welcome email
+      // Send welcome email (convert snake_case to camelCase)
       const emailResult = await sendWelcomeEmail({
         email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
+        firstName: user.first_name,
+        lastName: user.last_name,
         resetToken
       })
 

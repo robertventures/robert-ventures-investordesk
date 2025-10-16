@@ -1,12 +1,13 @@
 'use client'
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import styles from './PortfolioSummary.module.css'
 import TransactionsList from './TransactionsList'
 import { calculateInvestmentValue, formatCurrency, formatDate, getInvestmentStatus } from '../../lib/investmentCalculations'
 
 export default function PortfolioSummary() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [userData, setUserData] = useState(null)
   const [portfolioData, setPortfolioData] = useState({
     totalInvested: 0,
@@ -39,7 +40,11 @@ export default function PortfolioSummary() {
       const currentAppTime = timeData.success ? timeData.appTime : new Date().toISOString()
       setAppTime(currentAppTime)
       
-      const res = await fetch(`/api/users/${userId}`)
+      // Check if we're coming from investment finalization to request fresh data
+      const fromFinalize = searchParams.get('from') === 'finalize'
+      const freshParam = fromFinalize ? '?fresh=true' : ''
+      
+      const res = await fetch(`/api/users/${userId}${freshParam}`)
       const data = await res.json()
       if (data.success && data.user) {
         setUserData(data.user)
@@ -240,7 +245,7 @@ export default function PortfolioSummary() {
       // Set error state so user knows something went wrong
       alert('Failed to load portfolio data. Please refresh the page. If the problem persists, contact support.')
     }
-  }, [])
+  }, [searchParams])
 
   useEffect(() => {
     loadData()

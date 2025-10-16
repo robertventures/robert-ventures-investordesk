@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getUsers, updateUser } from '../../../../../lib/database'
+import { getUsers, updateUser } from '../../../../../lib/supabaseDatabase.js'
 import { uploadDocument, generateDocumentKey, isPDF } from '../../../../../lib/documentStorage'
 import { sendDocumentNotification } from '../../../../../lib/emailService'
 import { generateTransactionId } from '../../../../../lib/idGenerator'
