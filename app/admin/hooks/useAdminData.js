@@ -15,7 +15,8 @@ export function useAdminData() {
   const [isLoadingPayouts, setIsLoadingPayouts] = useState(false)
   const [timeMachineData, setTimeMachineData] = useState({ 
     appTime: null, 
-    isActive: false 
+    isActive: false,
+    autoApproveDistributions: false
   })
 
   // Load initial data
@@ -112,7 +113,8 @@ export function useAdminData() {
         setTimeMachineData({
           appTime: timeData.appTime,
           isActive: timeData.isTimeMachineActive,
-          realTime: timeData.realTime
+          realTime: timeData.realTime,
+          autoApproveDistributions: timeData.autoApproveDistributions || false
         })
       }
     } catch (e) {

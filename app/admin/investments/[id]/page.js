@@ -80,9 +80,11 @@ export default function AdminInvestmentDetailsPage({ params }) {
           paymentMethod: foundInvestment.paymentMethod || 'ach'
         })
 
-        // Fetch app time for withdrawal calculations
-        if (usersData.appTime) {
-          setAppTime(usersData.appTime)
+        // Calculate current app time using offset for withdrawal calculations
+        if (usersData.timeOffset !== undefined && usersData.timeOffset !== null) {
+          const realTime = new Date()
+          const currentAppTime = new Date(realTime.getTime() + usersData.timeOffset).toISOString()
+          setAppTime(currentAppTime)
         }
       } catch (e) {
         console.error('Failed to load investment', e)

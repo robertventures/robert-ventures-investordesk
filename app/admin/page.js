@@ -377,7 +377,8 @@ export default function AdminPage() {
         setTimeMachineData({
           appTime: realTime,
           isActive: false,
-          realTime
+          realTime,
+          autoApproveDistributions: false
         })
         alert('Time machine reset to real time!')
         await refreshUsers()
@@ -390,6 +391,43 @@ export default function AdminPage() {
       alert('An error occurred while resetting app time')
     }
     return null
+  }
+
+  const toggleAutoApproveDistributions = async (newValue) => {
+    if (!currentUser || !currentUser.id) {
+      alert('Current user not loaded. Please refresh the page.')
+      return
+    }
+    
+    try {
+      const res = await fetch('/api/admin/time-machine', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          autoApproveDistributions: newValue
+        })
+      })
+      
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`)
+      }
+      
+      const data = await res.json()
+      
+      if (data.success) {
+        setTimeMachineData({
+          ...timeMachineData,
+          autoApproveDistributions: data.autoApproveDistributions
+        })
+        
+        alert(`Auto-approve distributions ${newValue ? 'enabled' : 'disabled'}!`)
+      } else {
+        alert(data.error || 'Failed to update auto-approve setting')
+      }
+    } catch (e) {
+      console.error('Failed to toggle auto-approve', e)
+      alert('An error occurred while updating auto-approve setting: ' + e.message)
+    }
   }
 
   const deleteAllAccounts = async () => {
@@ -516,6 +554,7 @@ export default function AdminPage() {
               isSeedingAccounts={isSeedingAccounts}
               onRefreshWithdrawals={refreshWithdrawals}
               onImportComplete={handleImportComplete}
+              onToggleAutoApprove={toggleAutoApproveDistributions}
             />
           )}
 

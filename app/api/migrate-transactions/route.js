@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getUsers, saveUsers } from '../../../lib/database'
-import { getCurrentAppTime } from '../../../lib/appTime'
+import { getCurrentAppTime, getAutoApproveDistributions } from '../../../lib/appTime'
 import { generateTransactionId } from '../../../lib/idGenerator'
 
 // Helper functions matching investmentCalculations.js
@@ -175,6 +175,7 @@ export async function POST() {
     const usersData = await getUsers()
     const appTime = await getCurrentAppTime()
     const now = new Date(appTime || new Date().toISOString())
+    const autoApproveDistributions = await getAutoApproveDistributions()
 
     let usersUpdated = 0
     let eventsCreated = 0
@@ -492,9 +493,22 @@ export async function POST() {
               const legacyKey = `${inv.id}-${distributionDateIso}`
               const legacyEvent = legacyDistributionEvents.get(legacyKey)
 
-              let status = legacyEvent ? mapLegacyPayoutStatus(legacyEvent.payoutStatus) : 'pending'
-              if (existingTx && existingTx.status && existingTx.status !== 'pending' && status === 'pending') {
+              // Determine status based on priority:
+              // 1. If transaction exists with non-pending status, keep that status
+              // 2. If legacy event has status, use that
+              // 3. If auto-approve is enabled AND this is a NEW distribution, auto-approve it
+              // 4. Otherwise, default to pending
+              let status = 'pending'
+              let autoApproved = false
+              
+              if (existingTx && existingTx.status && existingTx.status !== 'pending') {
                 status = existingTx.status
+              } else if (legacyEvent) {
+                status = mapLegacyPayoutStatus(legacyEvent.payoutStatus)
+              } else if (!existingTx && autoApproveDistributions) {
+                // NEW distribution and auto-approve is enabled
+                status = 'approved'
+                autoApproved = true
               }
 
               ensureTransaction({
@@ -509,6 +523,7 @@ export async function POST() {
                 payoutMethod,
                 payoutBankId,
                 payoutBankNickname,
+                autoApproved: autoApproved || existingTx?.autoApproved || false,
                 failureReason: legacyEvent?.failureReason || existingTx?.failureReason || null,
                 retryCount: legacyEvent?.retryCount ?? existingTx?.retryCount ?? 0,
                 lastRetryAt: legacyEvent?.lastRetryAt || existingTx?.lastRetryAt || null,

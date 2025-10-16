@@ -4,6 +4,7 @@ import { getCurrentAppTime } from '../../../../lib/appTime'
 import { generateGlobalInvestmentId, generateTransactionId } from '../../../../lib/idGenerator'
 import { hashPassword, comparePassword, isPasswordHashed, signToken, signRefreshToken } from '../../../../lib/auth'
 import { setAuthCookies } from '../../../../lib/authMiddleware'
+import { decrypt, isEncrypted } from '../../../../lib/encryption'
 
 // PUT - Update user data
 export async function PUT(request, { params }) {
@@ -61,10 +62,14 @@ export async function PUT(request, { params }) {
       // Hash the new password before storing
       const hashedNewPassword = await hashPassword(newPassword)
 
+      // Use app time (Time Machine) for timestamps
+      const appTime = await getCurrentAppTime()
+      const timestamp = appTime || new Date().toISOString()
+      
       const updatedUser = {
         ...user,
         password: hashedNewPassword,
-        updatedAt: new Date().toISOString()
+        updatedAt: timestamp
       }
       usersData.users[userIndex] = updatedUser
 
@@ -143,7 +148,9 @@ export async function PUT(request, { params }) {
 
       // Generate next sequential investment ID (global across all users)
       const investmentId = generateGlobalInvestmentId(usersData.users)
-      const timestamp = new Date().toISOString()
+      // Use app time (Time Machine) for timestamps
+      const appTime = await getCurrentAppTime()
+      const timestamp = appTime || new Date().toISOString()
       
       const newInvestment = {
         id: investmentId,
@@ -160,7 +167,7 @@ export async function PUT(request, { params }) {
       const updatedUser = {
         ...user,
         investments: [...filtered, newInvestment],
-        updatedAt: new Date().toISOString()
+        updatedAt: timestamp
       }
       usersData.users[userIndex] = updatedUser
 
@@ -214,11 +221,15 @@ export async function PUT(request, { params }) {
         return NextResponse.json({ success: false, error: 'Invalid verification code' }, { status: 400 })
       }
 
+      // Use app time (Time Machine) for timestamps
+      const appTime = await getCurrentAppTime()
+      const timestamp = appTime || new Date().toISOString()
+      
       const updatedUser = {
         ...user,
         isVerified: true,
-        verifiedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        verifiedAt: timestamp,
+        updatedAt: timestamp
       }
 
       usersData.users[userIndex] = updatedUser
@@ -377,10 +388,14 @@ export async function PUT(request, { params }) {
         }
       }
 
+      // Use app time (Time Machine) for timestamps
+      const appTime = await getCurrentAppTime()
+      const timestamp = appTime || new Date().toISOString()
+      
       let updatedInvestment = {
         ...investments[invIndex],
         ...body.fields,
-        updatedAt: new Date().toISOString()
+        updatedAt: timestamp
       }
 
       // VALIDATION: IRA accounts cannot use monthly payment frequency (Bug #2)
@@ -389,31 +404,11 @@ export async function PUT(request, { params }) {
         return NextResponse.json({ success: false, error: 'IRA accounts can only use compounding payment frequency' }, { status: 400 })
       }
 
-      // AUTO-APPROVAL FOR ACH INVESTMENTS
-      // When status changes to 'pending', automatically approve ACH investments
-      if (body.fields.status === 'pending' && updatedInvestment.paymentMethod === 'ach') {
-        // Automatically approve ACH investments - change status to active
-        updatedInvestment.status = 'active'
-        updatedInvestment.autoApproved = true
-        updatedInvestment.autoApprovedReason = 'ACH payment method'
-        
-        // Set confirmation timestamp
-        const appTime = await getCurrentAppTime()
-        const confirmedDate = new Date(appTime)
-        updatedInvestment.confirmedAt = confirmedDate.toISOString()
-        updatedInvestment.confirmationSource = 'auto_ach'
-        
-        // Calculate lockup end date
-        const lockupYears = updatedInvestment.lockupPeriod === '3-year' ? 3 : 1
-        const lockupEndDate = new Date(confirmedDate)
-        lockupEndDate.setFullYear(lockupEndDate.getFullYear() + lockupYears)
-        updatedInvestment.lockupEndDate = lockupEndDate.toISOString()
-      }
-      // Wire investments remain pending for manual approval
-      else if (body.fields.status === 'pending' && updatedInvestment.paymentMethod === 'wire') {
-        // Keep as pending, add metadata
+      // ALL INVESTMENTS REQUIRE MANUAL ADMIN APPROVAL
+      // Both ACH and wire investments remain pending until admin approves
+      if (body.fields.status === 'pending') {
         updatedInvestment.requiresManualApproval = true
-        updatedInvestment.manualApprovalReason = 'Wire transfer payment method'
+        updatedInvestment.manualApprovalReason = 'All investments require admin approval'
       }
       
       // On confirmation, set server-driven confirmation date and lock up end date
@@ -446,7 +441,15 @@ export async function PUT(request, { params }) {
 
         // Always derive confirmation date from server app time (supports time machine)
         const appTime = await getCurrentAppTime()
-        const confirmedDate = new Date(appTime)
+        let confirmedDate = new Date(appTime)
+        
+        // VALIDATION: Confirmation date cannot be earlier than investment creation/submission
+        // This prevents illogical timelines where confirmation appears before the investment was created
+        const investmentCreationDate = new Date(updatedInvestment.submittedAt || updatedInvestment.createdAt)
+        if (confirmedDate < investmentCreationDate) {
+          confirmedDate = investmentCreationDate
+        }
+        
         const lockupYears = updatedInvestment.lockupPeriod === '3-year' ? 3 : 1
 
         // Always recalculate lockup end date on confirmation to ensure consistency
@@ -551,7 +554,7 @@ export async function PUT(request, { params }) {
         investments,
         ...(shouldSetAccountType ? { accountType: updatedInvestment.accountType } : {}),
         ...accountTypeFields,
-        updatedAt: new Date().toISOString()
+        updatedAt: timestamp
       }
       usersData.users[userIndex] = updatedUser
       if (!await saveUsers(usersData)) {
@@ -630,12 +633,16 @@ export async function PUT(request, { params }) {
         entity: null
       } : {}
       
+      // Use app time (Time Machine) for timestamps
+      const appTime = await getCurrentAppTime()
+      const timestamp = appTime || new Date().toISOString()
+      
       const updatedUser = {
         ...user,
         investments,
         activity: cleanedActivity,
         ...accountTypeFields,
-        updatedAt: new Date().toISOString()
+        updatedAt: timestamp
       }
       usersData.users[userIndex] = updatedUser
       if (!await saveUsers(usersData)) {
@@ -717,11 +724,47 @@ export async function GET(request, { params }) {
     const user = usersData.users.find(user => user.id === id)
     
     if (user) {
-      // Include app time for calculations (Time Machine support)
+      // Calculate current app time using offset (Time Machine support)
+      const realTime = new Date()
+      let appTime
+      if (usersData.timeOffset !== undefined && usersData.timeOffset !== null) {
+        appTime = new Date(realTime.getTime() + usersData.timeOffset).toISOString()
+      } else {
+        appTime = null
+      }
+      
+      // Decrypt SSN for display (user viewing their own profile)
+      // The encryption is for at-rest security, not for hiding from the user
+      const userWithDecryptedSSN = { ...user }
+      
+      if (userWithDecryptedSSN.ssn && isEncrypted(userWithDecryptedSSN.ssn)) {
+        try {
+          userWithDecryptedSSN.ssn = decrypt(userWithDecryptedSSN.ssn)
+        } catch (error) {
+          console.error('Failed to decrypt primary SSN:', error)
+        }
+      }
+      
+      if (userWithDecryptedSSN.jointHolder?.ssn && isEncrypted(userWithDecryptedSSN.jointHolder.ssn)) {
+        try {
+          userWithDecryptedSSN.jointHolder.ssn = decrypt(userWithDecryptedSSN.jointHolder.ssn)
+        } catch (error) {
+          console.error('Failed to decrypt joint holder SSN:', error)
+        }
+      }
+      
+      if (userWithDecryptedSSN.authorizedRepresentative?.ssn && isEncrypted(userWithDecryptedSSN.authorizedRepresentative.ssn)) {
+        try {
+          userWithDecryptedSSN.authorizedRepresentative.ssn = decrypt(userWithDecryptedSSN.authorizedRepresentative.ssn)
+        } catch (error) {
+          console.error('Failed to decrypt authorized representative SSN:', error)
+        }
+      }
+      
       return NextResponse.json({ 
         success: true, 
-        user,
-        appTime: usersData.appTime || null
+        user: userWithDecryptedSSN,
+        appTime
       })
     } else {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 })

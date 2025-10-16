@@ -466,20 +466,25 @@ function ClientContent() {
               const earningsMethod = investment.paymentFrequency === 'monthly' ? payoutMethod : 'compounding'
               console.log('Investment details:', { userId, investmentId, paymentMethod: fundingMethod, earningsMethod })
 
+              // Fetch current app time (Time Machine) from server
+              const timeRes = await fetch('/api/admin/time-machine')
+              const timeData = await timeRes.json()
+              const appTime = timeData.success ? timeData.appTime : new Date().toISOString()
+              console.log('Using app time for timestamps:', appTime)
+
               // Determine bank account to use when bank-transfer is selected
               let bankToUse = null
               if (fundingMethod === 'bank-transfer') {
-                const nowIso = new Date().toISOString()
                 const existing = availableBanks.find(b => b.id === selectedBankId)
                 if (existing) {
-                  bankToUse = { ...existing, lastUsedAt: nowIso }
+                  bankToUse = { ...existing, lastUsedAt: appTime }
                 } else {
                   bankToUse = {
                     id: `bank-${Date.now()}`,
                     nickname: 'Default Bank',
                     type: 'ach',
-                    createdAt: nowIso,
-                    lastUsedAt: nowIso
+                    createdAt: appTime,
+                    lastUsedAt: appTime
                   }
                 }
               }
@@ -534,14 +539,14 @@ function ClientContent() {
                       },
                       consent: {
                         accepted: true,
-                        acceptedAt: new Date().toISOString()
+                        acceptedAt: appTime
                       },
                       signature: {
                         name: [user.firstName, user.lastName].filter(Boolean).join(' '),
-                        signedAt: new Date().toISOString()
+                        signedAt: appTime
                       },
                       agreement: {
-                        agreementDate: new Date().toISOString(),
+                        agreementDate: appTime,
                         investor: {
                           accountType: investment.accountType,
                           firstName: user.firstName,
@@ -580,7 +585,7 @@ function ClientContent() {
                       }
                     },
                     status: 'pending',
-                    submittedAt: new Date().toISOString()
+                    submittedAt: appTime
                   }
                 })
               })

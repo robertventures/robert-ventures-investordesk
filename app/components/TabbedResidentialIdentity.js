@@ -159,9 +159,21 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
           const currentInv = investments.find(inv => inv.id === localStorage.getItem('currentInvestmentId'))
           if (!accountTypeProp && currentInv?.accountType) setAccountType(currentInv.accountType)
           
-          // Check if user has any pending or active investments (for read-only enforcement)
+          // Check if user has any pending or active investments
+          // This will lock identity fields (name, DOB, SSN) but allow updating contact info (phone, address)
           const hasPendingOrActive = investments.some(inv => inv.status === 'pending' || inv.status === 'active')
           setHasActiveInvestments(hasPendingOrActive)
+
+          // SSN/TIN: If already encrypted (saved), show masked value so validation passes
+          // Show as "•••-••-••••" to indicate it's on file
+          const savedSsn = u.ssn || u.taxId || ''
+          const isEncryptedSsn = savedSsn.includes(':') || savedSsn.length > 20
+          
+          const savedJointSsn = u.jointHolder?.ssn || ''
+          const isEncryptedJointSsn = savedJointSsn.includes(':') || savedJointSsn.length > 20
+          
+          const savedAuthRepSsn = u.authorizedRepresentative?.ssn || ''
+          const isEncryptedAuthRepSsn = savedAuthRepSsn.includes(':') || savedAuthRepSsn.length > 20
 
           setForm(prev => ({
             ...prev,
@@ -176,7 +188,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
             zip: u.address?.zip || '',
             country: u.address?.country || 'United States',
             dob: u.dob || '',
-            ssn: (u.ssn || u.taxId || ''),
+            ssn: isEncryptedSsn ? '•••-••-••••' : savedSsn,
             jointHoldingType: u.jointHoldingType || '',
             jointHolder: {
               firstName: u.jointHolder?.firstName || '',
@@ -188,7 +200,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
               zip: u.jointHolder?.address?.zip || '',
               country: u.jointHolder?.address?.country || 'United States',
               dob: u.jointHolder?.dob || '',
-              ssn: u.jointHolder?.ssn || '',
+              ssn: isEncryptedJointSsn ? '•••-••-••••' : savedJointSsn,
               email: u.jointHolder?.email || '',
               phone: formatPhoneFromDB(u.jointHolder?.phone || '')
             },
@@ -202,7 +214,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
               zip: u.authorizedRepresentative?.address?.zip || '',
               country: u.authorizedRepresentative?.address?.country || 'United States',
               dob: u.authorizedRepresentative?.dob || '',
-              ssn: u.authorizedRepresentative?.ssn || ''
+              ssn: isEncryptedAuthRepSsn ? '•••-••-••••' : savedAuthRepSsn
             }
           }))
         }
@@ -312,8 +324,9 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
   } else if (!isAdultDob(form.dob)) {
     newErrors.dob = `Enter a valid date (YYYY-MM-DD). Min ${MIN_DOB}. Must be 18+.`
   }
+  // Skip SSN validation if it's masked (already on file)
   if (!form.ssn.trim()) newErrors.ssn = 'Required'
-  else if (!isCompleteSsn(form.ssn)) newErrors.ssn = 'Enter full SSN'
+  else if (form.ssn !== '•••-••-••••' && !isCompleteSsn(form.ssn)) newErrors.ssn = 'Enter full SSN'
     
     // Validate joint holder fields if account type is joint
     if (accountType === 'joint') {
@@ -327,8 +340,9 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
       if (!form.jointHolder.zip.trim()) newErrors['jointHolder.zip'] = 'Required'
       else if (form.jointHolder.zip.length !== 5) newErrors['jointHolder.zip'] = 'Enter 5 digits'
       if (!form.jointHolder.dob || !isAdultDob(form.jointHolder.dob)) newErrors['jointHolder.dob'] = `Enter a valid date (YYYY-MM-DD). Min ${MIN_DOB}. Must be 18+.`
+      // Skip joint holder SSN validation if it's masked (already on file)
       if (!form.jointHolder.ssn.trim()) newErrors['jointHolder.ssn'] = 'Required'
-      else if (!isCompleteSsn(form.jointHolder.ssn)) newErrors['jointHolder.ssn'] = 'Enter full SSN'
+      else if (form.jointHolder.ssn !== '•••-••-••••' && !isCompleteSsn(form.jointHolder.ssn)) newErrors['jointHolder.ssn'] = 'Enter full SSN'
       if (!/\S+@\S+\.\S+/.test(form.jointHolder.email)) newErrors['jointHolder.email'] = 'Invalid email'
       if (!form.jointHolder.phone.trim()) newErrors['jointHolder.phone'] = 'Required'
       else if (!isCompletePhone(form.jointHolder.phone)) newErrors['jointHolder.phone'] = 'Enter full 10-digit phone number'
@@ -344,8 +358,9 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
       if (!form.authorizedRep.zip.trim()) newErrors['authorizedRep.zip'] = 'Required'
       else if (form.authorizedRep.zip.length !== 5) newErrors['authorizedRep.zip'] = 'Enter 5 digits'
       if (!form.authorizedRep.dob || !isAdultDob(form.authorizedRep.dob)) newErrors['authorizedRep.dob'] = `Enter a valid date (YYYY-MM-DD). Min ${MIN_DOB}. Must be 18+.`
+      // Skip authorized rep SSN validation if it's masked (already on file)
       if (!form.authorizedRep.ssn.trim()) newErrors['authorizedRep.ssn'] = 'Required'
-      else if (!isCompleteSsn(form.authorizedRep.ssn)) newErrors['authorizedRep.ssn'] = 'Enter full SSN'
+      else if (form.authorizedRep.ssn !== '•••-••-••••' && !isCompleteSsn(form.authorizedRep.ssn)) newErrors['authorizedRep.ssn'] = 'Enter full SSN'
     }
     
     setErrors(newErrors)
@@ -355,11 +370,8 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
   const handleSave = async () => {
     if (!validate()) return
     
-    // SECURITY: Prevent editing KYC information if user has pending/active investments
-    if (hasActiveInvestments) {
-      alert('Cannot modify investor information while you have pending or active investments. Please contact support if you need to update your information.')
-      return
-    }
+    // Note: Identity fields (name, DOB, SSN) are disabled when there are active investments
+    // Contact info (phone, address) can still be updated per investment
     
     setIsSaving(true)
     try {
@@ -384,6 +396,10 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
         country: form.jointHolder.country
       }
 
+      // Don't send masked SSN values - they're already on file
+      const isSsnMasked = form.ssn === '•••-••-••••'
+      const isAuthRepSsnMasked = form.authorizedRep.ssn === '•••-••-••••'
+      
       const userData = {
         ...(accountType !== 'entity' ? {
           firstName: form.firstName.trim(),
@@ -393,7 +409,8 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
         ...(accountType === 'entity' ? { entity: {
           name: form.entityName,
           registrationDate: form.dob,
-          taxId: form.ssn,
+          // Only send taxId if it's not masked (already on file)
+          ...(isSsnMasked ? {} : { taxId: form.ssn }),
           address: {
             street1: form.street1,
             street2: form.street2,
@@ -405,7 +422,8 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
         }} : {}),
         ...(accountType !== 'entity' ? {
           dob: form.dob,
-          ssn: form.ssn,
+          // Only send ssn if it's not masked (already on file)
+          ...(isSsnMasked ? {} : { ssn: form.ssn }),
           address: {
             street1: form.street1,
             street2: form.street2,
@@ -419,7 +437,8 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
           firstName: form.authorizedRep.firstName.trim(),
           lastName: form.authorizedRep.lastName.trim(),
           dob: form.authorizedRep.dob,
-          ssn: form.authorizedRep.ssn,
+          // Only send ssn if it's not masked (already on file)
+          ...(isAuthRepSsnMasked ? {} : { ssn: form.authorizedRep.ssn }),
           address: {
             street1: form.authorizedRep.street1,
             street2: form.authorizedRep.street2,
@@ -433,13 +452,15 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
 
       // Add joint holder data if account type is joint
       if (accountType === 'joint') {
+        const isJointSsnMasked = form.jointHolder.ssn === '•••-••-••••'
         userData.jointHoldingType = form.jointHoldingType
         userData.jointHolder = {
           firstName: form.jointHolder.firstName.trim(),
           lastName: form.jointHolder.lastName.trim(),
           address: jointAddress,
           dob: form.jointHolder.dob,
-          ssn: form.jointHolder.ssn,
+          // Only send ssn if it's not masked (already on file)
+          ...(isJointSsnMasked ? {} : { ssn: form.jointHolder.ssn }),
           email: form.jointHolder.email,
           phone: normalizePhoneForDB(form.jointHolder.phone)
         }
@@ -585,7 +606,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
           fontSize: '14px',
           lineHeight: '1.5'
         }}>
-          <strong>⚠️ Information Locked:</strong> Your investor information cannot be modified while you have pending or active investments. If you need to update your information, please contact support.
+          <strong>⚠️ Identity Information Locked:</strong> Your name, date of birth, and SSN/TIN cannot be modified while you have pending or active investments. You can still update your phone number and address for this investment.
         </div>
       )}
       
@@ -621,12 +642,12 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
           <div className={styles.grid}>
             <div className={styles.field}> 
               <label className={styles.label}>First Name</label>
-              <input className={`${styles.input} ${errors['authorizedRep.firstName'] ? styles.inputError : ''}`} name="authorizedRep.firstName" value={form.authorizedRep.firstName} onChange={handleChange} placeholder="Enter first name" />
+              <input className={`${styles.input} ${errors['authorizedRep.firstName'] ? styles.inputError : ''}`} name="authorizedRep.firstName" value={form.authorizedRep.firstName} onChange={handleChange} placeholder="Enter first name" disabled={hasActiveInvestments} />
               {errors['authorizedRep.firstName'] && <span className={styles.error}>{errors['authorizedRep.firstName']}</span>}
             </div>
             <div className={styles.field}> 
               <label className={styles.label}>Last Name</label>
-              <input className={`${styles.input} ${errors['authorizedRep.lastName'] ? styles.inputError : ''}`} name="authorizedRep.lastName" value={form.authorizedRep.lastName} onChange={handleChange} placeholder="Enter last name" />
+              <input className={`${styles.input} ${errors['authorizedRep.lastName'] ? styles.inputError : ''}`} name="authorizedRep.lastName" value={form.authorizedRep.lastName} onChange={handleChange} placeholder="Enter last name" disabled={hasActiveInvestments} />
               {errors['authorizedRep.lastName'] && <span className={styles.error}>{errors['authorizedRep.lastName']}</span>}
             </div>
             <div className={styles.field}> 
@@ -669,7 +690,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
             </div>
             <div className={styles.field}> 
               <label className={styles.label}>Date of Birth</label>
-              <input className={`${styles.input} ${errors['authorizedRep.dob'] ? styles.inputError : ''}`} type="date" name="authorizedRep.dob" value={form.authorizedRep.dob} onChange={handleChange} min={MIN_DOB} max={maxAdultDob} />
+              <input className={`${styles.input} ${errors['authorizedRep.dob'] ? styles.inputError : ''}`} type="date" name="authorizedRep.dob" value={form.authorizedRep.dob} onChange={handleChange} min={MIN_DOB} max={maxAdultDob} disabled={hasActiveInvestments} />
               {errors['authorizedRep.dob'] && <span className={styles.error}>{errors['authorizedRep.dob']}</span>}
             </div>
             <div className={styles.field}> 
@@ -677,7 +698,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
                 <label className={styles.label}>SSN</label>
                 <button type="button" className={styles.helpLink} onClick={() => setShowAuthorizedRepSsnHelp(v => !v)}>Why do we need this?</button>
               </div>
-              <input className={`${styles.input} ${errors['authorizedRep.ssn'] ? styles.inputError : ''}`} name="authorizedRep.ssn" value={form.authorizedRep.ssn} onChange={handleChange} placeholder="123-45-6789" inputMode="numeric" />
+              <input className={`${styles.input} ${errors['authorizedRep.ssn'] ? styles.inputError : ''}`} name="authorizedRep.ssn" value={form.authorizedRep.ssn} onChange={handleChange} placeholder="123-45-6789" inputMode="numeric" disabled={hasActiveInvestments} readOnly={hasActiveInvestments} />
               {errors['authorizedRep.ssn'] && <span className={styles.error}>{errors['authorizedRep.ssn']}</span>}
               {showAuthorizedRepSsnHelp && (
                 <div className={styles.helpText}>
@@ -698,7 +719,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
           <>
             <div className={styles.field}> 
               <label className={styles.label}>Entity Name</label>
-              <input className={`${styles.input} ${errors.entityName ? styles.inputError : ''}`} name="entityName" value={form.entityName} onChange={handleChange} placeholder="Enter entity name" />
+              <input className={`${styles.input} ${errors.entityName ? styles.inputError : ''}`} name="entityName" value={form.entityName} onChange={handleChange} placeholder="Enter entity name" disabled={hasActiveInvestments} />
               {errors.entityName && <span className={styles.error}>{errors.entityName}</span>}
             </div>
             <div className={styles.field}> 
@@ -712,12 +733,12 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
           <>
             <div className={styles.field}> 
               <label className={styles.label}>First Name</label>
-              <input className={`${styles.input} ${errors.firstName ? styles.inputError : ''}`} name="firstName" value={form.firstName} onChange={handleChange} placeholder="Enter first name" />
+              <input className={`${styles.input} ${errors.firstName ? styles.inputError : ''}`} name="firstName" value={form.firstName} onChange={handleChange} placeholder="Enter first name" disabled={hasActiveInvestments} />
               {errors.firstName && <span className={styles.error}>{errors.firstName}</span>}
             </div>
             <div className={styles.field}> 
               <label className={styles.label}>Last Name</label>
-              <input className={`${styles.input} ${errors.lastName ? styles.inputError : ''}`} name="lastName" value={form.lastName} onChange={handleChange} placeholder="Enter last name" />
+              <input className={`${styles.input} ${errors.lastName ? styles.inputError : ''}`} name="lastName" value={form.lastName} onChange={handleChange} placeholder="Enter last name" disabled={hasActiveInvestments} />
               {errors.lastName && <span className={styles.error}>{errors.lastName}</span>}
             </div>
             <div className={styles.field}> 
@@ -767,7 +788,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
         </div>
         <div className={styles.field}> 
           <label className={styles.label}>{dateLabel}</label>
-          <input className={`${styles.input} ${errors.dob ? styles.inputError : ''}`} type="date" name="dob" value={form.dob} onChange={handleChange} min={MIN_DOB} max={accountType === 'entity' ? maxToday : maxAdultDob} />
+          <input className={`${styles.input} ${errors.dob ? styles.inputError : ''}`} type="date" name="dob" value={form.dob} onChange={handleChange} min={MIN_DOB} max={accountType === 'entity' ? maxToday : maxAdultDob} disabled={hasActiveInvestments} />
           {errors.dob && <span className={styles.error}>{errors.dob}</span>}
         </div>
         <div className={styles.field}> 
@@ -777,7 +798,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
               Why do we need this?
             </button>
           </div>
-          <input className={`${styles.input} ${errors.ssn ? styles.inputError : ''}`} name="ssn" value={form.ssn} onChange={handleChange} placeholder={accountType === 'entity' ? 'Enter EIN or TIN' : '123-45-6789'} inputMode="numeric" />
+          <input className={`${styles.input} ${errors.ssn ? styles.inputError : ''}`} name="ssn" value={form.ssn} onChange={handleChange} placeholder={accountType === 'entity' ? 'Enter EIN or TIN' : '123-45-6789'} inputMode="numeric" disabled={hasActiveInvestments} readOnly={hasActiveInvestments} />
           {errors.ssn && <span className={styles.error}>{errors.ssn}</span>}
           {showSsnHelp && (
             <div className={styles.helpText}>
@@ -800,12 +821,12 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
           <div className={styles.grid}>
             <div className={styles.field}> 
               <label className={styles.label}>First Name</label>
-              <input className={`${styles.input} ${errors['jointHolder.firstName'] ? styles.inputError : ''}`} name="jointHolder.firstName" value={form.jointHolder.firstName} onChange={handleChange} placeholder="Enter first name" />
+              <input className={`${styles.input} ${errors['jointHolder.firstName'] ? styles.inputError : ''}`} name="jointHolder.firstName" value={form.jointHolder.firstName} onChange={handleChange} placeholder="Enter first name" disabled={hasActiveInvestments} />
               {errors['jointHolder.firstName'] && <span className={styles.error}>{errors['jointHolder.firstName']}</span>}
             </div>
             <div className={styles.field}> 
               <label className={styles.label}>Last Name</label>
-              <input className={`${styles.input} ${errors['jointHolder.lastName'] ? styles.inputError : ''}`} name="jointHolder.lastName" value={form.jointHolder.lastName} onChange={handleChange} placeholder="Enter last name" />
+              <input className={`${styles.input} ${errors['jointHolder.lastName'] ? styles.inputError : ''}`} name="jointHolder.lastName" value={form.jointHolder.lastName} onChange={handleChange} placeholder="Enter last name" disabled={hasActiveInvestments} />
               {errors['jointHolder.lastName'] && <span className={styles.error}>{errors['jointHolder.lastName']}</span>}
             </div>
             <div className={styles.field}> 
@@ -820,7 +841,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
             </div>
             <div className={styles.field}> 
               <label className={styles.label}>Date of Birth</label>
-              <input className={`${styles.input} ${errors['jointHolder.dob'] ? styles.inputError : ''}`} type="date" name="jointHolder.dob" value={form.jointHolder.dob} onChange={handleChange} min={MIN_DOB} max={maxAdultDob} />
+              <input className={`${styles.input} ${errors['jointHolder.dob'] ? styles.inputError : ''}`} type="date" name="jointHolder.dob" value={form.jointHolder.dob} onChange={handleChange} min={MIN_DOB} max={maxAdultDob} disabled={hasActiveInvestments} />
               {errors['jointHolder.dob'] && <span className={styles.error}>{errors['jointHolder.dob']}</span>}
             </div>
             <div className={styles.field}> 
@@ -828,7 +849,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
                 <label className={styles.label}>SSN</label>
                 <button type="button" className={styles.helpLink} onClick={() => setShowJointSsnHelp(v => !v)}>Why do we need this?</button>
               </div>
-              <input className={`${styles.input} ${errors['jointHolder.ssn'] ? styles.inputError : ''}`} name="jointHolder.ssn" value={form.jointHolder.ssn} onChange={handleChange} placeholder="123-45-6789" inputMode="numeric" />
+              <input className={`${styles.input} ${errors['jointHolder.ssn'] ? styles.inputError : ''}`} name="jointHolder.ssn" value={form.jointHolder.ssn} onChange={handleChange} placeholder="123-45-6789" inputMode="numeric" disabled={hasActiveInvestments} readOnly={hasActiveInvestments} />
               {errors['jointHolder.ssn'] && <span className={styles.error}>{errors['jointHolder.ssn']}</span>}
               {showJointSsnHelp && (
                 <div className={styles.helpText}>
@@ -897,8 +918,8 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
       )}
 
       <div className={styles.actions}>
-        <button className={styles.primaryButton} onClick={handleSave} disabled={isSaving || hasActiveInvestments}>
-          {isSaving ? 'Saving...' : hasActiveInvestments ? 'Information Locked' : 'Continue'}
+        <button className={styles.primaryButton} onClick={handleSave} disabled={isSaving}>
+          {isSaving ? 'Saving...' : 'Continue'}
         </button>
       </div>
     </div>

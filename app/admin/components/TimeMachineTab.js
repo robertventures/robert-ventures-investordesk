@@ -12,7 +12,8 @@ export default function TimeMachineTab({
   onDeleteAccounts,
   onSeedTestAccounts,
   isDeletingAccounts,
-  isSeedingAccounts
+  isSeedingAccounts,
+  onToggleAutoApprove
 }) {
   const [newAppTime, setNewAppTime] = useState(
     timeMachineData.appTime ? new Date(timeMachineData.appTime).toISOString().slice(0, 16) : ''
@@ -91,6 +92,10 @@ export default function TimeMachineTab({
           <span className={styles.statLabel}>Real Time</span>
           <span className={styles.statValue}>{timeMachineData.realTime ? formatEt(timeMachineData.realTime) : '-'}</span>
         </div>
+        <div className={timeMachineData.autoApproveDistributions ? styles.statChipActive : styles.statChip}>
+          <span className={styles.statLabel}>Auto-Approve</span>
+          <span className={styles.statValue}>{timeMachineData.autoApproveDistributions ? 'ON' : 'OFF'}</span>
+        </div>
       </div>
 
       <div className={styles.contentGrid}>
@@ -141,9 +146,33 @@ export default function TimeMachineTab({
           </div>
         </div>
 
-        {/* Right: Data Shortcuts */}
+        {/* Right: Data Shortcuts & Auto-Approve */}
         <div className={styles.cardBlock}>
-          <div className={styles.blockHeader}>Data Shortcuts</div>
+          <div className={styles.blockHeader}>Distribution Settings</div>
+          <div className={styles.blockBody}>
+            <p className={styles.helperText}>
+              Auto-approve newly generated monthly distributions for testing. Enable this before moving time forward.
+            </p>
+            <div className={styles.toggleContainer}>
+              <label className={styles.toggleLabel}>
+                <span className={styles.toggleText}>Auto-Approve Distributions</span>
+                <button
+                  className={`${styles.toggleButton} ${timeMachineData.autoApproveDistributions ? styles.toggleActive : ''}`}
+                  onClick={() => onToggleAutoApprove && onToggleAutoApprove(!timeMachineData.autoApproveDistributions)}
+                  disabled={isUpdating}
+                >
+                  <span className={styles.toggleSlider}></span>
+                </button>
+              </label>
+              {timeMachineData.autoApproveDistributions && (
+                <p className={styles.warningText}>
+                  ⚠️ New monthly distributions will be auto-approved
+                </p>
+              )}
+            </div>
+          </div>
+          
+          <div className={styles.blockHeader} style={{ marginTop: '24px' }}>Data Shortcuts</div>
           <div className={styles.blockBody}>
             <p className={styles.helperText}>Use these tools to quickly demo or reset your environment.</p>
             <div className={styles.quickActions}>

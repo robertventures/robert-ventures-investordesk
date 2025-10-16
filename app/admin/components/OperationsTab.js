@@ -21,7 +21,8 @@ export default function OperationsTab({
   isDeletingAccounts,
   isSeedingAccounts,
   onRefreshWithdrawals,
-  onImportComplete
+  onImportComplete,
+  onToggleAutoApprove
 }) {
   const [masterPassword, setMasterPassword] = useState(null)
   const [masterPasswordInfo, setMasterPasswordInfo] = useState(null)
@@ -186,6 +187,7 @@ export default function OperationsTab({
           onSeedTestAccounts={onSeedTestAccounts}
           isDeletingAccounts={isDeletingAccounts}
           isSeedingAccounts={isSeedingAccounts}
+          onToggleAutoApprove={onToggleAutoApprove}
         />
       </SectionCard>
 

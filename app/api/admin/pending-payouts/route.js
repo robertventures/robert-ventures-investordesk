@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getUsers, saveUsers } from '../../../../lib/database'
 import { requireAdmin, authErrorResponse } from '../../../../lib/authMiddleware'
+import { getCurrentAppTime } from '../../../../lib/appTime'
 
 // GET - List all pending payouts across all users
 export async function GET(request) {
@@ -11,6 +12,15 @@ export async function GET(request) {
       return authErrorResponse('Admin access required', 403)
     }
     const usersData = await getUsers()
+    
+    // Get current app time to filter out future-dated distributions
+    const currentAppTime = await getCurrentAppTime()
+    const currentAppTimeMs = new Date(currentAppTime).getTime()
+    
+    console.log('🕐 Pending Payouts - Current App Time:', currentAppTime)
+    console.log('🕐 Current App Time (ms):', currentAppTimeMs)
+    console.log('🕐 Current Date Object:', new Date(currentAppTime))
+    
     const pendingPayouts = []
 
     for (const user of usersData.users) {
@@ -27,6 +37,16 @@ export async function GET(request) {
           // Exclude compounding investments - they don't require manual approval
           // Compounding distributions are auto-approved and reinvested
           if (investment.paymentFrequency === 'compounding' || tx.paymentFrequency === 'compounding') return
+          
+          // CRITICAL: Only show distributions that are due (scheduled date <= current app time)
+          // This prevents future-dated distributions from showing when Time Machine is reset
+          const scheduledDateMs = new Date(tx.date || 0).getTime()
+          console.log(`📅 Checking transaction ${tx.id}: scheduled=${tx.date}, scheduledMs=${scheduledDateMs}, currentMs=${currentAppTimeMs}, isFuture=${scheduledDateMs > currentAppTimeMs}`)
+          if (scheduledDateMs > currentAppTimeMs) {
+            console.log(`  ❌ FILTERED OUT - Future date`)
+            return
+          }
+          console.log(`  ✅ INCLUDED - Date is due`)
 
           pendingPayouts.push({
             ...tx,

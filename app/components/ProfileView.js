@@ -34,6 +34,16 @@ export default function ProfileView() {
     return `(${withoutCountry.slice(0, 3)}) ${withoutCountry.slice(3, 6)}-${withoutCountry.slice(6, 10)}`
   }
 
+  // Mask SSN for display (show last 4 digits only)
+  const maskSSN = (ssn = '') => {
+    if (!ssn) return ''
+    const digits = ssn.replace(/\D/g, '')
+    if (digits.length === 9) {
+      return `***-**-${digits.slice(-4)}`
+    }
+    return '***-**-****'
+  }
+
   // Normalize phone number to E.164 format for database storage (+1XXXXXXXXXX)
   const normalizePhoneForDB = (value = '') => {
     const digits = value.replace(/\D/g, '')
@@ -71,6 +81,9 @@ export default function ProfileView() {
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' })
   const [isChangingPassword, setIsChangingPassword] = useState(false)
   const [passwordChangeSuccess, setPasswordChangeSuccess] = useState(false)
+  const [showSSN, setShowSSN] = useState(false)
+  const [showJointSSN, setShowJointSSN] = useState(false)
+  const [showRepSSN, setShowRepSSN] = useState(false)
 
   useEffect(() => {
     const loadUser = async () => {
@@ -617,7 +630,25 @@ export default function ProfileView() {
               </div>
               <div className={styles.field}>
                 <label className={styles.label}>Social Security Number</label>
-                <input className={styles.input} name="ssn" value={formData.ssn} onChange={handleChange} placeholder="123-45-6789" />
+                <div className={styles.inputWrapper}>
+                  <input 
+                    className={`${styles.input} ${styles.inputWithToggle}`}
+                    type="text"
+                    name="ssn" 
+                    value={showSSN ? formData.ssn : maskSSN(formData.ssn)} 
+                    onChange={handleChange} 
+                    placeholder="123-45-6789"
+                    readOnly={!showSSN}
+                  />
+                  <button
+                    type="button"
+                    className={styles.toggleButton}
+                    onClick={() => setShowSSN(!showSSN)}
+                    aria-label={showSSN ? 'Hide SSN' : 'Show SSN'}
+                  >
+                    {showSSN ? 'Hide' : 'Show'}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -802,7 +833,24 @@ export default function ProfileView() {
                 </div>
                 <div className={styles.field}>
                   <label className={styles.label}>SSN</label>
-                  <input className={`${styles.input} ${errors.jointSsn ? styles.inputError : ''}`} name="ssn" value={formData.jointHolder?.ssn || ''} onChange={handleJointHolderChange} />
+                  <div className={styles.inputWrapper}>
+                    <input 
+                      className={`${styles.input} ${styles.inputWithToggle} ${errors.jointSsn ? styles.inputError : ''}`}
+                      type="text"
+                      name="ssn" 
+                      value={showJointSSN ? (formData.jointHolder?.ssn || '') : maskSSN(formData.jointHolder?.ssn || '')} 
+                      onChange={handleJointHolderChange}
+                      readOnly={!showJointSSN}
+                    />
+                    <button
+                      type="button"
+                      className={styles.toggleButton}
+                      onClick={() => setShowJointSSN(!showJointSSN)}
+                      aria-label={showJointSSN ? 'Hide SSN' : 'Show SSN'}
+                    >
+                      {showJointSSN ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -949,13 +997,24 @@ export default function ProfileView() {
                 </div>
                 <div className={styles.field}>
                   <label className={styles.label}>SSN</label>
-                  <input
-                    className={`${styles.input} ${errors.repSsn ? styles.inputError : ''}`}
-                    type="text"
-                    name="ssn"
-                    value={formData.authorizedRepresentative?.ssn || ''}
-                    onChange={handleAuthorizedRepChange}
-                  />
+                  <div className={styles.inputWrapper}>
+                    <input
+                      className={`${styles.input} ${styles.inputWithToggle} ${errors.repSsn ? styles.inputError : ''}`}
+                      type="text"
+                      name="ssn"
+                      value={showRepSSN ? (formData.authorizedRepresentative?.ssn || '') : maskSSN(formData.authorizedRepresentative?.ssn || '')}
+                      onChange={handleAuthorizedRepChange}
+                      readOnly={!showRepSSN}
+                    />
+                    <button
+                      type="button"
+                      className={styles.toggleButton}
+                      onClick={() => setShowRepSSN(!showRepSSN)}
+                      aria-label={showRepSSN ? 'Hide SSN' : 'Show SSN'}
+                    >
+                      {showRepSSN ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
                   {errors.repSsn && <span className={styles.errorText}>{errors.repSsn}</span>}
                 </div>
               </div>
