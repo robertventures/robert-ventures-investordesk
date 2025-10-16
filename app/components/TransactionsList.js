@@ -78,7 +78,9 @@ export default function TransactionsList({ limit = null, showViewAll = true, fil
             }))
           })
           const combined = [...baseEvents, ...investmentEvents]
-          const sorted = combined.slice().sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))
+          // Sort ascending (oldest first) so activity tells a chronological story:
+          // Account Created → Investment Created → Confirmed → Distributions
+          const sorted = combined.slice().sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0))
           setEvents(sorted)
         }
       } finally {
