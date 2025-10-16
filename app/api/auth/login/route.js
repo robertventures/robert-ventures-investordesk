@@ -5,6 +5,8 @@ import { verifyMasterPassword } from '../../../../lib/masterPassword.js'
 import { rateLimit, RATE_LIMIT_CONFIGS } from '../../../../lib/rateLimit.js'
 import { logAuditEvent } from '../../../../lib/supabaseDatabase.js'
 import { validateEmail, ValidationError } from '../../../../lib/validation.js'
+import { signToken, signRefreshToken } from '../../../../lib/auth.js'
+import { setAuthCookies } from '../../../../lib/authMiddleware.js'
 
 export async function POST(request) {
   try {
@@ -69,21 +71,17 @@ export async function POST(request) {
 
       console.log('🔐 SECURITY ALERT: Admin logged in as user using master password:', user.email)
 
-      // Create Supabase session for this user
-      const { data: sessionData, error: sessionError } = await supabase.auth.admin.generateLink({
-        type: 'magiclink',
-        email: user.email
-      })
-
-      if (sessionError || !sessionData) {
-        console.error('Failed to create master password session:', sessionError)
-        return NextResponse.json(
-          { success: false, error: 'Failed to create session' },
-          { status: 500 }
-        )
+      // Generate JWT tokens for this user (convert snake_case to camelCase)
+      const tokenUser = {
+        id: user.id,
+        email: user.email,
+        isAdmin: user.is_admin || false
       }
+      const accessToken = signToken(tokenUser)
+      const refreshToken = signRefreshToken(tokenUser)
 
-      return NextResponse.json({
+      // Create response
+      const response = NextResponse.json({
         success: true,
         user: {
           id: user.id,
@@ -92,11 +90,13 @@ export async function POST(request) {
           lastName: user.last_name,
           isAdmin: user.is_admin || false,
           isVerified: user.is_verified || false
-        },
-        session: {
-          access_token: sessionData.properties.action_link.split('token=')[1] || null
         }
       })
+
+      // Set HTTP-only cookies
+      setAuthCookies(response, accessToken, refreshToken)
+
+      return response
     }
 
     // Regular password login with Supabase Auth
@@ -122,8 +122,17 @@ export async function POST(request) {
       )
     }
 
-    // Return user data with session
-    return NextResponse.json({
+    // Generate JWT tokens for this user (convert snake_case to camelCase)
+    const tokenUser = {
+      id: user.id,
+      email: user.email,
+      isAdmin: user.is_admin || false
+    }
+    const accessToken = signToken(tokenUser)
+    const refreshToken = signRefreshToken(tokenUser)
+
+    // Create response
+    const response = NextResponse.json({
       success: true,
       user: {
         id: user.id,
@@ -132,12 +141,13 @@ export async function POST(request) {
         lastName: user.last_name,
         isAdmin: user.is_admin || false,
         isVerified: user.is_verified || false
-      },
-      session: {
-        access_token: authData.session.access_token,
-        refresh_token: authData.session.refresh_token
       }
     })
+
+    // Set HTTP-only cookies
+    setAuthCookies(response, accessToken, refreshToken)
+
+    return response
   } catch (error) {
     console.error('Error in POST /api/auth/login:', error)
     return NextResponse.json(
