@@ -623,10 +623,11 @@ function ClientContent() {
                 // Don't block redirect for banking update failure since investment was submitted successfully
               }
               
-              // Add a small delay to help with Netlify Blobs eventual consistency
+              // Add delay to help with Netlify Blobs eventual consistency
               // This ensures the data has time to propagate before the dashboard reads it
+              // Using 2 seconds to match backend save delay
               console.log('Waiting for data propagation before redirect...')
-              await new Promise(resolve => setTimeout(resolve, 1000))
+              await new Promise(resolve => setTimeout(resolve, 2000))
               
               console.log('Redirecting to dashboard...')
               window.location.href = '/dashboard'
