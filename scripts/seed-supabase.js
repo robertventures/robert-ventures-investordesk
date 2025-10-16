@@ -14,10 +14,10 @@ import { hashPassword } from '../lib/auth.js'
 import { encrypt } from '../lib/encryption.js'
 
 const ADMIN_EMAIL = 'admin@rv.com'
-const ADMIN_PASSWORD = 'admin123'
+const ADMIN_PASSWORD = 'Admin123!'
 
 const TEST_EMAIL = 'joe@test.com'
-const TEST_PASSWORD = 'test123'
+const TEST_PASSWORD = 'Test123!'
 
 async function seedDatabase() {
   console.log('🌱 Starting Supabase database seeding...\n')
