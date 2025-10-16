@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '../../../../lib/supabaseClient.js'
+import { clearAuthCookies } from '../../../../lib/authMiddleware.js'
 
 export async function POST(request) {
   try {
@@ -14,10 +15,16 @@ export async function POST(request) {
       await supabase.auth.admin.signOut(token)
     }
     
-    return NextResponse.json({
+    // Create response
+    const response = NextResponse.json({
       success: true,
       message: 'Logged out successfully'
     })
+
+    // Clear JWT authentication cookies
+    clearAuthCookies(response)
+    
+    return response
   } catch (error) {
     console.error('Error in POST /api/auth/logout:', error)
     return NextResponse.json(
