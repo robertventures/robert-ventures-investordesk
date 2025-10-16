@@ -485,7 +485,7 @@ function ClientContent() {
               const paymentMethod = fundingMethod === 'bank-transfer' ? 'ach' : 'wire'
               
               // Update the draft investment to pending status with compliance and banking data
-              await fetch(`/api/users/${userId}`, {
+              const investmentUpdateRes = await fetch(`/api/users/${userId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -578,6 +578,12 @@ function ClientContent() {
                   }
                 })
               })
+
+              const investmentUpdateData = await investmentUpdateRes.json()
+              if (!investmentUpdateData.success) {
+                alert(`Failed to submit investment: ${investmentUpdateData.error || 'Unknown error'}`)
+                return
+              }
               
               // Store banking details and bank accounts on user account
               const nextBankAccounts = (() => {
@@ -586,7 +592,7 @@ function ClientContent() {
                 return [bankToUse, ...others]
               })()
 
-              await fetch(`/api/users/${userId}`, {
+              const bankingUpdateRes = await fetch(`/api/users/${userId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -599,10 +605,21 @@ function ClientContent() {
                   ...(bankToUse ? { bankAccounts: nextBankAccounts } : {})
                 })
               })
+
+              const bankingUpdateData = await bankingUpdateRes.json()
+              if (!bankingUpdateData.success) {
+                console.warn('Banking details update failed:', bankingUpdateData.error)
+                // Don't block redirect for banking update failure since investment was submitted successfully
+              }
+              
+              // Add a small delay to help with Netlify Blobs eventual consistency
+              // This ensures the data has time to propagate before the dashboard reads it
+              await new Promise(resolve => setTimeout(resolve, 1000))
               
               window.location.href = '/dashboard'
             } catch (e) {
               console.error('Failed to save finalization data', e)
+              alert('An error occurred while submitting your investment. Please try again. If the problem persists, contact support.')
             } finally {
               setIsSaving(false)
             }
