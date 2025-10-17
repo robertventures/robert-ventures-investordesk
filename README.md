@@ -116,10 +116,23 @@ Navigate to [http://localhost:3000](http://localhost:3000) to see the applicatio
 - No local JSON files are used for user data
 - Changes are immediately visible across all sessions
 
-**For more details, see:**
-- [docs/DATA-SOURCES.md](docs/DATA-SOURCES.md) - Complete data architecture explanation
-- [docs/BACKEND-GUIDE.md](docs/BACKEND-GUIDE.md) - Database schema and API details
-- [docs/USER-DELETION-FIX.md](docs/USER-DELETION-FIX.md) - User deletion troubleshooting
+**For complete technical documentation:**
+- [docs/BACKEND-GUIDE.md](docs/BACKEND-GUIDE.md) - Complete backend implementation guide
+  - Database schema and API details
+  - Supabase architecture and data storage
+  - Auth + Users table explanation
+  - User deletion and syncing
+  - Troubleshooting and verification
+
+### Syncing Auth Users
+
+If you have users in Supabase Auth but they don't appear in the admin panel:
+
+```bash
+npm run sync-auth-users
+```
+
+This creates database records for auth users that are missing from the `users` table. See the "Supabase Architecture" section in BACKEND-GUIDE.md for details.
 
 ## Project Structure
 

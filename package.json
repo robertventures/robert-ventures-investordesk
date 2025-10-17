@@ -10,7 +10,8 @@
     "lint": "next lint",
     "seed-test-accounts": "node scripts/seed-test-accounts.js",
     "seed-supabase": "node --env-file=.env.local scripts/seed-supabase.js",
-    "verify-data": "node --env-file=.env.local scripts/verify-data-sources.js"
+    "verify-data": "node --env-file=.env.local scripts/verify-data-sources.js",
+    "sync-auth-users": "node --env-file=.env.local scripts/sync-auth-to-users.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",

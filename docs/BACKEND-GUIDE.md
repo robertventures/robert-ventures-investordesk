@@ -2614,6 +2614,307 @@ def test_bulk_csv_import():
 
 ---
 
+## Supabase Architecture (Reference Implementation)
+
+### Overview
+
+The reference Next.js implementation uses **Supabase** for all data storage, authentication, and file storage. This section documents the architecture for teams implementing backends in other technologies.
+
+### Why Supabase Auth + Users Table?
+
+**Two-System Approach (Recommended):**
+- **Supabase Auth:** Handles authentication, password management, sessions
+- **Users Table:** Stores business data, relationships, custom fields
+
+**Why Not Auth-Only?**
+
+| Feature | Auth Only | Auth + Users Table |
+|---------|-----------|-------------------|
+| Authentication | ✅ Yes | ✅ Yes |
+| Profile storage | ⚠️ Limited (1KB) | ✅ Unlimited |
+| Complex queries | ❌ No SQL joins | ✅ Full SQL |
+| Relationships | ❌ Difficult | ✅ Foreign keys |
+| Custom IDs | ❌ UUIDs only | ✅ USR-1001 format |
+| Encrypted fields | ❌ Not secure | ✅ SSN encryption |
+| Performance | ⚠️ Multiple calls | ✅ Single query |
+
+**Real-World Requirements:**
+```python
+# Need to query: "All users with investments > $10k in California"
+# Auth-only: Impossible (can't join, can't filter by state)
+# With users table: Simple SQL query
+
+SELECT u.*, i.* 
+FROM users u
+JOIN investments i ON i.user_id = u.id
+WHERE u.address->>'state' = 'California'
+  AND i.amount > 10000
+```
+
+**Industry Standard:**
+- Stripe: Auth + Customer records
+- Firebase: Auth + Firestore documents  
+- Auth0: Auth + Your database
+- **Supabase recommendation:** Auth + users table with foreign key
+
+### Data Storage Architecture
+
+**Database Tables:**
+```sql
+-- Core tables
+users (id, auth_id, email, first_name, ...)
+investments (id, user_id, amount, status, ...)
+transactions (id, investment_id, type, amount, ...)
+activity (id, user_id, type, date, ...)
+withdrawals (id, user_id, investment_id, amount, ...)
+bank_accounts (id, user_id, account_number, ...)
+app_settings (key, value, updated_at)
+audit_log (id, event_type, actor_id, timestamp, ...)
+```
+
+**Storage Buckets:**
+- `documents`: User documents (tax forms, statements, etc.)
+- File naming: `{type}/{year}/{userId}-{timestamp}.pdf`
+
+**Key Principles:**
+1. **Auth provides identity** - UUID-based auth_id
+2. **Database stores business data** - Custom IDs (USR-1001)
+3. **Foreign keys link systems** - users.auth_id → auth.users.id
+4. **Row Level Security (RLS)** - Users see only their own data
+
+### Syncing Auth and Database
+
+**Problem:** Users may exist in Auth but not in database (or vice versa)
+
+**When This Happens:**
+1. Manual user creation in Supabase dashboard
+2. Failed database insert during signup
+3. Migration from external platform
+4. Data import operations
+
+**Solution: Sync Script**
+```bash
+npm run sync-auth-users
+```
+
+**What It Does:**
+1. Fetches all users from Supabase Auth
+2. Fetches all users from database
+3. Identifies mismatches
+4. Creates missing database records
+5. Preserves email verification status
+
+**Preventing Future Issues:**
+```python
+# Always use proper user creation flow
+def create_user(email, password, profile_data):
+    # 1. Create auth user
+    auth_result = supabase.auth.sign_up({
+        'email': email,
+        'password': password
+    })
+    
+    # 2. Create database record
+    try:
+        user_result = supabase.from('users').insert({
+            'id': generate_user_id(),
+            'auth_id': auth_result.user.id,  # Link to auth
+            'email': email,
+            **profile_data
+        })
+    except Exception as e:
+        # Rollback: delete auth user if database fails
+        supabase.auth.admin.delete_user(auth_result.user.id)
+        raise e
+    
+    return user_result
+```
+
+### User Deletion (Auth + Database)
+
+**Problem:** Deleting users requires deleting from BOTH systems
+
+**API Endpoint:** `DELETE /api/admin/accounts`
+
+**Deletion Order (Critical):**
+```python
+# 1. Delete related data (foreign key constraints)
+delete_transactions()
+delete_activity()
+delete_withdrawals()
+delete_bank_accounts()
+delete_investments()
+
+# 2. Delete from users table
+delete_from_users_table()
+
+# 3. Delete from Supabase Auth
+supabase.auth.admin.delete_user(auth_id)
+```
+
+**Error Handling:**
+```python
+# Track auth deletion failures
+auth_failures = []
+
+for user in users_to_delete:
+    try:
+        result = supabase.auth.admin.delete_user(user.auth_id)
+        if result.error:
+            auth_failures.append({
+                'user_id': user.id,
+                'auth_id': user.auth_id,
+                'error': result.error.message
+            })
+    except Exception as e:
+        auth_failures.append({
+            'user_id': user.id, 
+            'error': str(e)
+        })
+
+if auth_failures:
+    return {
+        'success': False,
+        'partial': True,
+        'database_deleted': len(users_to_delete),
+        'auth_deleted': len(users_to_delete) - len(auth_failures),
+        'auth_failures': auth_failures
+    }
+```
+
+**Required Permission:**
+```bash
+# Service role key required (not anon key)
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+
+# Get from: Supabase Dashboard → Settings → API → service_role
+```
+
+### Local Development Files
+
+**Location:** `data/` directory
+
+**Files:**
+- `audit-log.json`: Security audit logs (dev only)
+- `master-password.json`: Temporary master passwords (dev only)
+- ~~`users.json`~~: **DELETED** - use Supabase
+
+**Production Migration:**
+Both audit logs and master passwords should migrate to Supabase tables:
+```sql
+-- Audit logs already exist
+audit_log (id, event_type, actor_id, timestamp, details, ...)
+
+-- Master passwords can use app_settings
+app_settings (key='master_password', value={...}, updated_at)
+```
+
+### Environment Configuration
+
+**Required Variables:**
+```bash
+# Supabase (Database & Auth)
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key  # Admin operations
+
+# JWT (Still used for cookies)
+JWT_SECRET=your-jwt-secret-32-bytes
+JWT_REFRESH_SECRET=your-refresh-secret-32-bytes
+
+# Email
+RESEND_API_KEY=your-resend-key
+EMAIL_FROM=noreply@yourdomain.com
+
+# App
+NEXT_PUBLIC_APP_URL=https://yourdomain.com
+```
+
+**Security Notes:**
+- ⚠️ NEVER expose `SUPABASE_SERVICE_ROLE_KEY` to frontend
+- ⚠️ Use anon key for client-side operations only
+- ⚠️ Service role key bypasses Row Level Security (RLS)
+
+### Verification & Troubleshooting
+
+**Verify Setup:**
+```bash
+npm run verify-data
+```
+
+**Checks:**
+- ✅ All environment variables set
+- ✅ Supabase connection working
+- ✅ Users readable from database
+- ✅ Auth admin methods available
+
+**Common Issues:**
+
+**Issue: "Users don't appear in admin panel"**
+```python
+# Check 1: Users in Supabase Auth?
+auth_users = supabase.auth.admin.list_users()
+print(f"Auth users: {len(auth_users)}")
+
+# Check 2: Users in database?
+db_users = supabase.from('users').select('id').execute()
+print(f"Database users: {len(db_users.data)}")
+
+# Solution: Run sync script
+# npm run sync-auth-users
+```
+
+**Issue: "Can't delete auth users"**
+```python
+# Check service role key is set
+assert os.getenv('SUPABASE_SERVICE_ROLE_KEY') is not None
+
+# Use service client (not anon client)
+from supabase import create_client
+supabase = create_client(url, service_role_key)  # Not anon_key
+
+# Now can delete
+supabase.auth.admin.delete_user(user_id)
+```
+
+**Issue: "Auth/database out of sync"**
+```python
+# Run sync script (one-time fix)
+npm run sync-auth-users
+
+# Prevent future issues: use proper user creation
+# See "Preventing Future Issues" section above
+```
+
+### Performance Considerations
+
+**Caching Strategy:**
+- Frontend: 30-second localStorage cache
+- Backend: Disabled (unreliable in serverless)
+- Future: Consider Redis for distributed cache
+
+**Query Optimization:**
+```python
+# Bad: N+1 queries
+for user in users:
+    investments = get_investments(user.id)
+    transactions = get_transactions(user.id)
+
+# Good: Batch fetch with joins
+users_with_data = supabase.from('users').select(`
+    *,
+    investments (*),
+    transactions (*)
+`).execute()
+```
+
+**RLS Performance:**
+- Use proper indexes on foreign keys
+- Test RLS policies don't cause slow queries
+- Monitor query performance in Supabase dashboard
+
+---
+
 ## Summary
 
 This guide provides:
