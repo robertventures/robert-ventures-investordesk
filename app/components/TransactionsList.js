@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo, memo } from 'react'
 import { useRouter } from 'next/navigation'
 import styles from './TransactionsList.module.css'
 
@@ -44,7 +44,7 @@ function eventMeta(ev) {
   }
 }
 
-export default function TransactionsList({ limit = null, showViewAll = true, filterInvestmentId = null, expandable = false }) {
+const TransactionsList = memo(function TransactionsList({ limit = null, showViewAll = true, filterInvestmentId = null, expandable = false }) {
   const router = useRouter()
   const [events, setEvents] = useState([])
   const [user, setUser] = useState(null)
@@ -58,8 +58,7 @@ export default function TransactionsList({ limit = null, showViewAll = true, fil
       const userId = localStorage.getItem('currentUserId')
       if (!userId) { setLoading(false); return }
       try {
-        // Ensure events are backfilled
-        await fetch('/api/migrate-transactions', { method: 'POST' })
+        // PERFORMANCE: Removed migration call - transactions are generated on admin time machine changes
         const res = await fetch(`/api/users/${userId}`)
         const data = await res.json()
         if (data.success && data.user) {
@@ -94,20 +93,26 @@ export default function TransactionsList({ limit = null, showViewAll = true, fil
 
   if (loading) return <div className={styles.empty}>Loading activity…</div>
   if (!user) return <div className={styles.empty}>No user found.</div>
-  const filtered = filterInvestmentId ? events.filter(ev => ev.investmentId === filterInvestmentId) : events
   
-  // Apply pagination if no limit is set (limit is used for "Recent Activity" widgets)
-  // When limit is set, we're showing a preview; when not set, show full paginated list
-  let visibleEvents
-  let totalPages = 1
-  if (limit) {
-    visibleEvents = filtered.slice(0, limit)
-  } else {
-    totalPages = Math.ceil(filtered.length / itemsPerPage)
-    const startIndex = (currentPage - 1) * itemsPerPage
-    const endIndex = startIndex + itemsPerPage
-    visibleEvents = filtered.slice(startIndex, endIndex)
-  }
+  // PERFORMANCE: Memoize expensive filtering and pagination calculations
+  const { filtered, visibleEvents, totalPages } = useMemo(() => {
+    const filtered = filterInvestmentId ? events.filter(ev => ev.investmentId === filterInvestmentId) : events
+    
+    // Apply pagination if no limit is set (limit is used for "Recent Activity" widgets)
+    // When limit is set, we're showing a preview; when not set, show full paginated list
+    let visibleEvents
+    let totalPages = 1
+    if (limit) {
+      visibleEvents = filtered.slice(0, limit)
+    } else {
+      totalPages = Math.ceil(filtered.length / itemsPerPage)
+      const startIndex = (currentPage - 1) * itemsPerPage
+      const endIndex = startIndex + itemsPerPage
+      visibleEvents = filtered.slice(startIndex, endIndex)
+    }
+    
+    return { filtered, visibleEvents, totalPages }
+  }, [events, filterInvestmentId, limit, currentPage, itemsPerPage])
 
   return (
     <div className={styles.listSection}>
@@ -204,5 +209,7 @@ export default function TransactionsList({ limit = null, showViewAll = true, fil
       )}
     </div>
   )
-}
+})
+
+export default TransactionsList
 

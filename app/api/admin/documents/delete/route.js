@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getUsers, updateUser, saveUsers } from '../../../../../lib/supabaseDatabase.js'
-import { deleteDocument } from '../../../../../lib/documentStorage'
+import { deleteDocument } from '../../../../../lib/supabaseStorage'
 import { requireAdmin, authErrorResponse } from '../../../../../lib/authMiddleware'
 
 /**
@@ -56,8 +56,10 @@ export async function POST(request) {
 
       const document = user.documents[docIndex]
 
-      // Delete from blob storage
-      await deleteDocument(document.blobKey)
+      // Delete from Supabase Storage
+      // Use storagePath if available (new), otherwise fallback to blobKey (legacy)
+      const storagePath = document.storagePath || document.blobKey
+      await deleteDocument(storagePath)
 
       // Remove from user record
       user.documents.splice(docIndex, 1)
@@ -85,8 +87,10 @@ export async function POST(request) {
 
         for (const doc of docs) {
           try {
-            // Delete from blob storage
-            await deleteDocument(doc.blobKey)
+            // Delete from Supabase Storage
+            // Use storagePath if available (new), otherwise fallback to blobKey (legacy)
+            const storagePath = doc.storagePath || doc.blobKey
+            await deleteDocument(storagePath)
 
             // Remove from user's documents
             user.documents = user.documents.filter(d => d.id !== doc.id)

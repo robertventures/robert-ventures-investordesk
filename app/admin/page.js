@@ -65,6 +65,10 @@ export default function AdminPage() {
     numInvestmentsMin: '',
     numInvestmentsMax: ''
   })
+  
+  // PERFORMANCE: Pagination for accounts view
+  const [accountsPage, setAccountsPage] = useState(1)
+  const accountsPerPage = 20
 
   // Keep tab in sync with URL
   useEffect(() => {
@@ -126,6 +130,9 @@ export default function AdminPage() {
   }, [nonAdminUsers])
 
   const filteredAccountUsers = useMemo(() => {
+    // Reset to page 1 when filters change
+    setAccountsPage(1)
+    
     let filtered = sortedAccountUsers
     
     // Apply search filter
@@ -188,6 +195,15 @@ export default function AdminPage() {
     
     return filtered
   }, [sortedAccountUsers, accountsSearch, accountFilters, timeMachineData.appTime])
+
+  // PERFORMANCE: Paginate accounts for better rendering performance
+  const paginatedAccountUsers = useMemo(() => {
+    const startIdx = (accountsPage - 1) * accountsPerPage
+    const endIdx = startIdx + accountsPerPage
+    return filteredAccountUsers.slice(startIdx, endIdx)
+  }, [filteredAccountUsers, accountsPage, accountsPerPage])
+  
+  const totalAccountPages = Math.ceil(filteredAccountUsers.length / accountsPerPage)
 
   // Helper function to check if user profile is complete for investment approval
   const isProfileComplete = (user) => {
@@ -743,8 +759,15 @@ export default function AdminPage() {
                   )}
                 </div>
               </div>
+              
+              {/* PERFORMANCE: Show results count and pagination info */}
+              <div style={{ padding: '12px 0', color: '#6b7280', fontSize: '14px' }}>
+                Showing {paginatedAccountUsers.length} of {filteredAccountUsers.length} accounts
+                {totalAccountPages > 1 && ` (Page ${accountsPage} of ${totalAccountPages})`}
+              </div>
+              
               <div className={styles.accountsGrid}>
-                {filteredAccountUsers.map(user => {
+                {paginatedAccountUsers.map(user => {
                   const activeInvestments = (user.investments || [])
                     .filter(inv => inv.status === 'active' || inv.status === 'withdrawal_notice')
                   
@@ -833,6 +856,56 @@ export default function AdminPage() {
                   )
                 })}
               </div>
+              
+              {/* PERFORMANCE: Pagination controls */}
+              {totalAccountPages > 1 && (
+                <div style={{ 
+                  display: 'flex', 
+                  justifyContent: 'center', 
+                  alignItems: 'center', 
+                  gap: '12px', 
+                  padding: '24px 0',
+                  marginTop: '24px'
+                }}>
+                  <button
+                    onClick={() => setAccountsPage(prev => Math.max(1, prev - 1))}
+                    disabled={accountsPage === 1}
+                    style={{
+                      padding: '8px 16px',
+                      backgroundColor: accountsPage === 1 ? '#f3f4f6' : '#3b82f6',
+                      color: accountsPage === 1 ? '#9ca3af' : '#ffffff',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: accountsPage === 1 ? 'not-allowed' : 'pointer',
+                      fontSize: '14px',
+                      fontWeight: '500'
+                    }}
+                  >
+                    ← Previous
+                  </button>
+                  
+                  <span style={{ fontSize: '14px', color: '#6b7280' }}>
+                    Page {accountsPage} of {totalAccountPages}
+                  </span>
+                  
+                  <button
+                    onClick={() => setAccountsPage(prev => Math.min(totalAccountPages, prev + 1))}
+                    disabled={accountsPage === totalAccountPages}
+                    style={{
+                      padding: '8px 16px',
+                      backgroundColor: accountsPage === totalAccountPages ? '#f3f4f6' : '#3b82f6',
+                      color: accountsPage === totalAccountPages ? '#9ca3af' : '#ffffff',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: accountsPage === totalAccountPages ? 'not-allowed' : 'pointer',
+                      fontSize: '14px',
+                      fontWeight: '500'
+                    }}
+                  >
+                    Next →
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

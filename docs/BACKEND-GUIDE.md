@@ -743,7 +743,7 @@ def query_audit_logs(filters=None):
 # Options:
 # 1. Dedicated file: data/audit-log.json
 # 2. Separate database table: audit_logs
-# 3. Netlify Blobs: store name "audit-logs"
+# 3. Cloud storage: S3, Google Cloud Storage, Azure Blob, or similar
 
 # Auto-rotation: Keep last 10,000 entries or 1 year
 # Archive older logs to cold storage for compliance
@@ -2706,7 +2706,7 @@ The document manager system allows admins to send documents to users via bulk up
 
 ### Storage Architecture
 
-#### Netlify Blobs
+#### Cloud Storage (Technology-Agnostic)
 
 **Store Name:** `documents` (separate from `users` store)
 
@@ -2714,7 +2714,7 @@ The document manager system allows admins to send documents to users via bulk up
 - Example: `documents/2025/USR-1001-1705320600000.pdf`
 - Timestamp prevents overwrites when uploading multiple documents
 
-**Storage Functions** (`lib/documentStorage.js`):
+**Storage Functions**:
 ```javascript
 uploadDocument(key, data, contentType)     // Upload PDF to blob storage
 getDocument(key)                           // Retrieve PDF from storage
@@ -2723,6 +2723,15 @@ listDocuments(prefix)                      // List all documents with prefix
 generateDocumentKey(type, year, userId, fileName)  // Generate storage key
 isPDF(data)                               // Validate PDF file
 ```
+
+**Reference Implementation:** Current production uses Supabase Storage via `lib/supabaseStorage.js`
+
+**Alternative Cloud Storage Services:**
+- **AWS S3**: Enterprise-grade object storage with global distribution
+- **Google Cloud Storage**: High availability and performance
+- **Azure Blob Storage**: Microsoft cloud integration
+- **Firebase Storage**: Real-time database integration
+- **Supabase Storage**: PostgreSQL-integrated storage with row-level security
 
 ### API Endpoints
 
@@ -3155,7 +3164,7 @@ Content-Disposition: attachment; filename="document.pdf"
 
 **NPM Packages:**
 - `jszip@^3.10.1` - ZIP file processing in Node.js
-- `@netlify/blobs` - Already in use for document storage
+- `@supabase/supabase-js` - Used for Supabase Storage (documents)
 - `resend` - Already in use for email notifications
 
 ### File Structure

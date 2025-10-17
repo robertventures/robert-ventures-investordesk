@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, memo } from 'react'
 import { useRouter } from 'next/navigation'
 import MetricCard from './MetricCard'
 import ActionCard from './ActionCard'
@@ -7,8 +7,9 @@ import styles from './DashboardTab.module.css'
 
 /**
  * Main dashboard tab showing overview metrics and recent activity
+ * PERFORMANCE: Memoized to prevent unnecessary re-renders
  */
-export default function DashboardTab({ 
+const DashboardTab = memo(function DashboardTab({ 
   metrics, 
   pendingInvestments, 
   pendingPayouts,
@@ -502,5 +503,7 @@ export default function DashboardTab({
       </div>
     </div>
   )
-}
+})
+
+export default DashboardTab
 

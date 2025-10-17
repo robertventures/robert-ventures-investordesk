@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getUsers } from '../../../../../../lib/supabaseDatabase.js'
-import { getDocument } from '../../../../../../lib/documentStorage'
+import { getDocument, downloadDocument } from '../../../../../../lib/supabaseStorage'
 
 /**
  * GET /api/users/[id]/documents/[docId]
@@ -50,8 +50,10 @@ export async function GET(request, { params }) {
       )
     }
 
-    // Retrieve document from blob storage
-    const result = await getDocument(document.blobKey)
+    // Retrieve document from Supabase Storage
+    // Use storagePath if available (new), otherwise fallback to blobKey (legacy)
+    const storagePath = document.storagePath || document.blobKey
+    const result = await downloadDocument(storagePath)
 
     if (!result.success) {
       return NextResponse.json(

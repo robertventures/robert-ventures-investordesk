@@ -26,25 +26,21 @@ export default function PortfolioSummary() {
     if (!userId) return
 
     try {
-      // Ensure transaction events (distributions/compounding) are generated
-      // Don't block on this - if it fails, still show user data
-      try {
-        await fetch('/api/migrate-transactions', { method: 'POST' })
-      } catch (migrationError) {
-        console.warn('Transaction migration failed, continuing anyway:', migrationError)
-      }
+      // PERFORMANCE FIX: Only run transaction migration when explicitly needed (not on every load)
+      // Migration will be triggered by:
+      // 1. Admin time machine changes
+      // 2. Manual admin action in Operations tab
+      // 3. Background job (if implemented)
       
-      // Get current app time for calculations
-      const timeRes = await fetch('/api/admin/time-machine')
+      // Get current app time for calculations (parallel with user data fetch)
+      const timePromise = fetch('/api/admin/time-machine')
+      const userPromise = fetch(`/api/users/${userId}${searchParams.get('from') === 'finalize' ? '?fresh=true' : ''}`)
+      
+      const [timeRes, res] = await Promise.all([timePromise, userPromise])
       const timeData = await timeRes.json()
       const currentAppTime = timeData.success ? timeData.appTime : new Date().toISOString()
       setAppTime(currentAppTime)
       
-      // Check if we're coming from investment finalization to request fresh data
-      const fromFinalize = searchParams.get('from') === 'finalize'
-      const freshParam = fromFinalize ? '?fresh=true' : ''
-      
-      const res = await fetch(`/api/users/${userId}${freshParam}`)
       const data = await res.json()
       if (data.success && data.user) {
         setUserData(data.user)

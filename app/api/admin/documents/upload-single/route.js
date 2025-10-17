@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getUsers, updateUser } from '../../../../../lib/supabaseDatabase.js'
-import { uploadDocument, generateDocumentKey, isPDF } from '../../../../../lib/documentStorage'
+import { uploadDocument, isPDF } from '../../../../../lib/supabaseStorage'
 import { sendDocumentNotification } from '../../../../../lib/emailService'
 import { generateTransactionId } from '../../../../../lib/idGenerator'
 import { requireAdmin, authErrorResponse } from '../../../../../lib/authMiddleware'
@@ -55,9 +55,18 @@ export async function POST(request) {
       )
     }
 
-    // Upload to blob storage
-    const blobKey = generateDocumentKey('documents', year, user.id, file.name)
-    const uploadResult = await uploadDocument(blobKey, arrayBuffer, 'application/pdf')
+    // Upload to Supabase Storage
+    const uploadResult = await uploadDocument(
+      user.id,
+      file.name,
+      arrayBuffer,
+      'application/pdf',
+      {
+        documentType: 'document',
+        uploadedBy: adminUser.id,
+        year: year
+      }
+    )
 
     if (!uploadResult.success) {
       return NextResponse.json(
@@ -66,8 +75,8 @@ export async function POST(request) {
       )
     }
 
-    // Update user record
-    const documentId = generateTransactionId('DOC', user.id, 'document')
+    // Update user record with document metadata
+    const documentId = uploadResult.id
     const newDocument = {
       id: documentId,
       type: 'document',
@@ -75,7 +84,7 @@ export async function POST(request) {
       year,
       uploadedAt: new Date().toISOString(),
       uploadedBy: adminUser.id,
-      blobKey
+      storagePath: uploadResult.path
     }
 
     const documents = user.documents || []
