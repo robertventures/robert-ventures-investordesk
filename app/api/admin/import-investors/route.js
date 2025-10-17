@@ -312,14 +312,14 @@ async function createInvestment(supabase, userId, investmentData, appTime) {
     // Create activity records
     const activities = [
       {
-        id: generateTransactionId('INV', investmentId, 'created'),
+        id: generateTransactionId('INV', investmentId, 'investment_created'),
         user_id: userId,
         type: 'investment_created',
         investment_id: investmentId,
         date: createdDate
       },
       {
-        id: generateTransactionId('INV', investmentId, 'confirmed'),
+        id: generateTransactionId('INV', investmentId, 'investment_confirmed'),
         user_id: userId,
         type: 'investment_confirmed',
         investment_id: investmentId,

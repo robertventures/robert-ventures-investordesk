@@ -264,7 +264,7 @@ export async function POST(request) {
         if (!inv || !inv.id) continue
         
         // 1. Check for investment_created event
-        const investmentCreatedEventId = generateTransactionId('INV', inv.id, 'created')
+        const investmentCreatedEventId = generateTransactionId('INV', inv.id, 'investment_created')
         const hasInvestmentCreatedEvent = user.activity.some(ev => ev.id === investmentCreatedEventId)
         const investmentCreatedDate = inv.submittedAt || inv.createdAt
         
@@ -283,7 +283,7 @@ export async function POST(request) {
         
         // 2. Check for investment_confirmed event (only for confirmed/active investments)
         if (inv.status !== 'draft' && inv.status !== 'pending' && inv.status !== 'rejected') {
-          const investmentConfirmedEventId = generateTransactionId('INV', inv.id, 'confirmed')
+          const investmentConfirmedEventId = generateTransactionId('INV', inv.id, 'investment_confirmed')
           const hasInvestmentConfirmedEvent = user.activity.some(ev => ev.id === investmentConfirmedEventId)
           const investmentConfirmedDate = inv.confirmedAt
           
@@ -449,7 +449,9 @@ export async function POST(request) {
         })
 
         // Distributions for monthly payout investments
+        console.log(`📊 Checking investment ${inv.id}: status=${inv.status}, payFreq=${payFreq}, confirmedAt=${inv.confirmedAt}`)
         if ((inv.status === 'active' || inv.status === 'withdrawal_notice') && payFreq === 'monthly' && inv.confirmedAt) {
+          console.log(`✅ Generating distributions for monthly investment ${inv.id}`)
           const confirmedDate = new Date(inv.confirmedAt)
           const accrualStartDate = addDaysUtc(toUtcStartOfDay(confirmedDate), 1)
           const annualRate = inv.lockupPeriod === '1-year' ? 0.08 : 0.10
@@ -557,6 +559,7 @@ export async function POST(request) {
         // 1. Distribution (earnings generated)
         // 2. Contribution (distribution reinvested back into the investment)
         if ((inv.status === 'active' || inv.status === 'withdrawal_notice') && payFreq === 'compounding' && inv.confirmedAt) {
+          console.log(`✅ Generating compounding transactions for investment ${inv.id}`)
           const confirmedDate = new Date(inv.confirmedAt)
           const accrualStartDate = addDaysUtc(toUtcStartOfDay(confirmedDate), 1)
           const annualRate = inv.lockupPeriod === '1-year' ? 0.08 : 0.10
@@ -571,6 +574,8 @@ export async function POST(request) {
             completedMonthEnds.push(monthEnd)
             cursor = addDaysUtc(monthEnd, 1)
           }
+          
+          console.log(`📅 Compounding Investment ${inv.id}: confirmedAt=${inv.confirmedAt}, accrualStart=${accrualStartDate.toISOString()}, now=${now.toISOString()}, completedMonths=${completedMonthEnds.length}`)
 
           if (completedMonthEnds.length > 0) {
             const lastCompletedMonthEnd = completedMonthEnds[completedMonthEnds.length - 1]
@@ -734,8 +739,10 @@ export async function POST(request) {
         if (!inv || !inv.id || !inv.transactions) continue
         for (const tx of inv.transactions) {
           // Convert camelCase to snake_case for database
+          // IMPORTANT: Only include core fields that exist in transactions table schema
           const dbTx = {
             id: tx.id,
+            user_id: user.id,
             investment_id: inv.id,
             type: tx.type,
             amount: tx.amount,
@@ -743,36 +750,13 @@ export async function POST(request) {
             date: tx.date
           }
           
-          // Add optional fields if they exist
-          if (tx.displayDate) dbTx.display_date = tx.displayDate
-          if (tx.monthIndex) dbTx.month_index = tx.monthIndex
-          if (tx.lockupPeriod) dbTx.lockup_period = tx.lockupPeriod
-          if (tx.paymentFrequency) dbTx.payment_frequency = tx.paymentFrequency
-          if (tx.payoutMethod) dbTx.payout_method = tx.payoutMethod
-          if (tx.payoutBankId) dbTx.payout_bank_id = tx.payoutBankId
-          if (tx.payoutBankNickname) dbTx.payout_bank_nickname = tx.payoutBankNickname
-          if (tx.principal !== undefined) dbTx.principal = tx.principal
-          if (tx.distributionTxId) dbTx.distribution_tx_id = tx.distributionTxId
-          if (tx.withdrawalId) dbTx.withdrawal_id = tx.withdrawalId
-          if (tx.payoutDueBy) dbTx.payout_due_by = tx.payoutDueBy
-          if (tx.confirmedAt) dbTx.confirmed_at = tx.confirmedAt
-          if (tx.approvedAt) dbTx.approved_at = tx.approvedAt
-          if (tx.rejectedAt) dbTx.rejected_at = tx.rejectedAt
-          if (tx.completedAt) dbTx.completed_at = tx.completedAt
-          if (tx.failedAt) dbTx.failed_at = tx.failedAt
-          if (tx.autoApproved !== undefined) dbTx.auto_approved = tx.autoApproved
-          if (tx.manuallyCompleted !== undefined) dbTx.manually_completed = tx.manuallyCompleted
-          if (tx.failureReason) dbTx.failure_reason = tx.failureReason
-          if (tx.retryCount !== undefined) dbTx.retry_count = tx.retryCount
-          if (tx.lastRetryAt) dbTx.last_retry_at = tx.lastRetryAt
-          if (tx.legacyReferenceId) dbTx.legacy_reference_id = tx.legacyReferenceId
-          
           transactionsToUpsert.push(dbTx)
         }
       }
     }
 
     // Batch upsert all transactions to Supabase
+    console.log(`💾 Attempting to upsert ${transactionsToUpsert.length} transactions to database`)
     if (transactionsToUpsert.length > 0) {
       const { error: transactionsError } = await supabase
         .from('transactions')
@@ -787,6 +771,8 @@ export async function POST(request) {
       }
       
       console.log(`✅ Successfully upserted ${transactionsToUpsert.length} transactions`)
+    } else {
+      console.log(`⚠️  No transactions to upsert!`)
     }
 
     // Batch insert all new activity events to Supabase
