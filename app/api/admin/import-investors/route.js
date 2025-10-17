@@ -209,15 +209,39 @@ export async function POST(request) {
       }
     }
 
-    // 5. Auto-trigger transaction regeneration
-    // NOTE: The migrate-transactions endpoint currently uses the legacy file-based approach
-    // and needs to be refactored to work with Supabase. For now, we'll skip auto-triggering
-    // and let admins manually trigger regeneration via the Operations tab.
+    // 5. Auto-trigger transaction regeneration to calculate distributions
     if (results.imported > 0) {
       console.log(`✅ Successfully imported ${results.imported} users`)
-      console.log('⚠️  Please manually click "Regenerate Transactions" in the Operations tab to calculate distributions')
-      results.transactionsRegenerated = false
-      results.message = 'Import successful! Please click "Regenerate Transactions" in Operations tab to calculate distributions.'
+      console.log('🔄 Triggering transaction regeneration to calculate distributions...')
+      
+      try {
+        // Create a new Request object with admin authentication headers
+        const migrateRequest = new Request(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/migrate-transactions`, {
+          method: 'POST',
+          headers: request.headers
+        })
+        
+        // Call migrate-transactions endpoint
+        const { POST: migrateTransactions } = await import('../migrate-transactions/route.js')
+        const migrateResponse = await migrateTransactions(migrateRequest)
+        const migrateData = await migrateResponse.json()
+        
+        if (migrateData.success) {
+          results.transactionsRegenerated = true
+          results.eventsCreated = migrateData.eventsCreated
+          results.activityEventsInserted = migrateData.activityEventsInserted
+          console.log(`✅ Successfully calculated ${migrateData.activityEventsInserted} distribution/contribution events`)
+          results.message = `Import successful! Generated ${results.imported} user(s) and ${migrateData.activityEventsInserted} distribution events.`
+        } else {
+          results.transactionsRegenerated = false
+          results.message = `Import successful but transaction regeneration failed: ${migrateData.error}. Please manually click "Regenerate Transactions" in Operations tab.`
+          console.error('⚠️  Transaction regeneration failed:', migrateData.error)
+        }
+      } catch (migrateError) {
+        console.error('⚠️  Failed to trigger transaction regeneration:', migrateError)
+        results.transactionsRegenerated = false
+        results.message = 'Import successful! Please manually click "Regenerate Transactions" in Operations tab to calculate distributions.'
+      }
     }
 
     return NextResponse.json({

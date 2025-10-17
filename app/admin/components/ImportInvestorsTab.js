@@ -158,14 +158,14 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
   }
 
   // Import investors
-  const handleImport = async () => {
+  // Perform the actual import (extracted for reuse)
+  const performImport = async (dataToImport) => {
     setIsProcessing(true)
     setError(null)
-    setStage(IMPORT_STAGES.IMPORTING)
 
     try {
       // Prepare data for import
-      const investors = editableData.map(row => {
+      const investors = dataToImport.map(row => {
         const investor = { ...row }
         delete investor._rowId
         
@@ -214,6 +214,12 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
     } finally {
       setIsProcessing(false)
     }
+  }
+
+  // Wrapper for importing from review stage
+  const handleImport = async () => {
+    setStage(IMPORT_STAGES.IMPORTING)
+    await performImport(editableData)
   }
 
   // Send welcome emails
@@ -341,8 +347,8 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
     }))
   }
 
-  // Add manual form data to review
-  const handleAddManualInvestor = () => {
+  // Add manual form data and immediately import (single-user workflow)
+  const handleAddManualInvestor = async () => {
     // Validate required fields
     if (!manualForm.email || !manualForm.firstName || !manualForm.lastName) {
       setError('Email, First Name, and Last Name are required')
@@ -411,7 +417,7 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
     const newInvestor = {
       ...manualForm,
       phoneNumber: manualForm.phoneNumber ? normalizePhoneForDB(manualForm.phoneNumber) : '',
-      _rowId: editableData.length
+      _rowId: 0
     }
 
     // Normalize joint holder phone if applicable
@@ -419,7 +425,13 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
       newInvestor.jointHolder.phoneNumber = normalizePhoneForDB(newInvestor.jointHolder.phoneNumber)
     }
     
-    setEditableData(prev => [...prev, newInvestor])
+    // For single-user import: go directly to importing
+    setEditableData([newInvestor])
+    setError(null)
+    setStage(IMPORT_STAGES.IMPORTING)
+    
+    // Immediately trigger import
+    await performImport([newInvestor])
     
     // Reset form
     setManualForm({
@@ -531,19 +543,14 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
       {/* Stage: Add Investor */}
       {stage === IMPORT_STAGES.ADD && (
         <div className={styles.stage}>
-          <h3>Add Investors from Wealthblock</h3>
-          <p>Manually add investors from your Wealthblock export. You can add multiple investors before importing.</p>
+          <h3>Import Investor from Wealthblock</h3>
+          <p>Fill out the form to import a single investor from your Wealthblock system. The investor will be imported immediately with all historical distributions calculated.</p>
           
           {!showForm && (
             <div className={styles.addButtonContainer}>
               <button onClick={() => setShowForm(true)} className={styles.addNewInvestorButton}>
-                + Add New Investor
+                + Import New Investor
               </button>
-              {editableData.length > 0 && (
-                <p className={styles.addedCount}>
-                  {editableData.length} investor{editableData.length !== 1 ? 's' : ''} added
-                </p>
-              )}
             </div>
           )}
 
@@ -1144,20 +1151,8 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
             >
               Cancel
             </button>
-            {editableData.length > 0 && (
-              <button 
-                onClick={() => {
-                  setShowForm(false)
-                  setStage(IMPORT_STAGES.REVIEW)
-                }} 
-                className={styles.secondaryButton}
-                type="button"
-              >
-                Go to Review ({editableData.length})
-              </button>
-            )}
             <button onClick={handleAddManualInvestor} className={styles.primaryButton} type="button">
-              Add to Review List
+              Import Investor
               {manualForm.investments.length > 0 && (
                 <span className={styles.investmentBadge}>
                   {manualForm.investments.length} investment{manualForm.investments.length !== 1 ? 's' : ''}
@@ -1167,15 +1162,6 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
           </div>
           </>
       )}
-
-          {/* Show button to go to review if there are investors added */}
-          {!showForm && editableData.length > 0 && (
-            <div className={styles.actions}>
-              <button onClick={() => setStage(IMPORT_STAGES.REVIEW)} className={styles.primaryButton}>
-                Continue to Review ({editableData.length} investor{editableData.length !== 1 ? 's' : ''})
-              </button>
-            </div>
-          )}
         </div>
       )}
 
@@ -1377,9 +1363,15 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
         <div className={styles.stage}>
           <h3>✅ Import Complete!</h3>
           
-          {importResults.imported > 0 && (
+          {importResults.transactionsRegenerated && importResults.activityEventsInserted > 0 && (
+            <div className={styles.successMessage}>
+              <strong>✅ Success!</strong> All historical distributions and contributions have been automatically calculated. {importResults.activityEventsInserted} activity events were generated based on the investment dates you provided.
+            </div>
+          )}
+          
+          {importResults.imported > 0 && !importResults.transactionsRegenerated && (
             <div className={styles.warningMessage}>
-              <strong>⚠️ IMPORTANT:</strong> To see distributions and contributions in user activity, you must click <strong>"Regenerate Transactions"</strong> in the Operations tab above. This will calculate all historical distributions based on the investment dates you provided.
+              <strong>⚠️ IMPORTANT:</strong> Automatic transaction regeneration failed. Please click <strong>"Regenerate Transactions"</strong> in the Operations tab above to calculate all historical distributions based on the investment dates you provided.
             </div>
           )}
           
@@ -1426,7 +1418,7 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
               {isProcessing ? 'Sending...' : '📧 Send Welcome Emails'}
             </button>
             <button onClick={handleReset} className={styles.secondaryButton}>
-              Import More Investors
+              Import Another Investor
             </button>
           </div>
         </div>

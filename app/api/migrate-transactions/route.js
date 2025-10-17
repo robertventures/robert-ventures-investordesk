@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server'
-import { getUsers, saveUsers } from '../../../lib/supabaseDatabase.js'
+import { getUsers } from '../../../lib/supabaseDatabase.js'
 import { getCurrentAppTime, getAutoApproveDistributions } from '../../../lib/appTime'
 import { generateTransactionId } from '../../../lib/idGenerator'
+import { createServiceClient } from '../../../lib/supabaseClient.js'
+import { requireAdmin, authErrorResponse } from '../../../lib/authMiddleware'
 
 // Helper functions matching investmentCalculations.js
 const MS_PER_DAY = 24 * 60 * 60 * 1000
@@ -170,8 +172,15 @@ const mapLegacyPayoutStatus = (status) => {
 // - monthly_distribution (for monthly payout investments, prorated first month)
 // - monthly_compounded (for compounding investments, prorated first month, compounding principal)
 // - withdrawal_requested (mirrors user.withdrawals)
-export async function POST() {
+export async function POST(request) {
   try {
+    // Verify admin authentication
+    const admin = await requireAdmin(request)
+    if (!admin) {
+      return authErrorResponse('Admin access required', 403)
+    }
+
+    const supabase = createServiceClient()
     const usersData = await getUsers()
     const appTime = await getCurrentAppTime()
     const now = new Date(appTime || new Date().toISOString())
@@ -179,6 +188,9 @@ export async function POST() {
 
     let usersUpdated = 0
     let eventsCreated = 0
+    
+    // Collect all new activity events to batch insert at the end
+    const activityEventsToInsert = []
 
     let dataMutated = false
 
@@ -235,8 +247,9 @@ export async function POST() {
         const accountEventId = generateTransactionId('USR', user.id, 'account_created')
         const hasAccountEvent = user.activity.some(ev => ev.id === accountEventId)
         if (!hasAccountEvent) {
-          user.activity.push({
+          activityEventsToInsert.push({
             id: accountEventId,
+            user_id: user.id,
             type: 'account_created',
             date: user.createdAt
           })
@@ -256,10 +269,11 @@ export async function POST() {
         const investmentCreatedDate = inv.submittedAt || inv.createdAt
         
         if (!hasInvestmentCreatedEvent && investmentCreatedDate) {
-          user.activity.push({
+          activityEventsToInsert.push({
             id: investmentCreatedEventId,
+            user_id: user.id,
             type: 'investment_created',
-            investmentId: inv.id,
+            investment_id: inv.id,
             date: investmentCreatedDate
           })
           eventsCreated++
@@ -274,10 +288,11 @@ export async function POST() {
           const investmentConfirmedDate = inv.confirmedAt
           
           if (!hasInvestmentConfirmedEvent && investmentConfirmedDate) {
-            user.activity.push({
+            activityEventsToInsert.push({
               id: investmentConfirmedEventId,
+              user_id: user.id,
               type: 'investment_confirmed',
-              investmentId: inv.id,
+              investment_id: inv.id,
               amount: inv.amount || 0,
               date: investmentConfirmedDate
             })
@@ -711,14 +726,29 @@ export async function POST() {
       }
     }
 
-    if (dataMutated) {
-      const saved = await saveUsers(usersData)
-      if (!saved) {
-        return NextResponse.json({ success: false, error: 'Failed to save transaction events' }, { status: 500 })
+    // Batch insert all new activity events to Supabase
+    if (activityEventsToInsert.length > 0) {
+      const { error: activityError } = await supabase
+        .from('activity')
+        .insert(activityEventsToInsert)
+      
+      if (activityError) {
+        console.error('Failed to insert activity events:', activityError)
+        return NextResponse.json({ 
+          success: false, 
+          error: `Failed to save activity events: ${activityError.message}` 
+        }, { status: 500 })
       }
+      
+      console.log(`✅ Successfully inserted ${activityEventsToInsert.length} activity events`)
     }
 
-    return NextResponse.json({ success: true, usersUpdated, eventsCreated })
+    return NextResponse.json({ 
+      success: true, 
+      usersUpdated, 
+      eventsCreated,
+      activityEventsInserted: activityEventsToInsert.length
+    })
   } catch (error) {
     console.error('Error migrating transactions:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
