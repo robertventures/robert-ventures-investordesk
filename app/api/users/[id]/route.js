@@ -332,7 +332,7 @@ export async function DELETE(request, { params }) {
       .from('users')
       .select('auth_id, email')
       .eq('id', id)
-      .single()
+      .maybeSingle()
 
     if (fetchError || !user) {
       console.log(`[DELETE /api/users/${id}] ❌ User not found in database:`, fetchError?.message)

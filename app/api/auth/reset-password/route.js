@@ -36,7 +36,7 @@ export async function POST(request) {
       .from('users')
       .select('*')
       .eq('reset_token', token)
-      .single()
+      .maybeSingle()
 
     if (findError || !user) {
       return NextResponse.json(
