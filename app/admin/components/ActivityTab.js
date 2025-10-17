@@ -96,8 +96,8 @@ export default function ActivityTab({ users }) {
         return { icon: '👤', title: 'Account Created', color: '#0369a1' }
       case 'investment_created':
         return { icon: '🧾', title: 'Investment Created', color: '#0369a1' }
-      case 'investment_approved':
-        return { icon: '✓', title: 'Investment Approved', color: '#0891b2' }
+      case 'investment_submitted':
+        return { icon: '📋', title: 'Investment Submitted', color: '#0369a1' }
       case 'investment_confirmed':
         return { icon: '✅', title: 'Investment Confirmed', color: '#065f46' }
       case 'investment_rejected':
@@ -232,7 +232,12 @@ export default function ActivityTab({ users }) {
                       )}
                     </td>
                     <td>
-                      {event.amount != null ? (
+                      {event.amount != null && 
+                       event.type !== 'account_created' && 
+                       event.type !== 'investment_created' &&
+                       event.type !== 'investment_submitted' && 
+                       event.type !== 'investment_confirmed' && 
+                       event.type !== 'investment_rejected' ? (
                         <strong className={styles.amount}>{formatCurrency(event.amount)}</strong>
                       ) : (
                         <span className={styles.naText}>-</span>
