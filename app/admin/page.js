@@ -844,14 +844,25 @@ export default function AdminPage() {
                           className={styles.dangerButton}
                           onClick={async (e) => {
                             e.stopPropagation()
-                            if (!confirm('Are you sure you want to delete this account? This cannot be undone.')) return
+                            if (!confirm(`Are you sure you want to delete ${user.firstName} ${user.lastName} (${user.email})? This will permanently delete:\n\n• Their account and profile\n• All investments and transactions\n• All activity and withdrawals\n• Their authentication access\n\nThis action cannot be undone.`)) return
                             try {
                               const res = await fetch(`/api/users/${user.id}`, { method: 'DELETE' })
                               const data = await res.json()
-                              if (!data.success) {
-                                alert(data.error || 'Failed to delete user')
+                              
+                              // Handle partial success (database deleted but auth failed)
+                              if (data.partialSuccess) {
+                                alert(`⚠️ Partial Success:\n\n${data.error}\n\n✅ User removed from database\n❌ Failed to remove from Supabase Auth\n\nYou may need to manually delete this user from the Supabase Auth dashboard.`)
+                                await refreshUsers(true)
                                 return
                               }
+                              
+                              // Handle complete failure
+                              if (!data.success) {
+                                alert(`❌ Failed to delete user:\n\n${data.error}`)
+                                return
+                              }
+                              
+                              // Success - refresh the list
                               await refreshUsers(true)  // Force refresh to bypass cache
                             } catch (e) {
                               console.error('Delete failed', e)

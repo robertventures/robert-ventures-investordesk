@@ -8,7 +8,30 @@ A day-by-day record of progress on Robert Ventures Investor Desk.
 
 ### Friday, October 18
 
-#### 🔧 **Supabase Auth & Database Sync**
+#### 🔧 **Individual User Deletion Fix** (Latest)
+- **Fixed DELETE /api/users/[id] endpoint**:
+  - Individual user deletion now removes user from both database AND Supabase Auth
+  - Previously only deleted from database, leaving auth users orphaned
+  - Added admin authentication requirement (was TODO)
+  - Properly handles foreign key constraints (deletes transactions, investments, activity, etc.)
+  - Returns HTTP 207 (Multi-Status) if database succeeds but auth fails
+  - Frontend shows detailed confirmation dialog with all data being deleted
+  - Frontend displays clear error messages for partial success scenarios
+  - Updated `app/admin/page.js` Delete button to show comprehensive confirmation and error handling
+
+- **Created cleanup script for orphaned auth users**:
+  - Built `scripts/clean-orphaned-auth-users.js` to delete auth users without database records
+  - Useful for cleaning up after manual user creation or failed imports
+  - Added `npm run clean-orphaned-auth` command
+  - Shows detailed summary of deleted/failed users
+
+- **Created diagnostic script**:
+  - Built `scripts/diagnose-deletion.js` to diagnose user deletion issues
+  - Added `npm run diagnose-deletion` command  
+  - Reports sync issues between auth and database
+  - Checks service role key, counts users, identifies orphaned records
+
+#### 🔧 **Bulk User Deletion (Accounts Tab)**
 - **Fixed user deletion bug**:
   - Users were deleted from database but remained in Supabase Auth
   - Updated `app/api/admin/accounts/route.js` to properly track auth deletion failures

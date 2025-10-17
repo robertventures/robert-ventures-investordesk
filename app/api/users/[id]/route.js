@@ -307,36 +307,138 @@ export async function PUT(request, { params }) {
 
 /**
  * DELETE /api/users/[id]
- * Delete user account
- * (Admin only - add authentication middleware)
+ * Delete user account from both database and Supabase Auth
+ * Admin only
  */
 export async function DELETE(request, { params }) {
   try {
     const { id } = params
+    console.log(`[DELETE /api/users/${id}] Starting deletion...`)
 
-    // TODO: Add admin authentication check here
-    // const admin = await requireAdmin(request)
-    // if (!admin) return authErrorResponse('Admin access required', 403)
+    // Require admin authentication
+    const { requireAdmin, authErrorResponse } = await import('../../../../lib/authMiddleware.js')
+    const admin = await requireAdmin(request)
+    if (!admin) {
+      console.log(`[DELETE /api/users/${id}] ❌ Admin authentication failed`)
+      return authErrorResponse('Admin access required', 403)
+    }
 
+    console.log(`[DELETE /api/users/${id}] ✅ Admin authenticated:`, admin.id)
     const supabase = createServiceClient()
 
+    // First, get the user to retrieve auth_id
+    console.log(`[DELETE /api/users/${id}] Fetching user from database...`)
+    const { data: user, error: fetchError } = await supabase
+      .from('users')
+      .select('auth_id, email')
+      .eq('id', id)
+      .single()
+
+    if (fetchError || !user) {
+      console.log(`[DELETE /api/users/${id}] ❌ User not found in database:`, fetchError?.message)
+      return NextResponse.json(
+        { success: false, error: 'User not found' },
+        { status: 404 }
+      )
+    }
+
+    console.log(`[DELETE /api/users/${id}] ✅ Found user:`, user.email, 'auth_id:', user.auth_id)
+
+    // Delete related data first (due to foreign key constraints)
+    // Get all investment IDs for this user
+    const { data: investments } = await supabase
+      .from('investments')
+      .select('id')
+      .eq('user_id', id)
+
+    const investmentIds = investments?.map(inv => inv.id) || []
+
+    // Delete transactions for these investments
+    if (investmentIds.length > 0) {
+      await supabase
+        .from('transactions')
+        .delete()
+        .in('investment_id', investmentIds)
+    }
+
+    // Delete activity for this user
+    await supabase
+      .from('activity')
+      .delete()
+      .eq('user_id', id)
+
+    // Delete withdrawals for this user
+    await supabase
+      .from('withdrawals')
+      .delete()
+      .eq('user_id', id)
+
+    // Delete bank accounts for this user
+    await supabase
+      .from('bank_accounts')
+      .delete()
+      .eq('user_id', id)
+
+    // Delete investments for this user
+    if (investmentIds.length > 0) {
+      await supabase
+        .from('investments')
+        .delete()
+        .in('id', investmentIds)
+    }
+
     // Delete user from database
-    const { error } = await supabase
+    console.log(`[DELETE /api/users/${id}] Deleting user from database...`)
+    const { error: deleteError } = await supabase
       .from('users')
       .delete()
       .eq('id', id)
 
-    if (error) {
-      console.error('Error deleting user:', error)
+    if (deleteError) {
+      console.error(`[DELETE /api/users/${id}] ❌ Error deleting user from database:`, deleteError)
       return NextResponse.json(
-        { success: false, error: 'Failed to delete user' },
+        { success: false, error: 'Failed to delete user from database' },
         { status: 500 }
       )
     }
 
+    console.log(`[DELETE /api/users/${id}] ✅ Deleted from database`)
+
+    // Delete from Supabase Auth (if auth_id exists)
+    if (user.auth_id) {
+      console.log(`[DELETE /api/users/${id}] Deleting from Supabase Auth (${user.auth_id})...`)
+      try {
+        const { error: authError } = await supabase.auth.admin.deleteUser(user.auth_id)
+        
+        if (authError) {
+          console.error(`[DELETE /api/users/${id}] ❌ Failed to delete auth user:`, user.auth_id, authError)
+          // Return partial success since database was deleted
+          return NextResponse.json({
+            success: false,
+            partialSuccess: true,
+            error: `User deleted from database but failed to delete from auth: ${authError.message}`,
+            authDeletionFailed: true
+          }, { status: 207 }) // 207 Multi-Status
+        }
+        console.log(`[DELETE /api/users/${id}] ✅ Deleted from Supabase Auth`)
+      } catch (authError) {
+        console.error(`[DELETE /api/users/${id}] ❌ Exception deleting auth user:`, user.auth_id, authError)
+        return NextResponse.json({
+          success: false,
+          partialSuccess: true,
+          error: `User deleted from database but failed to delete from auth: ${authError.message}`,
+          authDeletionFailed: true
+        }, { status: 207 })
+      }
+    } else {
+      console.log(`[DELETE /api/users/${id}] ⚠️  No auth_id, skipping auth deletion`)
+    }
+
+    console.log(`[DELETE /api/users/${id}] ✅ Successfully deleted user ${id} (${user.email}) from both database and auth`)
+
     return NextResponse.json({
       success: true,
-      message: 'User deleted successfully'
+      message: 'User deleted successfully from both database and authentication'
     })
 
   } catch (error) {

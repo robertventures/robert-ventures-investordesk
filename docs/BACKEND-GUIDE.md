@@ -2734,30 +2734,90 @@ def create_user(email, password, profile_data):
 
 **Problem:** Deleting users requires deleting from BOTH systems
 
-**API Endpoint:** `DELETE /api/admin/accounts`
+There are two deletion endpoints:
+1. **Individual deletion**: `DELETE /api/users/[id]` - Delete a single user
+2. **Bulk deletion**: `DELETE /api/admin/accounts` - Delete all non-admin users
+
+#### Individual User Deletion
+
+**API Endpoint:** `DELETE /api/users/[id]`
+
+**Requirements:**
+- Admin authentication required
+- Deletes from both database AND Supabase Auth
+- Handles all related data (foreign key constraints)
+- Returns HTTP 207 (Multi-Status) if database succeeds but auth fails
 
 **Deletion Order (Critical):**
 ```python
-# 1. Delete related data (foreign key constraints)
-delete_transactions()
-delete_activity()
-delete_withdrawals()
-delete_bank_accounts()
-delete_investments()
+# 1. Get user to retrieve auth_id
+user = supabase.from_('users').select('auth_id, email').eq('id', user_id).single()
 
-# 2. Delete from users table
-delete_from_users_table()
+# 2. Delete related data (foreign key constraints) - ORDER MATTERS
+# Get investment IDs first
+investments = supabase.from_('investments').select('id').eq('user_id', user_id)
+investment_ids = [inv.id for inv in investments]
 
-# 3. Delete from Supabase Auth
-supabase.auth.admin.delete_user(auth_id)
+# Delete transactions for these investments
+if investment_ids:
+    supabase.from_('transactions').delete().in_('investment_id', investment_ids)
+
+# Delete activity
+supabase.from_('activity').delete().eq('user_id', user_id)
+
+# Delete withdrawals
+supabase.from_('withdrawals').delete().eq('user_id', user_id)
+
+# Delete bank accounts
+supabase.from_('bank_accounts').delete().eq('user_id', user_id)
+
+# Delete investments
+if investment_ids:
+    supabase.from_('investments').delete().in_('id', investment_ids)
+
+# 3. Delete from users table
+supabase.from_('users').delete().eq('id', user_id)
+
+# 4. Delete from Supabase Auth (if auth_id exists)
+if user.auth_id:
+    result = supabase.auth.admin.delete_user(user.auth_id)
+    if result.error:
+        # Return partial success
+        return {
+            'success': False,
+            'partial_success': True,
+            'error': f'User deleted from database but failed to delete from auth: {result.error.message}',
+            'auth_deletion_failed': True
+        }, 207  # HTTP 207 Multi-Status
 ```
 
-**Error Handling:**
+**Frontend Handling:**
+```javascript
+const res = await fetch(`/api/users/${userId}`, { method: 'DELETE' })
+const data = await res.json()
+
+if (data.partialSuccess) {
+  // Database deleted but auth failed
+  alert(`⚠️ Partial Success:\n\n${data.error}\n\nYou may need to manually delete this user from Supabase Auth dashboard.`)
+} else if (!data.success) {
+  // Complete failure
+  alert(`❌ Failed: ${data.error}`)
+} else {
+  // Complete success
+  alert('✅ User deleted successfully')
+}
+```
+
+#### Bulk User Deletion
+
+**API Endpoint:** `DELETE /api/admin/accounts`
+
+**Deletion Process:**
 ```python
 # Track auth deletion failures
 auth_failures = []
 
-for user in users_to_delete:
+for user in non_admin_users:
     try:
         result = supabase.auth.admin.delete_user(user.auth_id)
         if result.error:
@@ -2775,19 +2835,29 @@ for user in users_to_delete:
 if auth_failures:
     return {
         'success': False,
-        'partial': True,
-        'database_deleted': len(users_to_delete),
-        'auth_deleted': len(users_to_delete) - len(auth_failures),
-        'auth_failures': auth_failures
-    }
+        'deleted_count': len(non_admin_users),
+        'error': f'Deleted {len(non_admin_users)} users from database, but failed to delete {len(auth_failures)} auth users',
+        'auth_deletion_failures': auth_failures
+    }, 207  # HTTP 207 Multi-Status
 ```
 
-**Required Permission:**
+#### Required Permissions
+
+**Service Role Key:**
 ```bash
-# Service role key required (not anon key)
+# Required for auth admin operations
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
 # Get from: Supabase Dashboard → Settings → API → service_role
+```
+
+**Testing:**
+```bash
+# Diagnose deletion issues
+npm run diagnose-deletion
+
+# Clean orphaned auth users (no database record)
+npm run clean-orphaned-auth
 ```
 
 ### Local Development Files
