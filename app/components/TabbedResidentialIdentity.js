@@ -700,7 +700,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
               </div>
               <input 
                 className={`${styles.input} ${errors['authorizedRep.ssn'] ? styles.inputError : ''}`} 
-                type="password"
+                type="text"
                 name="authorizedRep.ssn" 
                 value={form.authorizedRep.ssn} 
                 onChange={handleChange} 
@@ -811,7 +811,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
           </div>
           <input 
             className={`${styles.input} ${errors.ssn ? styles.inputError : ''}`} 
-            type="password"
+            type="text"
             name="ssn" 
             value={form.ssn} 
             onChange={handleChange} 
@@ -873,7 +873,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
               </div>
               <input 
                 className={`${styles.input} ${errors['jointHolder.ssn'] ? styles.inputError : ''}`} 
-                type="password"
+                type="text"
                 name="jointHolder.ssn" 
                 value={form.jointHolder.ssn} 
                 onChange={handleChange} 

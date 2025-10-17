@@ -38,7 +38,9 @@ export async function GET(request) {
         lastName: u.last_name,
         phoneNumber: u.phone_number,
         dob: u.dob,
+        ssn: u.ssn, // Include SSN for profile completeness check
         address: u.address,
+        accountType: u.account_type,
         isAdmin: u.is_admin,
         isVerified: u.is_verified,
         verifiedAt: u.verified_at,
