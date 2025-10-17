@@ -3,6 +3,8 @@ import { getUser, updateUser } from '../../../../lib/supabaseDatabase.js'
 import { createServiceClient } from '../../../../lib/supabaseClient.js'
 import { getCurrentAppTime } from '../../../../lib/appTime.js'
 import { decrypt, isEncrypted } from '../../../../lib/encryption.js'
+import { signToken, signRefreshToken } from '../../../../lib/auth.js'
+import { setAuthCookies } from '../../../../lib/authMiddleware.js'
 
 /**
  * GET /api/users/[id]
@@ -115,7 +117,18 @@ export async function PUT(request, { params }) {
         )
       }
 
-      return NextResponse.json({
+      // Create authentication session (auto-login after verification)
+      // Generate JWT tokens for this user
+      const tokenUser = {
+        id: result.user.id,
+        email: result.user.email,
+        isAdmin: result.user.is_admin || false
+      }
+      const accessToken = signToken(tokenUser)
+      const refreshToken = signRefreshToken(tokenUser)
+
+      // Create response with user data
+      const response = NextResponse.json({
         success: true,
         user: {
           id: result.user.id,
@@ -124,6 +137,11 @@ export async function PUT(request, { params }) {
           verifiedAt: result.user.verified_at
         }
       })
+
+      // Set HTTP-only cookies to authenticate the user
+      setAuthCookies(response, accessToken, refreshToken)
+
+      return response
     }
 
     // Validate that we have at least one field to update

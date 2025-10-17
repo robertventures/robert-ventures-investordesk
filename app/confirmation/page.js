@@ -137,6 +137,7 @@ export default function ConfirmationPage() {
       const res = await fetch(`/api/users/${userId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', // Important: needed to receive auth cookies
         body: JSON.stringify({
           _action: 'verifyAccount',
           verificationCode: enteredCode
