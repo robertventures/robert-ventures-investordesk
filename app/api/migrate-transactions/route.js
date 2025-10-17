@@ -547,21 +547,6 @@ export async function POST(request) {
                 failedAt: legacyEvent?.failedAt || existingTx?.failedAt || null
               })
 
-              // Create activity event for this distribution
-              const activityEventId = txId  // Use same ID as transaction for consistency
-              if (!activity.some(ev => ev.id === activityEventId)) {
-                activityEventsToInsert.push({
-                  id: activityEventId,
-                  user_id: user.id,
-                  type: 'distribution',
-                  investment_id: inv.id,
-                  amount: Math.round(distributionAmount * 100) / 100,
-                  date: distributionDateIso,
-                  status
-                })
-                eventsCreated++
-              }
-
               monthIndex += 1
             })
           }
@@ -630,20 +615,6 @@ export async function POST(request) {
                 legacyReferenceId: legacyDistributionEvent?.id || null
               })
 
-              // Create activity event for this distribution
-              if (!activity.some(ev => ev.id === distributionTxId)) {
-                activityEventsToInsert.push({
-                  id: distributionTxId,
-                  user_id: user.id,
-                  type: 'distribution',
-                  investment_id: inv.id,
-                  amount: Math.round(interest * 100) / 100,
-                  date: compoundingDateIso,
-                  status: 'received'
-                })
-                eventsCreated++
-              }
-
               // 2. Then, create the CONTRIBUTION (distribution reinvested)
               // Contribution happens 1 second after distribution to maintain correct chronological order
               // For compounding investments, contributions are auto-applied immediately
@@ -665,20 +636,6 @@ export async function POST(request) {
                 completedAt: contributionDateIso,  // Mark as completed immediately
                 legacyReferenceId: legacyContributionEvent?.id || null
               })
-
-              // Create activity event for this contribution
-              if (!activity.some(ev => ev.id === contributionTxId)) {
-                activityEventsToInsert.push({
-                  id: contributionTxId,
-                  user_id: user.id,
-                  type: 'contribution',
-                  investment_id: inv.id,
-                  amount: Math.round(interest * 100) / 100,
-                  date: contributionDateIso,
-                  status: 'received'
-                })
-                eventsCreated++
-              }
 
               balance += interest
               monthIndex += 1
