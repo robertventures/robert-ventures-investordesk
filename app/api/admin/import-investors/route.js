@@ -215,84 +215,33 @@ export async function POST(request) {
       console.log('🔄 Triggering transaction regeneration to calculate distributions...')
       
       try {
-        // Directly call the migrate-transactions logic instead of HTTP fetch
-        const { createServiceClient } = await import('../../../../lib/supabaseClient.js')
-        const { getUsers } = await import('../../../../lib/supabaseDatabase.js')
-        const { getCurrentAppTime, getAutoApproveDistributions } = await import('../../../../lib/appTime.js')
+        // Import and call the migrate-transactions POST handler directly
+        const { POST: migrateTransactionsHandler } = await import('../../migrate-transactions/route.js')
         
-        const migrateSupabase = createServiceClient()
-        const usersData = await getUsers()
-        const appTime = await getCurrentAppTime()
-        const now = new Date(appTime || new Date().toISOString())
+        // Create a mock request with the same headers for auth
+        const migrateRequest = new Request(new URL('/api/migrate-transactions', request.url), {
+          method: 'POST',
+          headers: request.headers
+        })
         
-        let activityEventsToInsert = []
-        let eventsCreated = 0
+        const migrateResponse = await migrateTransactionsHandler(migrateRequest)
+        const migrateData = await migrateResponse.json()
         
-        // Simple check: just ensure investment activity events exist
-        for (const user of usersData.users) {
-          const investments = Array.isArray(user.investments) ? user.investments : []
-          const activity = Array.isArray(user.activity) ? user.activity : []
-          
-          for (const inv of investments) {
-            if (!inv || !inv.id || inv.status === 'draft') continue
-            
-            // Check for investment_created event
-            const investmentCreatedEventId = `TX-INV-${inv.id}-CREATED`
-            const hasInvestmentCreatedEvent = activity.some(ev => ev.id === investmentCreatedEventId)
-            
-            if (!hasInvestmentCreatedEvent && (inv.submittedAt || inv.createdAt)) {
-              activityEventsToInsert.push({
-                id: investmentCreatedEventId,
-                user_id: user.id,
-                type: 'investment_created',
-                investment_id: inv.id,
-                date: inv.submittedAt || inv.createdAt
-              })
-              eventsCreated++
-            }
-            
-            // Check for investment_confirmed event
-            if (inv.status !== 'pending' && inv.status !== 'rejected') {
-              const investmentConfirmedEventId = `TX-INV-${inv.id}-CONFIRMED`
-              const hasInvestmentConfirmedEvent = activity.some(ev => ev.id === investmentConfirmedEventId)
-              
-              if (!hasInvestmentConfirmedEvent && inv.confirmedAt) {
-                activityEventsToInsert.push({
-                  id: investmentConfirmedEventId,
-                  user_id: user.id,
-                  type: 'investment_confirmed',
-                  investment_id: inv.id,
-                  amount: inv.amount || 0,
-                  date: inv.confirmedAt
-                })
-                eventsCreated++
-              }
-            }
-          }
+        if (migrateData.success) {
+          results.transactionsRegenerated = true
+          results.eventsCreated = migrateData.eventsCreated || 0
+          results.activityEventsInserted = migrateData.activityEventsInserted || 0
+          results.transactionsUpserted = migrateData.transactionsUpserted || 0
+          results.message = `Import successful! Generated ${results.imported} user(s), ${results.transactionsUpserted} transactions, and ${results.activityEventsInserted} activity events. All historical distributions have been calculated.`
+          console.log(`✅ Successfully regenerated transactions: ${results.transactionsUpserted} transactions, ${results.activityEventsInserted} activity events`)
+        } else {
+          throw new Error(migrateData.error || 'Unknown error from migrate-transactions')
         }
-        
-        // Insert activity events if any
-        if (activityEventsToInsert.length > 0) {
-          const { error: activityError } = await migrateSupabase
-            .from('activity')
-            .insert(activityEventsToInsert)
-          
-          if (activityError) {
-            throw new Error(`Failed to insert activity events: ${activityError.message}`)
-          }
-          
-          console.log(`✅ Successfully inserted ${activityEventsToInsert.length} activity events`)
-        }
-        
-        results.transactionsRegenerated = true
-        results.eventsCreated = eventsCreated
-        results.activityEventsInserted = activityEventsToInsert.length
-        results.message = `Import successful! Generated ${results.imported} user(s) and ${activityEventsToInsert.length} activity events. Please click "Regenerate Transactions" in Operations tab to calculate distributions.`
         
       } catch (migrateError) {
         console.error('⚠️  Failed to trigger transaction regeneration:', migrateError)
         results.transactionsRegenerated = false
-        results.message = 'Import successful! Please manually click "Regenerate Transactions" in Operations tab to calculate distributions.'
+        results.message = `Import successful! However, failed to auto-generate transactions: ${migrateError.message}. Please manually click "Regenerate Transactions" in Operations tab.`
       }
     }
 

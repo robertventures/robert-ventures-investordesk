@@ -783,9 +783,7 @@ export async function POST(request) {
             type: tx.type,
             amount: tx.amount,
             status: tx.status,
-            date: tx.date,
-            created_at: tx.createdAt || now.toISOString(),
-            updated_at: now.toISOString()
+            date: tx.date
           }
           
           // Add optional fields if they exist
