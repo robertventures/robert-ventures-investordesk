@@ -1363,15 +1363,9 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
         <div className={styles.stage}>
           <h3>✅ Import Complete!</h3>
           
-          {importResults.transactionsRegenerated && importResults.activityEventsInserted > 0 && (
-            <div className={styles.successMessage}>
-              <strong>✅ Success!</strong> All historical distributions and contributions have been automatically calculated. {importResults.activityEventsInserted} activity events were generated based on the investment dates you provided.
-            </div>
-          )}
-          
-          {importResults.imported > 0 && !importResults.transactionsRegenerated && (
+          {importResults.imported > 0 && (
             <div className={styles.warningMessage}>
-              <strong>⚠️ IMPORTANT:</strong> Automatic transaction regeneration failed. Please click <strong>"Regenerate Transactions"</strong> in the Operations tab above to calculate all historical distributions based on the investment dates you provided.
+              <strong>⚠️ NEXT STEP:</strong> To generate all historical distributions and contributions, please click <strong>"Regenerate Transactions"</strong> in the Operations tab above. This will calculate all monthly distributions based on the investment dates you provided.
             </div>
           )}
           
