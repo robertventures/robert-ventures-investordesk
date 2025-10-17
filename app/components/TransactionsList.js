@@ -93,11 +93,9 @@ const TransactionsList = memo(function TransactionsList({ limit = null, showView
     load()
   }, [])
 
-  // Prevent hydration mismatch
-  if (!mounted || loading) return <div className={styles.empty}>Loading activity…</div>
-  if (!user) return <div className={styles.empty}>No user found.</div>
-  
   // PERFORMANCE: Memoize expensive filtering and pagination calculations
+  // IMPORTANT: Hooks must be called unconditionally in the same order on every render.
+  // Compute memoized values before any early returns to avoid React hook order errors.
   const { filtered, visibleEvents, totalPages } = useMemo(() => {
     const filtered = filterInvestmentId ? events.filter(ev => ev.investmentId === filterInvestmentId) : events
     
@@ -116,6 +114,10 @@ const TransactionsList = memo(function TransactionsList({ limit = null, showView
     
     return { filtered, visibleEvents, totalPages }
   }, [events, filterInvestmentId, limit, currentPage, itemsPerPage])
+
+  // Prevent hydration mismatch
+  if (!mounted || loading) return <div className={styles.empty}>Loading activity…</div>
+  if (!user) return <div className={styles.empty}>No user found.</div>
 
   return (
     <div className={styles.listSection}>
