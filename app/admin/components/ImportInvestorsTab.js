@@ -10,12 +10,38 @@ const IMPORT_STAGES = {
   COMPLETE: 'complete'
 }
 
+// Phone formatting and validation
+const formatPhone = (value = '') => {
+  const digits = value.replace(/\D/g, '').slice(0, 10)
+  if (digits.length <= 3) return digits
+  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`
+}
+
+const isCompletePhone = (value = '') => value.replace(/\D/g, '').length === 10
+
+// Normalize phone number to E.164 format for database storage (+1XXXXXXXXXX)
+const normalizePhoneForDB = (value = '') => {
+  const digits = value.replace(/\D/g, '')
+  if (digits.length === 10) {
+    return `+1${digits}`
+  }
+  if (digits.length === 11 && digits.startsWith('1')) {
+    return `+${digits}`
+  }
+  return value
+}
+
+// Names: Allow only letters, spaces, hyphens, apostrophes, and periods
+const formatName = (value = '') => value.replace(/[^a-zA-Z\s'\-\.]/g, '')
+
 export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
   const [stage, setStage] = useState(IMPORT_STAGES.ADD)
   const [editableData, setEditableData] = useState([])
   const [importResults, setImportResults] = useState(null)
   const [error, setError] = useState(null)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [showForm, setShowForm] = useState(false)
   
   // Manual form state
   const [manualForm, setManualForm] = useState({
@@ -24,7 +50,6 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
     lastName: '',
     phoneNumber: '',
     dob: '',
-    ssn: '',
     accountType: 'individual',
     address: {
       street1: '',
@@ -32,6 +57,54 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
       city: '',
       state: '',
       zip: ''
+    },
+    // Joint account fields
+    jointHoldingType: '',
+    jointHolder: {
+      firstName: '',
+      lastName: '',
+      email: '',
+      phoneNumber: '',
+      dob: '',
+      address: {
+        street1: '',
+        street2: '',
+        city: '',
+        state: '',
+        zip: ''
+      }
+    },
+    // Entity fields
+    entity: {
+      entityType: 'LLC',
+      name: '',
+      registrationDate: '',
+      taxId: '',
+      address: {
+        street1: '',
+        street2: '',
+        city: '',
+        state: '',
+        zip: ''
+      }
+    },
+    authorizedRepresentative: {
+      firstName: '',
+      lastName: '',
+      dob: '',
+      address: {
+        street1: '',
+        street2: '',
+        city: '',
+        state: '',
+        zip: ''
+      }
+    },
+    // IRA fields
+    ira: {
+      accountType: 'traditional',
+      custodian: '',
+      accountNumber: ''
     },
     investments: []
   })
@@ -167,19 +240,47 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
 
   // Handle manual form field changes
   const handleManualFormChange = (field, value) => {
+    // Apply formatting based on field type
+    let formattedValue = value
+    
+    if (field === 'phoneNumber' || field.endsWith('.phoneNumber')) {
+      formattedValue = formatPhone(value)
+    } else if (field === 'firstName' || field === 'lastName' || 
+               field.endsWith('.firstName') || field.endsWith('.lastName')) {
+      formattedValue = formatName(value)
+    }
+    
+    // Handle nested fields (e.g., address.street1, jointHolder.firstName, entity.name)
     if (field.includes('.')) {
-      const [parent, child] = field.split('.')
-      setManualForm(prev => ({
-        ...prev,
-        [parent]: {
-          ...prev[parent],
-          [child]: value
-        }
-      }))
+      const parts = field.split('.')
+      
+      if (parts.length === 2) {
+        const [parent, child] = parts
+        setManualForm(prev => ({
+          ...prev,
+          [parent]: {
+            ...prev[parent],
+            [child]: formattedValue
+          }
+        }))
+      } else if (parts.length === 3) {
+        // Three levels deep (e.g., jointHolder.address.street1)
+        const [grandparent, parent, child] = parts
+        setManualForm(prev => ({
+          ...prev,
+          [grandparent]: {
+            ...prev[grandparent],
+            [parent]: {
+              ...prev[grandparent][parent],
+              [child]: formattedValue
+            }
+          }
+        }))
+      }
     } else {
       setManualForm(prev => ({
         ...prev,
-        [field]: value
+        [field]: formattedValue
       }))
     }
   }
@@ -238,10 +339,74 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
       return
     }
 
-    // Add to editable data
+    // Validate email format
+    if (!/\S+@\S+\.\S+/.test(manualForm.email)) {
+      setError('Please enter a valid email address')
+      return
+    }
+
+    // Validate phone number if provided
+    if (manualForm.phoneNumber && !isCompletePhone(manualForm.phoneNumber)) {
+      setError('Phone number must be 10 digits')
+      return
+    }
+
+    // Validate account-type-specific required fields
+    if (manualForm.accountType === 'joint') {
+      if (!manualForm.jointHoldingType) {
+        setError('Joint holding type is required for joint accounts')
+        return
+      }
+      if (!manualForm.jointHolder.firstName || !manualForm.jointHolder.lastName) {
+        setError('Joint holder first name and last name are required')
+        return
+      }
+      if (!manualForm.jointHolder.email) {
+        setError('Joint holder email is required')
+        return
+      }
+      if (manualForm.jointHolder.phoneNumber && !isCompletePhone(manualForm.jointHolder.phoneNumber)) {
+        setError('Joint holder phone number must be 10 digits')
+        return
+      }
+    }
+
+    if (manualForm.accountType === 'entity') {
+      if (!manualForm.entity.name) {
+        setError('Entity name is required for entity accounts')
+        return
+      }
+      if (!manualForm.entity.taxId) {
+        setError('Entity Tax ID/EIN is required')
+        return
+      }
+      if (!manualForm.authorizedRepresentative.firstName || !manualForm.authorizedRepresentative.lastName) {
+        setError('Authorized representative name is required')
+        return
+      }
+    }
+
+    if (manualForm.accountType === 'ira') {
+      if (!manualForm.ira.custodian) {
+        setError('IRA custodian is required')
+        return
+      }
+      if (!manualForm.ira.accountNumber) {
+        setError('IRA account number is required')
+        return
+      }
+    }
+
+    // Normalize phone numbers before adding
     const newInvestor = {
       ...manualForm,
+      phoneNumber: manualForm.phoneNumber ? normalizePhoneForDB(manualForm.phoneNumber) : '',
       _rowId: editableData.length
+    }
+
+    // Normalize joint holder phone if applicable
+    if (newInvestor.accountType === 'joint' && newInvestor.jointHolder.phoneNumber) {
+      newInvestor.jointHolder.phoneNumber = normalizePhoneForDB(newInvestor.jointHolder.phoneNumber)
     }
     
     setEditableData(prev => [...prev, newInvestor])
@@ -253,7 +418,6 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
       lastName: '',
       phoneNumber: '',
       dob: '',
-      ssn: '',
       accountType: 'individual',
       address: {
         street1: '',
@@ -261,6 +425,51 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
         city: '',
         state: '',
         zip: ''
+      },
+      jointHoldingType: '',
+      jointHolder: {
+        firstName: '',
+        lastName: '',
+        email: '',
+        phoneNumber: '',
+        dob: '',
+        address: {
+          street1: '',
+          street2: '',
+          city: '',
+          state: '',
+          zip: ''
+        }
+      },
+      entity: {
+        entityType: 'LLC',
+        name: '',
+        registrationDate: '',
+        taxId: '',
+        address: {
+          street1: '',
+          street2: '',
+          city: '',
+          state: '',
+          zip: ''
+        }
+      },
+      authorizedRepresentative: {
+        firstName: '',
+        lastName: '',
+        dob: '',
+        address: {
+          street1: '',
+          street2: '',
+          city: '',
+          state: '',
+          zip: ''
+        }
+      },
+      ira: {
+        accountType: 'traditional',
+        custodian: '',
+        accountNumber: ''
       },
       investments: []
     })
@@ -275,6 +484,7 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
     })
     
     setError(null)
+    setShowForm(false)
     setStage(IMPORT_STAGES.REVIEW)
   }
 
@@ -311,9 +521,23 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
       {/* Stage: Add Investor */}
       {stage === IMPORT_STAGES.ADD && (
         <div className={styles.stage}>
-          <h3>Add Investor Manually</h3>
-          <p>Fill out the form below to add an investor. You can add multiple investors before importing.</p>
+          <h3>Add Investors from Wealthblock</h3>
+          <p>Manually add investors from your Wealthblock export. You can add multiple investors before importing.</p>
           
+          {!showForm && (
+            <div className={styles.addButtonContainer}>
+              <button onClick={() => setShowForm(true)} className={styles.addNewInvestorButton}>
+                + Add New Investor
+              </button>
+              {editableData.length > 0 && (
+                <p className={styles.addedCount}>
+                  {editableData.length} investor{editableData.length !== 1 ? 's' : ''} added
+                </p>
+              )}
+            </div>
+          )}
+
+          {showForm && (
           <div className={styles.manualForm}>
             {/* User Information Section */}
             <div className={styles.formSection}>
@@ -367,8 +591,11 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
                     type="tel"
                     value={manualForm.phoneNumber}
                     onChange={(e) => handleManualFormChange('phoneNumber', e.target.value)}
-                    placeholder="+1-555-0100"
+                    placeholder="(555) 123-4567"
                   />
+                  {manualForm.phoneNumber && !isCompletePhone(manualForm.phoneNumber) && (
+                    <span className={styles.fieldHint}>Enter 10 digits</span>
+                  )}
                 </div>
                 <div className={styles.formGroup}>
                   <label>Date of Birth</label>
@@ -376,15 +603,6 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
                     type="date"
                     value={manualForm.dob}
                     onChange={(e) => handleManualFormChange('dob', e.target.value)}
-                  />
-                </div>
-                <div className={styles.formGroup}>
-                  <label>SSN/TIN</label>
-                  <input
-                    type="text"
-                    value={manualForm.ssn}
-                    onChange={(e) => handleManualFormChange('ssn', e.target.value)}
-                    placeholder="123-45-6789"
                   />
                 </div>
               </div>
@@ -441,6 +659,340 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
                 </div>
               </div>
             </div>
+
+            {/* Joint Account Fields */}
+            {manualForm.accountType === 'joint' && (
+              <>
+                <div className={styles.formSection}>
+                  <h4>Joint Account Details</h4>
+                  <div className={styles.formGrid}>
+                    <div className={styles.formGroup}>
+                      <label>Joint Holding Type *</label>
+                      <select
+                        value={manualForm.jointHoldingType}
+                        onChange={(e) => handleManualFormChange('jointHoldingType', e.target.value)}
+                        required
+                      >
+                        <option value="">Select holding type</option>
+                        <option value="joint-tenants">Joint Tenants with Right of Survivorship</option>
+                        <option value="tenants-common">Tenants in Common</option>
+                        <option value="community-property">Community Property</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div className={styles.formSection}>
+                  <h4>Joint Holder Information</h4>
+                  <div className={styles.formGrid}>
+                    <div className={styles.formGroup}>
+                      <label>First Name *</label>
+                      <input
+                        type="text"
+                        value={manualForm.jointHolder.firstName}
+                        onChange={(e) => handleManualFormChange('jointHolder.firstName', e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label>Last Name *</label>
+                      <input
+                        type="text"
+                        value={manualForm.jointHolder.lastName}
+                        onChange={(e) => handleManualFormChange('jointHolder.lastName', e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label>Email *</label>
+                      <input
+                        type="email"
+                        value={manualForm.jointHolder.email}
+                        onChange={(e) => handleManualFormChange('jointHolder.email', e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label>Phone Number</label>
+                      <input
+                        type="tel"
+                        value={manualForm.jointHolder.phoneNumber}
+                        onChange={(e) => handleManualFormChange('jointHolder.phoneNumber', e.target.value)}
+                        placeholder="(555) 123-4567"
+                      />
+                      {manualForm.jointHolder.phoneNumber && !isCompletePhone(manualForm.jointHolder.phoneNumber) && (
+                        <span className={styles.fieldHint}>Enter 10 digits</span>
+                      )}
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label>Date of Birth</label>
+                      <input
+                        type="date"
+                        value={manualForm.jointHolder.dob}
+                        onChange={(e) => handleManualFormChange('jointHolder.dob', e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <h5 className={styles.subheading}>Joint Holder Address</h5>
+                  <div className={styles.formGrid}>
+                    <div className={`${styles.formGroup} ${styles.fullWidth}`}>
+                      <label>Street Address 1</label>
+                      <input
+                        type="text"
+                        value={manualForm.jointHolder.address.street1}
+                        onChange={(e) => handleManualFormChange('jointHolder.address.street1', e.target.value)}
+                      />
+                    </div>
+                    <div className={`${styles.formGroup} ${styles.fullWidth}`}>
+                      <label>Street Address 2</label>
+                      <input
+                        type="text"
+                        value={manualForm.jointHolder.address.street2}
+                        onChange={(e) => handleManualFormChange('jointHolder.address.street2', e.target.value)}
+                      />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label>City</label>
+                      <input
+                        type="text"
+                        value={manualForm.jointHolder.address.city}
+                        onChange={(e) => handleManualFormChange('jointHolder.address.city', e.target.value)}
+                      />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label>State</label>
+                      <input
+                        type="text"
+                        value={manualForm.jointHolder.address.state}
+                        onChange={(e) => handleManualFormChange('jointHolder.address.state', e.target.value)}
+                      />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label>ZIP Code</label>
+                      <input
+                        type="text"
+                        value={manualForm.jointHolder.address.zip}
+                        onChange={(e) => handleManualFormChange('jointHolder.address.zip', e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Entity Account Fields */}
+            {manualForm.accountType === 'entity' && (
+              <>
+                <div className={styles.formSection}>
+                  <h4>Entity Information</h4>
+                  <div className={styles.formGrid}>
+                    <div className={styles.formGroup}>
+                      <label>Entity Type *</label>
+                      <select
+                        value={manualForm.entity.entityType}
+                        onChange={(e) => handleManualFormChange('entity.entityType', e.target.value)}
+                        required
+                      >
+                        <option value="LLC">LLC</option>
+                        <option value="Corporation">Corporation</option>
+                        <option value="Partnership">Partnership</option>
+                        <option value="Trust">Trust</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label>Entity Name *</label>
+                      <input
+                        type="text"
+                        value={manualForm.entity.name}
+                        onChange={(e) => handleManualFormChange('entity.name', e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label>Tax ID / EIN *</label>
+                      <input
+                        type="text"
+                        value={manualForm.entity.taxId}
+                        onChange={(e) => handleManualFormChange('entity.taxId', e.target.value)}
+                        placeholder="12-3456789"
+                        required
+                      />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label>Registration Date</label>
+                      <input
+                        type="date"
+                        value={manualForm.entity.registrationDate}
+                        onChange={(e) => handleManualFormChange('entity.registrationDate', e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <h5 className={styles.subheading}>Entity Address</h5>
+                  <div className={styles.formGrid}>
+                    <div className={`${styles.formGroup} ${styles.fullWidth}`}>
+                      <label>Street Address 1</label>
+                      <input
+                        type="text"
+                        value={manualForm.entity.address.street1}
+                        onChange={(e) => handleManualFormChange('entity.address.street1', e.target.value)}
+                      />
+                    </div>
+                    <div className={`${styles.formGroup} ${styles.fullWidth}`}>
+                      <label>Street Address 2</label>
+                      <input
+                        type="text"
+                        value={manualForm.entity.address.street2}
+                        onChange={(e) => handleManualFormChange('entity.address.street2', e.target.value)}
+                      />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label>City</label>
+                      <input
+                        type="text"
+                        value={manualForm.entity.address.city}
+                        onChange={(e) => handleManualFormChange('entity.address.city', e.target.value)}
+                      />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label>State</label>
+                      <input
+                        type="text"
+                        value={manualForm.entity.address.state}
+                        onChange={(e) => handleManualFormChange('entity.address.state', e.target.value)}
+                      />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label>ZIP Code</label>
+                      <input
+                        type="text"
+                        value={manualForm.entity.address.zip}
+                        onChange={(e) => handleManualFormChange('entity.address.zip', e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className={styles.formSection}>
+                  <h4>Authorized Representative</h4>
+                  <div className={styles.formGrid}>
+                    <div className={styles.formGroup}>
+                      <label>First Name *</label>
+                      <input
+                        type="text"
+                        value={manualForm.authorizedRepresentative.firstName}
+                        onChange={(e) => handleManualFormChange('authorizedRepresentative.firstName', e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label>Last Name *</label>
+                      <input
+                        type="text"
+                        value={manualForm.authorizedRepresentative.lastName}
+                        onChange={(e) => handleManualFormChange('authorizedRepresentative.lastName', e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label>Date of Birth</label>
+                      <input
+                        type="date"
+                        value={manualForm.authorizedRepresentative.dob}
+                        onChange={(e) => handleManualFormChange('authorizedRepresentative.dob', e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <h5 className={styles.subheading}>Representative Address</h5>
+                  <div className={styles.formGrid}>
+                    <div className={`${styles.formGroup} ${styles.fullWidth}`}>
+                      <label>Street Address 1</label>
+                      <input
+                        type="text"
+                        value={manualForm.authorizedRepresentative.address.street1}
+                        onChange={(e) => handleManualFormChange('authorizedRepresentative.address.street1', e.target.value)}
+                      />
+                    </div>
+                    <div className={`${styles.formGroup} ${styles.fullWidth}`}>
+                      <label>Street Address 2</label>
+                      <input
+                        type="text"
+                        value={manualForm.authorizedRepresentative.address.street2}
+                        onChange={(e) => handleManualFormChange('authorizedRepresentative.address.street2', e.target.value)}
+                      />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label>City</label>
+                      <input
+                        type="text"
+                        value={manualForm.authorizedRepresentative.address.city}
+                        onChange={(e) => handleManualFormChange('authorizedRepresentative.address.city', e.target.value)}
+                      />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label>State</label>
+                      <input
+                        type="text"
+                        value={manualForm.authorizedRepresentative.address.state}
+                        onChange={(e) => handleManualFormChange('authorizedRepresentative.address.state', e.target.value)}
+                      />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label>ZIP Code</label>
+                      <input
+                        type="text"
+                        value={manualForm.authorizedRepresentative.address.zip}
+                        onChange={(e) => handleManualFormChange('authorizedRepresentative.address.zip', e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* IRA Account Fields */}
+            {manualForm.accountType === 'ira' && (
+              <div className={styles.formSection}>
+                <h4>IRA Account Information</h4>
+                <div className={styles.formGrid}>
+                  <div className={styles.formGroup}>
+                    <label>IRA Type *</label>
+                    <select
+                      value={manualForm.ira.accountType}
+                      onChange={(e) => handleManualFormChange('ira.accountType', e.target.value)}
+                      required
+                    >
+                      <option value="traditional">Traditional IRA</option>
+                      <option value="roth">Roth IRA</option>
+                      <option value="sep">SEP IRA</option>
+                      <option value="simple">SIMPLE IRA</option>
+                    </select>
+                  </div>
+                  <div className={styles.formGroup}>
+                    <label>Custodian *</label>
+                    <input
+                      type="text"
+                      value={manualForm.ira.custodian}
+                      onChange={(e) => handleManualFormChange('ira.custodian', e.target.value)}
+                      placeholder="e.g., Fidelity, Charles Schwab"
+                      required
+                    />
+                  </div>
+                  <div className={styles.formGroup}>
+                    <label>IRA Account Number *</label>
+                    <input
+                      type="text"
+                      value={manualForm.ira.accountNumber}
+                      onChange={(e) => handleManualFormChange('ira.accountNumber', e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Investment Section */}
             <div className={styles.formSection}>
@@ -552,12 +1104,29 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
           </div>
 
           <div className={styles.actions}>
+            <button 
+              onClick={() => {
+                setShowForm(false)
+                setError(null)
+              }} 
+              className={styles.secondaryButton}
+              type="button"
+            >
+              Cancel
+            </button>
             {editableData.length > 0 && (
-              <button onClick={() => setStage(IMPORT_STAGES.REVIEW)} className={styles.secondaryButton}>
+              <button 
+                onClick={() => {
+                  setShowForm(false)
+                  setStage(IMPORT_STAGES.REVIEW)
+                }} 
+                className={styles.secondaryButton}
+                type="button"
+              >
                 Go to Review ({editableData.length})
               </button>
             )}
-            <button onClick={handleAddManualInvestor} className={styles.primaryButton}>
+            <button onClick={handleAddManualInvestor} className={styles.primaryButton} type="button">
               Add to Review List
               {manualForm.investments.length > 0 && (
                 <span className={styles.investmentBadge}>
@@ -566,6 +1135,15 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
               )}
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Show button to go to review if there are investors added */}
+      {!showForm && editableData.length > 0 && stage === IMPORT_STAGES.ADD && (
+        <div className={styles.actions}>
+          <button onClick={() => setStage(IMPORT_STAGES.REVIEW)} className={styles.primaryButton}>
+            Continue to Review ({editableData.length} investor{editableData.length !== 1 ? 's' : ''})
+          </button>
         </div>
       )}
 

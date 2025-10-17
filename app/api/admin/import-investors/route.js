@@ -104,25 +104,44 @@ export async function POST(request) {
         authUserId = authResult.user.id
 
         // 2. Create database user record
+        const userRecord = {
+          id: userId,
+          auth_id: authUserId,
+          email: normalizedEmail,
+          first_name: investorData.firstName || '',
+          last_name: investorData.lastName || '',
+          phone_number: investorData.phoneNumber || '',
+          dob: investorData.dob || '',
+          ssn: '', // Will be filled during onboarding
+          is_verified: false, // Needs email verification
+          verified_at: null,
+          is_admin: false,
+          address: investorData.address || null,
+          account_type: investorData.accountType || 'individual',
+          created_at: timestamp,
+          updated_at: timestamp
+        }
+
+        // Add account-type-specific fields
+        if (investorData.accountType === 'joint') {
+          userRecord.joint_holding_type = investorData.jointHoldingType || null
+          userRecord.joint_holder = investorData.jointHolder || null
+        } else if (investorData.accountType === 'entity') {
+          userRecord.entity_name = investorData.entity?.name || ''
+          userRecord.entity_type = investorData.entity?.entityType || 'LLC'
+          userRecord.tax_id = investorData.entity?.taxId || ''
+          userRecord.entity_registration_date = investorData.entity?.registrationDate || null
+          userRecord.entity_address = investorData.entity?.address || null
+          userRecord.authorized_representative = investorData.authorizedRepresentative || null
+        } else if (investorData.accountType === 'ira') {
+          userRecord.ira_type = investorData.ira?.accountType || 'traditional'
+          userRecord.ira_custodian = investorData.ira?.custodian || ''
+          userRecord.ira_account_number = investorData.ira?.accountNumber || ''
+        }
+
         const { error: userError } = await supabase
           .from('users')
-          .insert({
-            id: userId,
-            auth_id: authUserId,
-            email: normalizedEmail,
-            first_name: investorData.firstName || '',
-            last_name: investorData.lastName || '',
-            phone_number: investorData.phoneNumber || '',
-            dob: investorData.dob || '',
-            ssn: '', // Will be filled during onboarding
-            is_verified: false, // Needs email verification
-            verified_at: null,
-            is_admin: false,
-            address: investorData.address || null,
-            account_type: investorData.accountType || 'individual',
-            created_at: timestamp,
-            updated_at: timestamp
-          })
+          .insert(userRecord)
 
         if (userError) {
           // Rollback: Delete auth user
