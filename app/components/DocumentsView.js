@@ -3,10 +3,12 @@ import { useEffect, useState } from 'react'
 import styles from './DocumentsView.module.css'
 
 export default function DocumentsView() {
+  const [mounted, setMounted] = useState(false)
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    setMounted(true)
     const loadUser = async () => {
       const userId = localStorage.getItem('currentUserId')
       if (!userId) {
@@ -117,6 +119,11 @@ export default function DocumentsView() {
       console.error('Failed to download document:', error)
       alert('Failed to download document')
     }
+  }
+
+  // Prevent hydration mismatch
+  if (!mounted) {
+    return <div className={styles.documentsContainer}>Loading documents...</div>
   }
 
   return (

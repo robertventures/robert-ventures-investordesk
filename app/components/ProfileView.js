@@ -73,6 +73,7 @@ export default function ProfileView() {
     const adultCutoff = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate())
     return date <= adultCutoff
   }
+  const [mounted, setMounted] = useState(false)
   const [userData, setUserData] = useState(null)
   const [formData, setFormData] = useState(null)
   const [isSaving, setIsSaving] = useState(false)
@@ -86,6 +87,7 @@ export default function ProfileView() {
   const [showRepSSN, setShowRepSSN] = useState(false)
 
   useEffect(() => {
+    setMounted(true)
     const loadUser = async () => {
       const userId = localStorage.getItem('currentUserId')
       if (!userId) return
@@ -600,6 +602,11 @@ export default function ProfileView() {
       : userData?.banking?.payoutMethod === 'compounding'
         ? 'Compounding'
         : 'Not set'
+
+  // Prevent hydration mismatch
+  if (!mounted || !userData) {
+    return <div className={styles.profileContainer}>Loading profile...</div>
+  }
 
   return (
     <div className={styles.profileContainer}>
