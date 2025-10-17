@@ -10,6 +10,11 @@ const IMPORT_STAGES = {
   COMPLETE: 'complete'
 }
 
+// US States list
+const US_STATES = [
+  'Alabama','Alaska','Arizona','Arkansas','California','Colorado','Connecticut','Delaware','Florida','Georgia','Hawaii','Idaho','Illinois','Indiana','Iowa','Kansas','Kentucky','Louisiana','Maine','Maryland','Massachusetts','Michigan','Minnesota','Mississippi','Missouri','Montana','Nebraska','Nevada','New Hampshire','New Jersey','New Mexico','New York','North Carolina','North Dakota','Ohio','Oklahoma','Oregon','Pennsylvania','Rhode Island','South Carolina','South Dakota','Tennessee','Texas','Utah','Vermont','Virginia','Washington','West Virginia','Wisconsin','Wyoming'
+]
+
 // Phone formatting and validation
 const formatPhone = (value = '') => {
   const digits = value.replace(/\D/g, '').slice(0, 10)
@@ -31,6 +36,9 @@ const normalizePhoneForDB = (value = '') => {
   }
   return value
 }
+
+// ZIP code formatting (5 digits max)
+const formatZip = (value = '') => value.replace(/\D/g, '').slice(0, 5)
 
 // Names: Allow only letters, spaces, hyphens, apostrophes, and periods
 const formatName = (value = '') => value.replace(/[^a-zA-Z\s'\-\.]/g, '')
@@ -248,6 +256,8 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
     } else if (field === 'firstName' || field === 'lastName' || 
                field.endsWith('.firstName') || field.endsWith('.lastName')) {
       formattedValue = formatName(value)
+    } else if (field.endsWith('.zip')) {
+      formattedValue = formatZip(value)
     }
     
     // Handle nested fields (e.g., address.street1, jointHolder.firstName, entity.name)
@@ -642,12 +652,15 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
                 </div>
                 <div className={styles.formGroup}>
                   <label>State</label>
-                  <input
-                    type="text"
+                  <select
                     value={manualForm.address.state}
                     onChange={(e) => handleManualFormChange('address.state', e.target.value)}
-                    placeholder="California"
-                  />
+                  >
+                    <option value="">Select state</option>
+                    {US_STATES.map(state => (
+                      <option key={state} value={state}>{state}</option>
+                    ))}
+                  </select>
                 </div>
                 <div className={styles.formGroup}>
                   <label>ZIP Code</label>
@@ -656,6 +669,7 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
                     value={manualForm.address.zip}
                     onChange={(e) => handleManualFormChange('address.zip', e.target.value)}
                     placeholder="94102"
+                    maxLength="5"
                   />
                 </div>
               </div>
@@ -763,11 +777,15 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
                     </div>
                     <div className={styles.formGroup}>
                       <label>State</label>
-                      <input
-                        type="text"
+                      <select
                         value={manualForm.jointHolder.address.state}
                         onChange={(e) => handleManualFormChange('jointHolder.address.state', e.target.value)}
-                      />
+                      >
+                        <option value="">Select state</option>
+                        {US_STATES.map(state => (
+                          <option key={state} value={state}>{state}</option>
+                        ))}
+                      </select>
                     </div>
                     <div className={styles.formGroup}>
                       <label>ZIP Code</label>
@@ -775,6 +793,7 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
                         type="text"
                         value={manualForm.jointHolder.address.zip}
                         onChange={(e) => handleManualFormChange('jointHolder.address.zip', e.target.value)}
+                        maxLength="5"
                       />
                     </div>
                   </div>
@@ -859,11 +878,15 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
                     </div>
                     <div className={styles.formGroup}>
                       <label>State</label>
-                      <input
-                        type="text"
+                      <select
                         value={manualForm.entity.address.state}
                         onChange={(e) => handleManualFormChange('entity.address.state', e.target.value)}
-                      />
+                      >
+                        <option value="">Select state</option>
+                        {US_STATES.map(state => (
+                          <option key={state} value={state}>{state}</option>
+                        ))}
+                      </select>
                     </div>
                     <div className={styles.formGroup}>
                       <label>ZIP Code</label>
@@ -871,6 +894,7 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
                         type="text"
                         value={manualForm.entity.address.zip}
                         onChange={(e) => handleManualFormChange('entity.address.zip', e.target.value)}
+                        maxLength="5"
                       />
                     </div>
                   </div>
@@ -935,11 +959,15 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
                     </div>
                     <div className={styles.formGroup}>
                       <label>State</label>
-                      <input
-                        type="text"
+                      <select
                         value={manualForm.authorizedRepresentative.address.state}
                         onChange={(e) => handleManualFormChange('authorizedRepresentative.address.state', e.target.value)}
-                      />
+                      >
+                        <option value="">Select state</option>
+                        {US_STATES.map(state => (
+                          <option key={state} value={state}>{state}</option>
+                        ))}
+                      </select>
                     </div>
                     <div className={styles.formGroup}>
                       <label>ZIP Code</label>
@@ -947,6 +975,7 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
                         type="text"
                         value={manualForm.authorizedRepresentative.address.zip}
                         onChange={(e) => handleManualFormChange('authorizedRepresentative.address.zip', e.target.value)}
+                        maxLength="5"
                       />
                     </div>
                   </div>
@@ -1347,6 +1376,12 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
       {stage === IMPORT_STAGES.COMPLETE && importResults && (
         <div className={styles.stage}>
           <h3>✅ Import Complete!</h3>
+          
+          {importResults.imported > 0 && (
+            <div className={styles.warningMessage}>
+              <strong>⚠️ IMPORTANT:</strong> To see distributions and contributions in user activity, you must click <strong>"Regenerate Transactions"</strong> in the Operations tab above. This will calculate all historical distributions based on the investment dates you provided.
+            </div>
+          )}
           
           {importResults.message && (
             <div className={styles.importMessage}>
