@@ -1135,7 +1135,6 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
               )}
             </button>
           </div>
-        </div>
       )}
 
           {/* Show button to go to review if there are investors added */}
