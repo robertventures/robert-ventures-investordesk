@@ -1138,12 +1138,14 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
         </div>
       )}
 
-      {/* Show button to go to review if there are investors added */}
-      {!showForm && editableData.length > 0 && stage === IMPORT_STAGES.ADD && (
-        <div className={styles.actions}>
-          <button onClick={() => setStage(IMPORT_STAGES.REVIEW)} className={styles.primaryButton}>
-            Continue to Review ({editableData.length} investor{editableData.length !== 1 ? 's' : ''})
-          </button>
+          {/* Show button to go to review if there are investors added */}
+          {!showForm && editableData.length > 0 && (
+            <div className={styles.actions}>
+              <button onClick={() => setStage(IMPORT_STAGES.REVIEW)} className={styles.primaryButton}>
+                Continue to Review ({editableData.length} investor{editableData.length !== 1 ? 's' : ''})
+              </button>
+            </div>
+          )}
         </div>
       )}
 
