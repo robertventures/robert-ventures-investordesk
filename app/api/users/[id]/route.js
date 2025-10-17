@@ -41,24 +41,53 @@ export async function GET(request, { params }) {
       investments: user.investments || [],
       withdrawals: user.withdrawals || [],
       bankAccounts: user.bank_accounts || [],
-      activity: user.activity || []
+      activity: user.activity || [],
+      jointHolder: user.joint_holder || null,
+      jointHoldingType: user.joint_holding_type || null,
+      entityName: user.entity_name || null,
+      authorizedRepresentative: user.authorized_representative || null
     }
 
-    // Decrypt SSN if requested and user has permission
-    // (You might want to add authentication checks here)
+    // Always include SSN indicator (encrypted or decrypted based on query param)
     const { searchParams } = new URL(request.url)
     const includeSSN = searchParams.get('includeSSN') === 'true'
     
-    if (includeSSN && user.ssn) {
-      if (isEncrypted(user.ssn)) {
+    // Helper to handle SSN masking/decryption
+    const handleSSN = (ssnValue) => {
+      if (!ssnValue) return undefined
+      
+      if (includeSSN && isEncrypted(ssnValue)) {
         try {
-          safeUser.ssn = decrypt(user.ssn)
+          return decrypt(ssnValue)
         } catch (error) {
           console.error('Failed to decrypt SSN:', error)
-          // Don't expose SSN if decryption fails
+          return '•••-••-••••'
         }
+      } else if (includeSSN) {
+        return ssnValue
       } else {
-        safeUser.ssn = user.ssn
+        return '•••-••-••••'
+      }
+    }
+    
+    // Handle main user SSN
+    if (user.ssn) {
+      safeUser.ssn = handleSSN(user.ssn)
+    }
+    
+    // Handle joint holder SSN
+    if (safeUser.jointHolder && user.joint_holder?.ssn) {
+      safeUser.jointHolder = {
+        ...safeUser.jointHolder,
+        ssn: handleSSN(user.joint_holder.ssn)
+      }
+    }
+    
+    // Handle authorized representative SSN
+    if (safeUser.authorizedRepresentative && user.authorized_representative?.ssn) {
+      safeUser.authorizedRepresentative = {
+        ...safeUser.authorizedRepresentative,
+        ssn: handleSSN(user.authorized_representative.ssn)
       }
     }
 

@@ -698,7 +698,18 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
                 <label className={styles.label}>SSN</label>
                 <button type="button" className={styles.helpLink} onClick={() => setShowAuthorizedRepSsnHelp(v => !v)}>Why do we need this?</button>
               </div>
-              <input className={`${styles.input} ${errors['authorizedRep.ssn'] ? styles.inputError : ''}`} name="authorizedRep.ssn" value={form.authorizedRep.ssn} onChange={handleChange} placeholder="123-45-6789" inputMode="numeric" disabled={hasActiveInvestments} readOnly={hasActiveInvestments} />
+              <input 
+                className={`${styles.input} ${errors['authorizedRep.ssn'] ? styles.inputError : ''}`} 
+                type="password"
+                name="authorizedRep.ssn" 
+                value={form.authorizedRep.ssn} 
+                onChange={handleChange} 
+                placeholder="123-45-6789" 
+                inputMode="numeric" 
+                disabled={hasActiveInvestments} 
+                readOnly={hasActiveInvestments}
+                autoComplete="off"
+              />
               {errors['authorizedRep.ssn'] && <span className={styles.error}>{errors['authorizedRep.ssn']}</span>}
               {showAuthorizedRepSsnHelp && (
                 <div className={styles.helpText}>
@@ -798,7 +809,18 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
               Why do we need this?
             </button>
           </div>
-          <input className={`${styles.input} ${errors.ssn ? styles.inputError : ''}`} name="ssn" value={form.ssn} onChange={handleChange} placeholder={accountType === 'entity' ? 'Enter EIN or TIN' : '123-45-6789'} inputMode="numeric" disabled={hasActiveInvestments} readOnly={hasActiveInvestments} />
+          <input 
+            className={`${styles.input} ${errors.ssn ? styles.inputError : ''}`} 
+            type="password"
+            name="ssn" 
+            value={form.ssn} 
+            onChange={handleChange} 
+            placeholder={accountType === 'entity' ? 'Enter EIN or TIN' : '123-45-6789'} 
+            inputMode="numeric" 
+            disabled={hasActiveInvestments} 
+            readOnly={hasActiveInvestments}
+            autoComplete="off"
+          />
           {errors.ssn && <span className={styles.error}>{errors.ssn}</span>}
           {showSsnHelp && (
             <div className={styles.helpText}>
@@ -849,7 +871,18 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
                 <label className={styles.label}>SSN</label>
                 <button type="button" className={styles.helpLink} onClick={() => setShowJointSsnHelp(v => !v)}>Why do we need this?</button>
               </div>
-              <input className={`${styles.input} ${errors['jointHolder.ssn'] ? styles.inputError : ''}`} name="jointHolder.ssn" value={form.jointHolder.ssn} onChange={handleChange} placeholder="123-45-6789" inputMode="numeric" disabled={hasActiveInvestments} readOnly={hasActiveInvestments} />
+              <input 
+                className={`${styles.input} ${errors['jointHolder.ssn'] ? styles.inputError : ''}`} 
+                type="password"
+                name="jointHolder.ssn" 
+                value={form.jointHolder.ssn} 
+                onChange={handleChange} 
+                placeholder="123-45-6789" 
+                inputMode="numeric" 
+                disabled={hasActiveInvestments} 
+                readOnly={hasActiveInvestments}
+                autoComplete="off"
+              />
               {errors['jointHolder.ssn'] && <span className={styles.error}>{errors['jointHolder.ssn']}</span>}
               {showJointSsnHelp && (
                 <div className={styles.helpText}>
