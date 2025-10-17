@@ -412,7 +412,10 @@ export default function PortfolioSummary() {
                 </div>
               </div>
               <div className={styles.cardBottom}>
-                <div className={styles.viewDetails} onClick={() => router.push('/investment')}>Start an Investment →</div>
+                <div className={styles.viewDetails} onClick={() => {
+                  try { localStorage.removeItem('currentInvestmentId') } catch {}
+                  router.push('/investment')
+                }}>Start an Investment →</div>
               </div>
             </div>
           </div>

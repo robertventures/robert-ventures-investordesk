@@ -30,6 +30,10 @@ export default function DashboardHeader({ onViewChange, activeView }) {
   }, [router])
 
   const handleMakeInvestment = () => {
+    try {
+      // Force a fresh draft on new investment flow
+      localStorage.removeItem('currentInvestmentId')
+    } catch {}
     router.push('/investment')
   }
 
@@ -142,7 +146,11 @@ export default function DashboardHeader({ onViewChange, activeView }) {
             <button className={styles.mobileNavItem} onClick={() => handleNavSelect('documents')}>Documents</button>
             <button className={styles.mobileNavItem} onClick={() => handleNavSelect('activity')}>Activity</button>
             <button className={styles.mobileNavItem} onClick={() => handleNavSelect('contact')}>Contact</button>
-            <button className={styles.mobileNavItem} onClick={() => { setShowMobileNav(false); router.push('/investment') }}>Make an Investment</button>
+            <button className={styles.mobileNavItem} onClick={() => { 
+              setShowMobileNav(false); 
+              try { localStorage.removeItem('currentInvestmentId') } catch {}
+              router.push('/investment') 
+            }}>Make an Investment</button>
             <div className={styles.mobileDivider}></div>
             <button className={styles.mobileNavItem} onClick={() => { setShowMobileNav(false); handleLogout() }}>Sign Out</button>
           </div>

@@ -111,7 +111,39 @@ export default function InvestmentForm({ onCompleted, onReviewSummary, disableAu
     if (!userId) {
       alert('Please complete the signup process first.')
       router.push('/')
+      return
     }
+
+    // Load draft investment data if resuming
+    const loadDraftData = async () => {
+      const investmentId = typeof window !== 'undefined' ? localStorage.getItem('currentInvestmentId') : null
+      if (!investmentId) return
+
+      try {
+        const res = await fetch(`/api/users/${userId}`)
+        const data = await res.json()
+        if (data.success && data.user) {
+          const investment = data.user.investments?.find(inv => inv.id === investmentId)
+          if (investment && investment.status === 'draft') {
+            // Load saved draft values
+            if (investment.amount) {
+              setFormData(prev => ({ ...prev, investmentAmount: investment.amount }))
+              setDisplayAmount(investment.amount.toLocaleString())
+            }
+            if (investment.paymentFrequency) {
+              setFormData(prev => ({ ...prev, paymentFrequency: investment.paymentFrequency }))
+            }
+            if (investment.lockupPeriod) {
+              setSelectedLockup(investment.lockupPeriod)
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load draft investment:', error)
+      }
+    }
+
+    loadDraftData()
   }, [router, disableAuthGuard])
 
   // Keep in sync if parent updates values
@@ -204,37 +236,71 @@ export default function InvestmentForm({ onCompleted, onReviewSummary, disableAu
         bonds
       }
 
-      // Always start a fresh draft for a new investment flow
-      try { if (typeof window !== 'undefined') localStorage.removeItem('currentInvestmentId') } catch {}
-
-      // Create new draft investment
-      const res = await fetch(`/api/users/${userId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ _action: 'startInvestment', investment: investmentPayload })
-      })
-      const data = await res.json()
-      if (!data.success) {
-        alert(data.error || 'Failed to start investment')
-        return
-      }
-      // Save current investment id for next steps
-      if (data.investment?.id) {
-        localStorage.setItem('currentInvestmentId', data.investment.id)
-        // If account type was already chosen earlier in the step, persist it now
+      // Check if resuming an existing draft investment
+      const existingInvestmentId = typeof window !== 'undefined' ? localStorage.getItem('currentInvestmentId') : null
+      
+      if (existingInvestmentId) {
+        // Update existing draft investment
+        const res = await fetch(`/api/users/${userId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            _action: 'updateInvestment',
+            investmentId: existingInvestmentId,
+            fields: investmentPayload
+          })
+        })
+        const data = await res.json()
+        if (!data.success) {
+          alert(data.error || 'Failed to update investment')
+          return
+        }
+        
+        // If account type was already chosen, update it
         if (accountType) {
           await fetch(`/api/users/${userId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               _action: 'updateInvestment',
-              investmentId: data.investment.id,
+              investmentId: existingInvestmentId,
               fields: { accountType }
             })
           })
         }
+        
+        notifyCompletion(existingInvestmentId, lockupPeriod)
+      } else {
+        // Create new draft investment
+        const res = await fetch(`/api/users/${userId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ _action: 'startInvestment', investment: investmentPayload })
+        })
+        const data = await res.json()
+        if (!data.success) {
+          alert(data.error || 'Failed to start investment')
+          return
+        }
+        
+        // Save current investment id for next steps
+        if (data.investment?.id) {
+          localStorage.setItem('currentInvestmentId', data.investment.id)
+          // If account type was already chosen earlier in the step, persist it now
+          if (accountType) {
+            await fetch(`/api/users/${userId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                _action: 'updateInvestment',
+                investmentId: data.investment.id,
+                fields: { accountType }
+              })
+            })
+          }
+        }
+        notifyCompletion(data.investment?.id, lockupPeriod)
       }
-      notifyCompletion(data.investment?.id, lockupPeriod)
     } catch (err) {
       console.error('Error starting investment', err)
       alert('An error occurred. Please try again.')
