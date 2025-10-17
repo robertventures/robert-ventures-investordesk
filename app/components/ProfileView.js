@@ -91,7 +91,7 @@ export default function ProfileView() {
       if (!userId) return
 
       try {
-        const res = await fetch(`/api/users/${userId}`)
+        const res = await fetch(`/api/users/${userId}?includeSSN=true`)
         const data = await res.json()
         if (data.success && data.user) {
           setUserData(data.user)
