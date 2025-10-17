@@ -444,7 +444,7 @@ export default function PortfolioSummary() {
                     <span className={styles.investmentBadge}>Investment {String(inv.id).slice(-6)}</span>
                   </div>
                   <div className={styles.compactMetric}>
-                    <span className={styles.compactLabel}>Approval Date</span>
+                    <span className={styles.compactLabel}>Confirmation Date</span>
                     <span className={styles.compactValue}>{inv.confirmedAt ? formatDate(inv.confirmedAt) : (inv.status.status === 'pending' ? 'Pending' : '—')}</span>
                   </div>
                   <div className={styles.compactMetric}>
