@@ -538,6 +538,7 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
           )}
 
           {showForm && (
+          <>
           <div className={styles.manualForm}>
             {/* User Information Section */}
             <div className={styles.formSection}>
@@ -1135,6 +1136,7 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
               )}
             </button>
           </div>
+          </>
       )}
 
           {/* Show button to go to review if there are investors added */}
