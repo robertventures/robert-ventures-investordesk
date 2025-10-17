@@ -1,69 +1,21 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
-import Papa from 'papaparse'
+import { useState } from 'react'
 import styles from './ImportInvestorsTab.module.css'
 
-/**
- * Field definitions for investor import
- * Maps internal field names to user-friendly labels
- */
-const FIELD_DEFINITIONS = {
-  // Required user fields
-  email: { label: 'Email', required: true, category: 'User Profile' },
-  firstName: { label: 'First Name', required: true, category: 'User Profile' },
-  lastName: { label: 'Last Name', required: true, category: 'User Profile' },
-  
-  // Optional user fields
-  phoneNumber: { label: 'Phone Number', required: false, category: 'User Profile' },
-  dob: { label: 'Date of Birth', required: false, category: 'User Profile' },
-  ssn: { label: 'SSN/TIN', required: false, category: 'User Profile' },
-  accountType: { label: 'Account Type', required: false, category: 'User Profile' },
-  
-  // Address fields
-  'address.street1': { label: 'Address Street 1', required: false, category: 'Address' },
-  'address.street2': { label: 'Address Street 2', required: false, category: 'Address' },
-  'address.city': { label: 'City', required: false, category: 'Address' },
-  'address.state': { label: 'State', required: false, category: 'Address' },
-  'address.zip': { label: 'ZIP Code', required: false, category: 'Address' },
-  
-  // Investment fields
-  'investment.amount': { label: 'Investment Amount', required: false, category: 'Investment' },
-  'investment.paymentFrequency': { label: 'Payment Frequency', required: false, category: 'Investment' },
-  'investment.lockupPeriod': { label: 'Lockup Period', required: false, category: 'Investment' },
-  'investment.createdDate': { label: 'Investment Created Date', required: false, category: 'Investment' },
-  'investment.confirmedDate': { label: 'Investment Confirmed Date', required: false, category: 'Investment' },
-  'investment.status': { label: 'Investment Status', required: false, category: 'Investment' },
-  
-  // Dates
-  createdAt: { label: 'Account Created Date', required: false, category: 'Dates' },
-  verifiedAt: { label: 'Verified Date', required: false, category: 'Dates' }
-}
-
 const IMPORT_STAGES = {
-  UPLOAD: 'upload',
-  MAPPING: 'mapping',
+  ADD: 'add',
   REVIEW: 'review',
   IMPORTING: 'importing',
   COMPLETE: 'complete'
 }
 
-const IMPORT_MODES = {
-  CSV: 'csv',
-  MANUAL: 'manual'
-}
-
 export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
-  const [importMode, setImportMode] = useState(null) // null, 'csv', or 'manual'
-  const [stage, setStage] = useState(IMPORT_STAGES.UPLOAD)
-  const [csvData, setCsvData] = useState(null)
-  const [csvHeaders, setCsvHeaders] = useState([])
-  const [fieldMapping, setFieldMapping] = useState({})
+  const [stage, setStage] = useState(IMPORT_STAGES.ADD)
   const [editableData, setEditableData] = useState([])
   const [importResults, setImportResults] = useState(null)
   const [error, setError] = useState(null)
   const [isProcessing, setIsProcessing] = useState(false)
-  const fileInputRef = useRef(null)
   
   // Manual form state
   const [manualForm, setManualForm] = useState({
@@ -81,149 +33,19 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
       state: '',
       zip: ''
     },
-    investment: {
-      amount: '',
-      paymentFrequency: 'compounding',
-      lockupPeriod: '1-year',
-      createdDate: '',
-      confirmedDate: '',
-      status: 'active'
-    }
+    investments: []
   })
 
-  // Handle CSV file upload
-  const handleFileUpload = useCallback((event) => {
-    const file = event.target.files[0]
-    if (!file) return
+  // Current investment being added
+  const [currentInvestment, setCurrentInvestment] = useState({
+    amount: '',
+    paymentFrequency: 'compounding',
+    lockupPeriod: '1-year',
+    createdDate: '',
+    confirmedDate: '',
+    status: 'active'
+  })
 
-    setError(null)
-    setIsProcessing(true)
-
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        if (results.errors.length > 0) {
-          setError(`CSV parsing errors: ${results.errors.map(e => e.message).join(', ')}`)
-          setIsProcessing(false)
-          return
-        }
-
-        const headers = results.meta.fields || []
-        setCsvHeaders(headers)
-        setCsvData(results.data)
-        
-        // Auto-detect field mappings
-        const autoMapping = autoDetectFieldMapping(headers)
-        setFieldMapping(autoMapping)
-        
-        setStage(IMPORT_STAGES.MAPPING)
-        setIsProcessing(false)
-      },
-      error: (error) => {
-        setError(`Failed to parse CSV: ${error.message}`)
-        setIsProcessing(false)
-      }
-    })
-  }, [])
-
-  // Auto-detect field mappings based on CSV headers
-  const autoDetectFieldMapping = (headers) => {
-    const mapping = {}
-    
-    headers.forEach(header => {
-      const lowerHeader = header.toLowerCase().trim()
-      
-      // Common mappings
-      if (lowerHeader.includes('email') || lowerHeader === 'e-mail') {
-        mapping[header] = 'email'
-      } else if (lowerHeader.includes('first') && lowerHeader.includes('name')) {
-        mapping[header] = 'firstName'
-      } else if (lowerHeader.includes('last') && lowerHeader.includes('name')) {
-        mapping[header] = 'lastName'
-      } else if (lowerHeader.includes('phone')) {
-        mapping[header] = 'phoneNumber'
-      } else if (lowerHeader.includes('dob') || lowerHeader.includes('birth')) {
-        mapping[header] = 'dob'
-      } else if (lowerHeader.includes('ssn') || lowerHeader.includes('tax') && lowerHeader.includes('id')) {
-        mapping[header] = 'ssn'
-      } else if (lowerHeader.includes('account') && lowerHeader.includes('type')) {
-        mapping[header] = 'accountType'
-      } else if (lowerHeader.includes('street') || lowerHeader.includes('address')) {
-        mapping[header] = 'address.street1'
-      } else if (lowerHeader.includes('city')) {
-        mapping[header] = 'address.city'
-      } else if (lowerHeader.includes('state')) {
-        mapping[header] = 'address.state'
-      } else if (lowerHeader.includes('zip') || lowerHeader.includes('postal')) {
-        mapping[header] = 'address.zip'
-      } else if (lowerHeader.includes('amount') || lowerHeader.includes('investment')) {
-        mapping[header] = 'investment.amount'
-      } else if (lowerHeader.includes('payment') && lowerHeader.includes('freq')) {
-        mapping[header] = 'investment.paymentFrequency'
-      } else if (lowerHeader.includes('lockup')) {
-        mapping[header] = 'investment.lockupPeriod'
-      } else if (lowerHeader.includes('created') && (lowerHeader.includes('invest') || lowerHeader.includes('start'))) {
-        mapping[header] = 'investment.createdDate'
-      } else if (lowerHeader.includes('confirmed') || lowerHeader.includes('funded') || lowerHeader.includes('active')) {
-        mapping[header] = 'investment.confirmedDate'
-      } else if (lowerHeader.includes('created') && lowerHeader.includes('account')) {
-        mapping[header] = 'createdAt'
-      }
-    })
-    
-    return mapping
-  }
-
-  // Update field mapping
-  const handleMappingChange = (csvHeader, targetField) => {
-    setFieldMapping(prev => ({
-      ...prev,
-      [csvHeader]: targetField
-    }))
-  }
-
-  // Proceed to review stage
-  const proceedToReview = () => {
-    // Check required fields are mapped
-    const requiredFields = Object.keys(FIELD_DEFINITIONS).filter(
-      key => FIELD_DEFINITIONS[key].required
-    )
-    
-    const mappedFields = Object.values(fieldMapping)
-    const missingFields = requiredFields.filter(field => !mappedFields.includes(field))
-    
-    if (missingFields.length > 0) {
-      setError(`Missing required field mappings: ${missingFields.map(f => FIELD_DEFINITIONS[f].label).join(', ')}`)
-      return
-    }
-
-    // Transform CSV data to editable format
-    const transformedData = csvData.map((row, index) => {
-      const investor = { _rowId: index }
-      
-      Object.entries(fieldMapping).forEach(([csvHeader, targetField]) => {
-        if (!targetField || targetField === '') return
-        
-        const value = row[csvHeader]
-        
-        // Handle nested fields (e.g., address.city)
-        if (targetField.includes('.')) {
-          const [parent, child] = targetField.split('.')
-          if (!investor[parent]) investor[parent] = {}
-          investor[parent][child] = value
-        } else {
-          investor[targetField] = value
-        }
-      })
-      
-      return investor
-    })
-    
-    setEditableData(transformedData)
-    setStage(IMPORT_STAGES.REVIEW)
-    setError(null)
-  }
 
   // Handle data editing in review stage
   const handleDataEdit = (rowId, field, value) => {
@@ -266,17 +88,16 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
         const investor = { ...row }
         delete investor._rowId
         
-        // If investment data is present, structure it properly
-        if (investor.investment && Object.keys(investor.investment).some(k => investor.investment[k])) {
-          investor.investments = [{
-            amount: parseFloat(investor.investment.amount) || 0,
-            paymentFrequency: investor.investment.paymentFrequency || 'compounding',
-            lockupPeriod: investor.investment.lockupPeriod || '1-year',
-            createdDate: investor.investment.createdDate || new Date().toISOString(),
-            confirmedDate: investor.investment.confirmedDate || investor.investment.createdDate || new Date().toISOString(),
-            status: investor.investment.status || 'active'
-          }]
-          delete investor.investment
+        // Process investments array
+        if (investor.investments && Array.isArray(investor.investments)) {
+          investor.investments = investor.investments.map(inv => ({
+            amount: parseFloat(inv.amount) || 0,
+            paymentFrequency: inv.paymentFrequency || 'compounding',
+            lockupPeriod: inv.lockupPeriod || '1-year',
+            createdDate: inv.createdDate || new Date().toISOString(),
+            confirmedDate: inv.confirmedDate || inv.createdDate || new Date().toISOString(),
+            status: inv.status || 'active'
+          })).filter(inv => inv.amount > 0) // Only include investments with amount
         }
         
         return investor
@@ -363,6 +184,52 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
     }
   }
 
+  // Handle current investment field changes
+  const handleInvestmentChange = (field, value) => {
+    setCurrentInvestment(prev => ({
+      ...prev,
+      [field]: value
+    }))
+  }
+
+  // Add investment to list
+  const handleAddInvestment = () => {
+    if (!currentInvestment.amount) {
+      setError('Investment amount is required')
+      return
+    }
+
+    const newInvestment = {
+      ...currentInvestment,
+      id: `TEMP-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    }
+
+    setManualForm(prev => ({
+      ...prev,
+      investments: [...prev.investments, newInvestment]
+    }))
+
+    // Reset current investment form
+    setCurrentInvestment({
+      amount: '',
+      paymentFrequency: 'compounding',
+      lockupPeriod: '1-year',
+      createdDate: '',
+      confirmedDate: '',
+      status: 'active'
+    })
+
+    setError(null)
+  }
+
+  // Remove investment from list
+  const handleRemoveInvestment = (investmentId) => {
+    setManualForm(prev => ({
+      ...prev,
+      investments: prev.investments.filter(inv => inv.id !== investmentId)
+    }))
+  }
+
   // Add manual form data to review
   const handleAddManualInvestor = () => {
     // Validate required fields
@@ -395,14 +262,16 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
         state: '',
         zip: ''
       },
-      investment: {
-        amount: '',
-        paymentFrequency: 'compounding',
-        lockupPeriod: '1-year',
-        createdDate: '',
-        confirmedDate: '',
-        status: 'active'
-      }
+      investments: []
+    })
+
+    setCurrentInvestment({
+      amount: '',
+      paymentFrequency: 'compounding',
+      lockupPeriod: '1-year',
+      createdDate: '',
+      confirmedDate: '',
+      status: 'active'
     })
     
     setError(null)
@@ -411,40 +280,26 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
 
   // Reset to start
   const handleReset = () => {
-    setImportMode(null)
-    setStage(IMPORT_STAGES.UPLOAD)
-    setCsvData(null)
-    setCsvHeaders([])
-    setFieldMapping({})
+    setStage(IMPORT_STAGES.ADD)
     setEditableData([])
     setImportResults(null)
     setError(null)
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ''
-    }
   }
 
   return (
     <div className={styles.container}>
-      {/* Stage Indicator - Only show if mode is selected */}
-      {importMode && (
-        <div className={styles.stageIndicator}>
-          <div className={`${styles.stageItem} ${stage === IMPORT_STAGES.UPLOAD ? styles.active : ''}`}>
-            {importMode === IMPORT_MODES.CSV ? '1. Upload CSV' : '1. Add Investor'}
-          </div>
-          {importMode === IMPORT_MODES.CSV && (
-            <div className={`${styles.stageItem} ${stage === IMPORT_STAGES.MAPPING ? styles.active : ''}`}>
-              2. Map Fields
-            </div>
-          )}
-          <div className={`${styles.stageItem} ${stage === IMPORT_STAGES.REVIEW ? styles.active : ''}`}>
-            {importMode === IMPORT_MODES.CSV ? '3. Review & Edit' : '2. Review & Edit'}
-          </div>
-          <div className={`${styles.stageItem} ${stage === IMPORT_STAGES.IMPORTING || stage === IMPORT_STAGES.COMPLETE ? styles.active : ''}`}>
-            {importMode === IMPORT_MODES.CSV ? '4. Import' : '3. Import'}
-          </div>
+      {/* Stage Indicator */}
+      <div className={styles.stageIndicator}>
+        <div className={`${styles.stageItem} ${stage === IMPORT_STAGES.ADD ? styles.active : ''}`}>
+          1. Add Investor
         </div>
-      )}
+        <div className={`${styles.stageItem} ${stage === IMPORT_STAGES.REVIEW ? styles.active : ''}`}>
+          2. Review & Edit
+        </div>
+        <div className={`${styles.stageItem} ${stage === IMPORT_STAGES.IMPORTING || stage === IMPORT_STAGES.COMPLETE ? styles.active : ''}`}>
+          3. Import
+        </div>
+      </div>
 
       {/* Error Display */}
       {error && (
@@ -453,75 +308,8 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
         </div>
       )}
 
-      {/* Mode Selection */}
-      {!importMode && stage === IMPORT_STAGES.UPLOAD && (
-        <div className={styles.stage}>
-          <h3>Add Investors</h3>
-          <p>Choose how you want to add investors to the platform.</p>
-          
-          <div className={styles.modeSelection}>
-            <div 
-              className={styles.modeCard}
-              onClick={() => setImportMode(IMPORT_MODES.CSV)}
-            >
-              <div className={styles.modeIcon}>📄</div>
-              <h4>Upload CSV File</h4>
-              <p>Import multiple investors at once from a CSV file exported from Wealthblock or other platforms.</p>
-              <button className={styles.modeButton}>Choose CSV Upload</button>
-            </div>
-
-            <div 
-              className={styles.modeCard}
-              onClick={() => {
-                setImportMode(IMPORT_MODES.MANUAL)
-                setStage(IMPORT_STAGES.UPLOAD)
-              }}
-            >
-              <div className={styles.modeIcon}>✍️</div>
-              <h4>Add Manually</h4>
-              <p>Add investors one at a time by filling out a form with their information.</p>
-              <button className={styles.modeButton}>Choose Manual Entry</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Stage: CSV Upload */}
-      {importMode === IMPORT_MODES.CSV && stage === IMPORT_STAGES.UPLOAD && (
-        <div className={styles.stage}>
-          <h3>Upload Investor Data</h3>
-          <p>Upload a CSV file exported from Wealthblock containing investor information.</p>
-          
-          <div className={styles.uploadArea}>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".csv,.xlsx,.xls"
-              onChange={handleFileUpload}
-              disabled={isProcessing}
-              className={styles.fileInput}
-            />
-            {isProcessing && <p>Processing file...</p>}
-          </div>
-
-          <div className={styles.help}>
-            <h4>Expected Fields:</h4>
-            <ul>
-              <li><strong>Required:</strong> Email, First Name, Last Name</li>
-              <li><strong>Optional:</strong> Phone, DOB, SSN, Address, Investment Details</li>
-            </ul>
-          </div>
-
-          <div className={styles.actions}>
-            <button onClick={handleReset} className={styles.secondaryButton}>
-              Back to Mode Selection
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Stage: Manual Form */}
-      {importMode === IMPORT_MODES.MANUAL && stage === IMPORT_STAGES.UPLOAD && (
+      {/* Stage: Add Investor */}
+      {stage === IMPORT_STAGES.ADD && (
         <div className={styles.stage}>
           <h3>Add Investor Manually</h3>
           <p>Fill out the form below to add an investor. You can add multiple investors before importing.</p>
@@ -657,118 +445,125 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
             {/* Investment Section */}
             <div className={styles.formSection}>
               <h4>Investment Details (Optional)</h4>
-              <div className={styles.formGrid}>
-                <div className={styles.formGroup}>
-                  <label>Investment Amount</label>
-                  <input
-                    type="number"
-                    value={manualForm.investment.amount}
-                    onChange={(e) => handleManualFormChange('investment.amount', e.target.value)}
-                    placeholder="50000"
-                    min="0"
-                    step="1000"
-                  />
+              <p className={styles.sectionNote}>
+                Add investments for this investor. You can add multiple investments.
+              </p>
+              
+              {/* Add Investment Form */}
+              <div className={styles.investmentForm}>
+                <div className={styles.formGrid}>
+                  <div className={styles.formGroup}>
+                    <label>Investment Amount</label>
+                    <input
+                      type="number"
+                      value={currentInvestment.amount}
+                      onChange={(e) => handleInvestmentChange('amount', e.target.value)}
+                      placeholder="50000"
+                      min="0"
+                      step="1000"
+                    />
+                  </div>
+                  <div className={styles.formGroup}>
+                    <label>Payment Frequency</label>
+                    <select
+                      value={currentInvestment.paymentFrequency}
+                      onChange={(e) => handleInvestmentChange('paymentFrequency', e.target.value)}
+                    >
+                      <option value="monthly">Monthly</option>
+                      <option value="compounding">Compounding</option>
+                    </select>
+                  </div>
+                  <div className={styles.formGroup}>
+                    <label>Lockup Period</label>
+                    <select
+                      value={currentInvestment.lockupPeriod}
+                      onChange={(e) => handleInvestmentChange('lockupPeriod', e.target.value)}
+                    >
+                      <option value="1-year">1 Year</option>
+                      <option value="3-year">3 Years</option>
+                    </select>
+                  </div>
+                  <div className={styles.formGroup}>
+                    <label>Investment Created Date</label>
+                    <input
+                      type="date"
+                      value={currentInvestment.createdDate}
+                      onChange={(e) => handleInvestmentChange('createdDate', e.target.value)}
+                    />
+                  </div>
+                  <div className={styles.formGroup}>
+                    <label>Investment Confirmed Date</label>
+                    <input
+                      type="date"
+                      value={currentInvestment.confirmedDate}
+                      onChange={(e) => handleInvestmentChange('confirmedDate', e.target.value)}
+                    />
+                  </div>
                 </div>
-                <div className={styles.formGroup}>
-                  <label>Payment Frequency</label>
-                  <select
-                    value={manualForm.investment.paymentFrequency}
-                    onChange={(e) => handleManualFormChange('investment.paymentFrequency', e.target.value)}
-                  >
-                    <option value="monthly">Monthly</option>
-                    <option value="compounding">Compounding</option>
-                  </select>
-                </div>
-                <div className={styles.formGroup}>
-                  <label>Lockup Period</label>
-                  <select
-                    value={manualForm.investment.lockupPeriod}
-                    onChange={(e) => handleManualFormChange('investment.lockupPeriod', e.target.value)}
-                  >
-                    <option value="1-year">1 Year</option>
-                    <option value="3-year">3 Years</option>
-                  </select>
-                </div>
-                <div className={styles.formGroup}>
-                  <label>Investment Created Date</label>
-                  <input
-                    type="date"
-                    value={manualForm.investment.createdDate}
-                    onChange={(e) => handleManualFormChange('investment.createdDate', e.target.value)}
-                  />
-                </div>
-                <div className={styles.formGroup}>
-                  <label>Investment Confirmed Date</label>
-                  <input
-                    type="date"
-                    value={manualForm.investment.confirmedDate}
-                    onChange={(e) => handleManualFormChange('investment.confirmedDate', e.target.value)}
-                  />
-                </div>
+                <button 
+                  type="button"
+                  onClick={handleAddInvestment} 
+                  className={styles.addInvestmentButton}
+                >
+                  + Add Investment
+                </button>
               </div>
+
+              {/* Display Added Investments */}
+              {manualForm.investments.length > 0 && (
+                <div className={styles.investmentsList}>
+                  <h5>Added Investments ({manualForm.investments.length})</h5>
+                  <div className={styles.investmentItems}>
+                    {manualForm.investments.map(inv => (
+                      <div key={inv.id} className={styles.investmentItem}>
+                        <div className={styles.investmentInfo}>
+                          <span className={styles.investmentAmount}>${parseFloat(inv.amount).toLocaleString()}</span>
+                          <span className={styles.investmentDetails}>
+                            {inv.paymentFrequency} • {inv.lockupPeriod}
+                          </span>
+                          {inv.createdDate && (
+                            <span className={styles.investmentDate}>
+                              Created: {new Date(inv.createdDate).toLocaleDateString()}
+                            </span>
+                          )}
+                          {inv.confirmedDate && (
+                            <span className={styles.investmentDate}>
+                              Confirmed: {new Date(inv.confirmedDate).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveInvestment(inv.id)}
+                          className={styles.investmentRemove}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className={styles.investmentTotal}>
+                    Total Investment Amount: ${manualForm.investments.reduce((sum, inv) => sum + parseFloat(inv.amount || 0), 0).toLocaleString()}
+                  </div>
+                </div>
+              )}
             </div>
 
           </div>
 
           <div className={styles.actions}>
-            <button onClick={handleReset} className={styles.secondaryButton}>
-              Back to Mode Selection
-            </button>
+            {editableData.length > 0 && (
+              <button onClick={() => setStage(IMPORT_STAGES.REVIEW)} className={styles.secondaryButton}>
+                Go to Review ({editableData.length})
+              </button>
+            )}
             <button onClick={handleAddManualInvestor} className={styles.primaryButton}>
               Add to Review List
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Stage: Mapping */}
-      {stage === IMPORT_STAGES.MAPPING && (
-        <div className={styles.stage}>
-          <h3>Map CSV Fields</h3>
-          <p>Map columns from your CSV to the investor database fields.</p>
-          
-          <div className={styles.mappingTable}>
-            <table>
-              <thead>
-                <tr>
-                  <th>CSV Column</th>
-                  <th>Sample Data</th>
-                  <th>Maps To</th>
-                </tr>
-              </thead>
-              <tbody>
-                {csvHeaders.map(header => (
-                  <tr key={header}>
-                    <td>{header}</td>
-                    <td className={styles.sampleData}>
-                      {csvData[0]?.[header] || '—'}
-                    </td>
-                    <td>
-                      <select
-                        value={fieldMapping[header] || ''}
-                        onChange={(e) => handleMappingChange(header, e.target.value)}
-                        className={styles.mappingSelect}
-                      >
-                        <option value="">— Skip —</option>
-                        {Object.entries(FIELD_DEFINITIONS).map(([field, def]) => (
-                          <option key={field} value={field}>
-                            {def.label} {def.required ? '*' : ''} ({def.category})
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className={styles.actions}>
-            <button onClick={handleReset} className={styles.secondaryButton}>
-              Cancel
-            </button>
-            <button onClick={proceedToReview} className={styles.primaryButton}>
-              Continue to Review
+              {manualForm.investments.length > 0 && (
+                <span className={styles.investmentBadge}>
+                  {manualForm.investments.length} investment{manualForm.investments.length !== 1 ? 's' : ''}
+                </span>
+              )}
             </button>
           </div>
         </div>
@@ -792,7 +587,13 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
             <div className={styles.summaryCard}>
               <div className={styles.summaryLabel}>With Investments</div>
               <div className={styles.summaryValue}>
-                {editableData.filter(row => row.investment?.amount).length}
+                {editableData.filter(row => row.investments?.length > 0).length}
+              </div>
+            </div>
+            <div className={styles.summaryCard}>
+              <div className={styles.summaryLabel}>Total Investments</div>
+              <div className={styles.summaryValue}>
+                {editableData.reduce((sum, row) => sum + (row.investments?.length || 0), 0)}
               </div>
             </div>
           </div>
@@ -900,31 +701,36 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
                     </div>
                   )}
 
-                  {/* Investment */}
-                  {row.investment?.amount && (
+                  {/* Investments */}
+                  {row.investments && row.investments.length > 0 && (
                     <div className={styles.cardSection}>
-                      <h5>Investment</h5>
-                      <div className={styles.investmentDisplay}>
-                        <div className={styles.investmentAmount}>
-                          ${parseFloat(row.investment.amount || 0).toLocaleString()}
+                      <h5>Investments ({row.investments.length})</h5>
+                      {row.investments.map((inv, idx) => (
+                        <div key={idx} className={styles.investmentDisplay}>
+                          <div className={styles.investmentAmount}>
+                            ${parseFloat(inv.amount || 0).toLocaleString()}
+                          </div>
+                          <div className={styles.investmentDetails}>
+                            <span>{inv.paymentFrequency || 'compounding'}</span>
+                            <span>•</span>
+                            <span>{inv.lockupPeriod || '1-year'}</span>
+                            {inv.createdDate && (
+                              <>
+                                <span>•</span>
+                                <span>Created: {new Date(inv.createdDate).toLocaleDateString()}</span>
+                              </>
+                            )}
+                            {inv.confirmedDate && (
+                              <>
+                                <span>•</span>
+                                <span>Confirmed: {new Date(inv.confirmedDate).toLocaleDateString()}</span>
+                              </>
+                            )}
+                          </div>
                         </div>
-                        <div className={styles.investmentDetails}>
-                          <span>{row.investment.paymentFrequency || 'compounding'}</span>
-                          <span>•</span>
-                          <span>{row.investment.lockupPeriod || '1-year'}</span>
-                          {row.investment.createdDate && (
-                            <>
-                              <span>•</span>
-                              <span>Created: {new Date(row.investment.createdDate).toLocaleDateString()}</span>
-                            </>
-                          )}
-                          {row.investment.confirmedDate && (
-                            <>
-                              <span>•</span>
-                              <span>Confirmed: {new Date(row.investment.confirmedDate).toLocaleDateString()}</span>
-                            </>
-                          )}
-                        </div>
+                      ))}
+                      <div className={styles.investmentTotal}>
+                        Total: ${row.investments.reduce((sum, inv) => sum + parseFloat(inv.amount || 0), 0).toLocaleString()}
                       </div>
                       <div className={styles.note}>
                         ℹ️ <strong>Note:</strong> Distributions will be auto-calculated after import based on these dates
@@ -937,16 +743,9 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
           </div>
 
           <div className={styles.actions}>
-            {importMode === IMPORT_MODES.CSV && (
-              <button onClick={() => setStage(IMPORT_STAGES.MAPPING)} className={styles.secondaryButton}>
-                Back to Mapping
-              </button>
-            )}
-            {importMode === IMPORT_MODES.MANUAL && (
-              <button onClick={() => setStage(IMPORT_STAGES.UPLOAD)} className={styles.secondaryButton}>
-                Add Another Investor
-              </button>
-            )}
+            <button onClick={() => setStage(IMPORT_STAGES.ADD)} className={styles.secondaryButton}>
+              Add Another Investor
+            </button>
             <button onClick={handleImport} className={styles.primaryButton} disabled={isProcessing}>
               {isProcessing ? 'Importing...' : `Import ${editableData.length} Investor${editableData.length !== 1 ? 's' : ''}`}
             </button>
