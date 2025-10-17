@@ -86,7 +86,45 @@ export async function GET(request, { params }) {
 export async function PUT(request, { params }) {
   try {
     const { id } = params
-    const updateData = await request.json()
+    const body = await request.json()
+    const { _action, verificationCode, ...updateData } = body
+
+    // Handle special actions
+    if (_action === 'verifyAccount') {
+      // Verify the code (in production, you'd validate the actual code)
+      if (verificationCode !== '000000') {
+        return NextResponse.json(
+          { success: false, error: 'Invalid verification code' },
+          { status: 400 }
+        )
+      }
+
+      // Update user as verified
+      const appTime = await getCurrentAppTime()
+      const timestamp = appTime || new Date().toISOString()
+      
+      const result = await updateUser(id, {
+        isVerified: true,
+        verifiedAt: timestamp
+      })
+
+      if (!result.success) {
+        return NextResponse.json(
+          { success: false, error: result.error },
+          { status: 500 }
+        )
+      }
+
+      return NextResponse.json({
+        success: true,
+        user: {
+          id: result.user.id,
+          email: result.user.email,
+          isVerified: result.user.is_verified,
+          verifiedAt: result.user.verified_at
+        }
+      })
+    }
 
     // Validate that we have at least one field to update
     if (Object.keys(updateData).length === 0) {
