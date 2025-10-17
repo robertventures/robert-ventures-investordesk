@@ -156,6 +156,10 @@ export default function InvestmentPage() {
             if (typeof existingInvestment.amount === 'number') setInvestmentAmount(existingInvestment.amount)
             if (existingInvestment.paymentFrequency) setInvestmentPaymentFrequency(existingInvestment.paymentFrequency)
             if (existingInvestment.lockupPeriod) setInvestmentLockup(existingInvestment.lockupPeriod)
+          } else {
+            // Investment ID in localStorage doesn't exist anymore - clear it
+            console.log('Clearing stale investment ID from localStorage:', investmentId)
+            localStorage.removeItem('currentInvestmentId')
           }
         }
       } catch {}

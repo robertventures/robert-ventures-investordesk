@@ -252,6 +252,13 @@ export default function InvestmentForm({ onCompleted, onReviewSummary, disableAu
         })
         const data = await res.json()
         if (!data.success) {
+          // If investment not found, clear stale ID and create new one
+          if (data.error && data.error.includes('not found')) {
+            console.log('Investment not found, clearing stale ID and creating new investment')
+            localStorage.removeItem('currentInvestmentId')
+            // Retry as new investment by calling handleSave again
+            return handleSave(investmentPayload, accountType)
+          }
           alert(data.error || 'Failed to update investment')
           return
         }
