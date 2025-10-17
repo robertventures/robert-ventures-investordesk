@@ -547,6 +547,21 @@ export async function POST(request) {
                 failedAt: legacyEvent?.failedAt || existingTx?.failedAt || null
               })
 
+              // Create activity event for this distribution
+              const activityEventId = txId  // Use same ID as transaction for consistency
+              if (!activity.some(ev => ev.id === activityEventId)) {
+                activityEventsToInsert.push({
+                  id: activityEventId,
+                  user_id: user.id,
+                  type: 'distribution',
+                  investment_id: inv.id,
+                  amount: Math.round(distributionAmount * 100) / 100,
+                  date: distributionDateIso,
+                  status
+                })
+                eventsCreated++
+              }
+
               monthIndex += 1
             })
           }
@@ -615,6 +630,20 @@ export async function POST(request) {
                 legacyReferenceId: legacyDistributionEvent?.id || null
               })
 
+              // Create activity event for this distribution
+              if (!activity.some(ev => ev.id === distributionTxId)) {
+                activityEventsToInsert.push({
+                  id: distributionTxId,
+                  user_id: user.id,
+                  type: 'distribution',
+                  investment_id: inv.id,
+                  amount: Math.round(interest * 100) / 100,
+                  date: compoundingDateIso,
+                  status: 'received'
+                })
+                eventsCreated++
+              }
+
               // 2. Then, create the CONTRIBUTION (distribution reinvested)
               // Contribution happens 1 second after distribution to maintain correct chronological order
               // For compounding investments, contributions are auto-applied immediately
@@ -636,6 +665,20 @@ export async function POST(request) {
                 completedAt: contributionDateIso,  // Mark as completed immediately
                 legacyReferenceId: legacyContributionEvent?.id || null
               })
+
+              // Create activity event for this contribution
+              if (!activity.some(ev => ev.id === contributionTxId)) {
+                activityEventsToInsert.push({
+                  id: contributionTxId,
+                  user_id: user.id,
+                  type: 'contribution',
+                  investment_id: inv.id,
+                  amount: Math.round(interest * 100) / 100,
+                  date: contributionDateIso,
+                  status: 'received'
+                })
+                eventsCreated++
+              }
 
               balance += interest
               monthIndex += 1
@@ -726,6 +769,71 @@ export async function POST(request) {
       }
     }
 
+    // Collect all transactions to save to the transactions table
+    const transactionsToUpsert = []
+    for (const user of usersData.users) {
+      const investments = Array.isArray(user.investments) ? user.investments : []
+      for (const inv of investments) {
+        if (!inv || !inv.id || !inv.transactions) continue
+        for (const tx of inv.transactions) {
+          // Convert camelCase to snake_case for database
+          const dbTx = {
+            id: tx.id,
+            investment_id: inv.id,
+            type: tx.type,
+            amount: tx.amount,
+            status: tx.status,
+            date: tx.date,
+            created_at: tx.createdAt || now.toISOString(),
+            updated_at: now.toISOString()
+          }
+          
+          // Add optional fields if they exist
+          if (tx.displayDate) dbTx.display_date = tx.displayDate
+          if (tx.monthIndex) dbTx.month_index = tx.monthIndex
+          if (tx.lockupPeriod) dbTx.lockup_period = tx.lockupPeriod
+          if (tx.paymentFrequency) dbTx.payment_frequency = tx.paymentFrequency
+          if (tx.payoutMethod) dbTx.payout_method = tx.payoutMethod
+          if (tx.payoutBankId) dbTx.payout_bank_id = tx.payoutBankId
+          if (tx.payoutBankNickname) dbTx.payout_bank_nickname = tx.payoutBankNickname
+          if (tx.principal !== undefined) dbTx.principal = tx.principal
+          if (tx.distributionTxId) dbTx.distribution_tx_id = tx.distributionTxId
+          if (tx.withdrawalId) dbTx.withdrawal_id = tx.withdrawalId
+          if (tx.payoutDueBy) dbTx.payout_due_by = tx.payoutDueBy
+          if (tx.confirmedAt) dbTx.confirmed_at = tx.confirmedAt
+          if (tx.approvedAt) dbTx.approved_at = tx.approvedAt
+          if (tx.rejectedAt) dbTx.rejected_at = tx.rejectedAt
+          if (tx.completedAt) dbTx.completed_at = tx.completedAt
+          if (tx.failedAt) dbTx.failed_at = tx.failedAt
+          if (tx.autoApproved !== undefined) dbTx.auto_approved = tx.autoApproved
+          if (tx.manuallyCompleted !== undefined) dbTx.manually_completed = tx.manuallyCompleted
+          if (tx.failureReason) dbTx.failure_reason = tx.failureReason
+          if (tx.retryCount !== undefined) dbTx.retry_count = tx.retryCount
+          if (tx.lastRetryAt) dbTx.last_retry_at = tx.lastRetryAt
+          if (tx.legacyReferenceId) dbTx.legacy_reference_id = tx.legacyReferenceId
+          
+          transactionsToUpsert.push(dbTx)
+        }
+      }
+    }
+
+    // Batch upsert all transactions to Supabase
+    if (transactionsToUpsert.length > 0) {
+      const { error: transactionsError } = await supabase
+        .from('transactions')
+        .upsert(transactionsToUpsert, { onConflict: 'id' })
+      
+      if (transactionsError) {
+        console.error('Failed to upsert transactions:', transactionsError)
+        return NextResponse.json({ 
+          success: false, 
+          error: `Failed to save transactions: ${transactionsError.message}` 
+        }, { status: 500 })
+      }
+      
+      console.log(`✅ Successfully upserted ${transactionsToUpsert.length} transactions`)
+    }
+
     // Batch insert all new activity events to Supabase
     if (activityEventsToInsert.length > 0) {
       const { error: activityError } = await supabase
@@ -747,7 +855,8 @@ export async function POST(request) {
       success: true, 
       usersUpdated, 
       eventsCreated,
-      activityEventsInserted: activityEventsToInsert.length
+      activityEventsInserted: activityEventsToInsert.length,
+      transactionsUpserted: transactionsToUpsert.length
     })
   } catch (error) {
     console.error('Error migrating transactions:', error)

@@ -117,13 +117,20 @@ export default function OperationsTab({
     try {
       const result = await onMigrateTransactions()
       if (result.success) {
-        alert(`Transaction migration complete!\n\nUsers updated: ${result.usersUpdated}\nEvents created: ${result.eventsCreated}`)
+        const summary = [
+          `Transaction regeneration complete!`,
+          ``,
+          `✅ Transactions saved: ${result.transactionsUpserted || 0}`,
+          `✅ Activity events created: ${result.activityEventsInserted || 0}`,
+          `✅ Users updated: ${result.usersUpdated || 0}`
+        ].join('\n')
+        alert(summary)
       } else {
-        alert('Failed to migrate transactions: ' + (result.error || 'Unknown error'))
+        alert('Failed to regenerate transactions: ' + (result.error || 'Unknown error'))
       }
     } catch (error) {
-      console.error('Error migrating transactions:', error)
-      alert('An error occurred while migrating transactions')
+      console.error('Error regenerating transactions:', error)
+      alert('An error occurred while regenerating transactions')
     } finally {
       setIsMigrating(false)
     }
