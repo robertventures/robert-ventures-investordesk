@@ -1,8 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
+// Cache configuration
+const CACHE_DURATION = 30000 // 30 seconds
+const CACHE_KEY_USERS = 'admin_users_cache'
+const CACHE_KEY_WITHDRAWALS = 'admin_withdrawals_cache'
+const CACHE_KEY_PAYOUTS = 'admin_payouts_cache'
+
 /**
- * Custom hook to manage all admin data fetching and state
+ * Custom hook to manage all admin data fetching and state with intelligent caching
  */
 export function useAdminData() {
   const router = useRouter()
@@ -18,6 +24,49 @@ export function useAdminData() {
     isActive: false,
     autoApproveDistributions: false
   })
+
+  // Helper to get cached data if still valid
+  const getCachedData = (key) => {
+    try {
+      const cached = localStorage.getItem(key)
+      if (!cached) return null
+      
+      const { data, timestamp } = JSON.parse(cached)
+      const age = Date.now() - timestamp
+      
+      if (age < CACHE_DURATION) {
+        return data
+      }
+      
+      // Cache expired, remove it
+      localStorage.removeItem(key)
+      return null
+    } catch (e) {
+      console.error('Cache read error:', e)
+      return null
+    }
+  }
+
+  // Helper to set cached data
+  const setCachedData = (key, data) => {
+    try {
+      localStorage.setItem(key, JSON.stringify({
+        data,
+        timestamp: Date.now()
+      }))
+    } catch (e) {
+      console.error('Cache write error:', e)
+    }
+  }
+
+  // Helper to clear specific cache
+  const clearCache = (key) => {
+    try {
+      localStorage.removeItem(key)
+    } catch (e) {
+      console.error('Cache clear error:', e)
+    }
+  }
 
   // Load initial data
   useEffect(() => {
@@ -59,29 +108,59 @@ export function useAdminData() {
     init()
   }, [router])
 
-  const loadUsers = async () => {
+  const loadUsers = async (forceRefresh = false) => {
     try {
-      // First, ensure all transaction events are generated based on current app time
-      await fetch('/api/migrate-transactions', { method: 'POST' })
+      // Check cache first unless forcing refresh
+      if (!forceRefresh) {
+        const cached = getCachedData(CACHE_KEY_USERS)
+        if (cached) {
+          console.log('📦 Using cached user data')
+          setUsers(cached)
+          return
+        }
+      }
       
-      // Then load users with all their activity events
+      // Clear cache if forcing refresh
+      if (forceRefresh) {
+        clearCache(CACHE_KEY_USERS)
+        await fetch('/api/migrate-transactions', { method: 'POST' })
+      }
+      
+      // Load users with all their activity events
       const res = await fetch('/api/users')
       const data = await res.json()
       if (data.success) {
         setUsers(data.users || [])
+        setCachedData(CACHE_KEY_USERS, data.users || [])
+        console.log('✓ User data loaded and cached')
       }
     } catch (e) {
       console.error('Failed to load users', e)
     }
   }
 
-  const loadWithdrawals = async () => {
+  const loadWithdrawals = async (forceRefresh = false) => {
     try {
+      // Check cache first unless forcing refresh
+      if (!forceRefresh) {
+        const cached = getCachedData(CACHE_KEY_WITHDRAWALS)
+        if (cached) {
+          console.log('📦 Using cached withdrawals data')
+          setWithdrawals(cached)
+          return
+        }
+      }
+      
+      if (forceRefresh) {
+        clearCache(CACHE_KEY_WITHDRAWALS)
+      }
+      
       setIsLoadingWithdrawals(true)
       const res = await fetch('/api/admin/withdrawals')
       const data = await res.json()
       if (data.success) {
         setWithdrawals(data.withdrawals || [])
+        setCachedData(CACHE_KEY_WITHDRAWALS, data.withdrawals || [])
       }
     } catch (e) {
       console.error('Failed to load withdrawals', e)
@@ -90,13 +169,28 @@ export function useAdminData() {
     }
   }
 
-  const loadPendingPayouts = async () => {
+  const loadPendingPayouts = async (forceRefresh = false) => {
     try {
+      // Check cache first unless forcing refresh
+      if (!forceRefresh) {
+        const cached = getCachedData(CACHE_KEY_PAYOUTS)
+        if (cached) {
+          console.log('📦 Using cached payouts data')
+          setPendingPayouts(cached)
+          return
+        }
+      }
+      
+      if (forceRefresh) {
+        clearCache(CACHE_KEY_PAYOUTS)
+      }
+      
       setIsLoadingPayouts(true)
       const res = await fetch('/api/admin/pending-payouts')
       const data = await res.json()
       if (data.success) {
         setPendingPayouts(data.pendingPayouts || [])
+        setCachedData(CACHE_KEY_PAYOUTS, data.pendingPayouts || [])
       }
     } catch (e) {
       console.error('Failed to load pending payouts', e)
@@ -122,6 +216,30 @@ export function useAdminData() {
     }
   }
 
+  // Manual transaction migration for when needed (Time Machine changes, admin action)
+  const migrateTransactions = async () => {
+    try {
+      const res = await fetch('/api/migrate-transactions', { method: 'POST' })
+      const data = await res.json()
+      if (data.success) {
+        // Clear cache and reload users after migration
+        clearCache(CACHE_KEY_USERS)
+        await loadUsers(false)
+      }
+      return data
+    } catch (e) {
+      console.error('Failed to migrate transactions', e)
+      return { success: false, error: e.message }
+    }
+  }
+
+  // Clear all caches
+  const clearAllCaches = () => {
+    clearCache(CACHE_KEY_USERS)
+    clearCache(CACHE_KEY_WITHDRAWALS)
+    clearCache(CACHE_KEY_PAYOUTS)
+  }
+
   return {
     currentUser,
     users,
@@ -135,7 +253,8 @@ export function useAdminData() {
     refreshUsers: loadUsers,
     refreshWithdrawals: loadWithdrawals,
     refreshPayouts: loadPendingPayouts,
-    refreshTimeMachine: loadTimeMachine
+    refreshTimeMachine: loadTimeMachine,
+    migrateTransactions  // Expose for manual triggering
   }
 }
 

@@ -22,12 +22,14 @@ export default function OperationsTab({
   isSeedingAccounts,
   onRefreshWithdrawals,
   onImportComplete,
-  onToggleAutoApprove
+  onToggleAutoApprove,
+  onMigrateTransactions
 }) {
   const [masterPassword, setMasterPassword] = useState(null)
   const [masterPasswordInfo, setMasterPasswordInfo] = useState(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [isMigrating, setIsMigrating] = useState(false)
 
   // Fetch current master password info
   useEffect(() => {
@@ -106,8 +108,56 @@ export default function OperationsTab({
     return `${minutes}m ${seconds}s`
   }
 
+  const handleMigrateTransactions = async () => {
+    if (!confirm('Regenerate all transaction data? This will recalculate distributions and compounding based on current app time.')) {
+      return
+    }
+    
+    setIsMigrating(true)
+    try {
+      const result = await onMigrateTransactions()
+      if (result.success) {
+        alert(`Transaction migration complete!\n\nUsers updated: ${result.usersUpdated}\nEvents created: ${result.eventsCreated}`)
+      } else {
+        alert('Failed to migrate transactions: ' + (result.error || 'Unknown error'))
+      }
+    } catch (error) {
+      console.error('Error migrating transactions:', error)
+      alert('An error occurred while migrating transactions')
+    } finally {
+      setIsMigrating(false)
+    }
+  }
+
   return (
     <div className={styles.operationsTab}>
+      {/* System Operations Section */}
+      <SectionCard title="System Operations">
+        <div className={styles.sectionHeader}>
+          <p className={styles.sectionDescription}>
+            Manually trigger system operations for data management and synchronization.
+          </p>
+        </div>
+        <div className={styles.systemOperations}>
+          <div className={styles.operationCard}>
+            <div className={styles.operationInfo}>
+              <h4 className={styles.operationTitle}>Regenerate Transactions</h4>
+              <p className={styles.operationDescription}>
+                Recalculate all investment distributions, compounding, and transaction data based on current app time. 
+                This happens automatically when Time Machine changes, but you can manually trigger it here.
+              </p>
+            </div>
+            <button
+              onClick={handleMigrateTransactions}
+              disabled={isMigrating}
+              className={styles.operationButton}
+            >
+              {isMigrating ? 'Processing...' : 'Regenerate Transactions'}
+            </button>
+          </div>
+        </div>
+      </SectionCard>
+
       {/* Master Password Section */}
       <SectionCard title="Master Password Generator">
         <div className={styles.sectionHeader}>

@@ -39,7 +39,8 @@ export default function AdminPage() {
     setTimeMachineData,
     refreshUsers,
     refreshWithdrawals,
-    refreshPayouts
+    refreshPayouts,
+    migrateTransactions
   } = useAdminData()
 
   // Metrics calculation with custom hook
@@ -343,15 +344,14 @@ export default function AdminPage() {
           realTime: new Date().toISOString()
         })
         
-        // Manually trigger transaction sync
+        // Trigger transaction sync using optimized hook method
         try {
-          await fetch('/api/migrate-transactions', { method: 'POST' })
+          await migrateTransactions()
         } catch (syncErr) {
           console.error('Failed to sync transactions:', syncErr)
         }
         
         alert('Time machine updated successfully!')
-        await refreshUsers()
       } else {
         alert(data.error || 'Failed to update app time')
       }
@@ -380,8 +380,15 @@ export default function AdminPage() {
           realTime,
           autoApproveDistributions: false
         })
+        
+        // Trigger transaction sync after reset
+        try {
+          await migrateTransactions()
+        } catch (syncErr) {
+          console.error('Failed to sync transactions:', syncErr)
+        }
+        
         alert('Time machine reset to real time!')
-        await refreshUsers()
         return { appTime: realTime }
       } else {
         alert(data.error || 'Failed to reset app time')
@@ -555,6 +562,7 @@ export default function AdminPage() {
               onRefreshWithdrawals={refreshWithdrawals}
               onImportComplete={handleImportComplete}
               onToggleAutoApprove={toggleAutoApproveDistributions}
+              onMigrateTransactions={migrateTransactions}
             />
           )}
 
