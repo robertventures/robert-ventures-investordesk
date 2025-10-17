@@ -31,7 +31,8 @@ const FIELD_DEFINITIONS = {
   'investment.amount': { label: 'Investment Amount', required: false, category: 'Investment' },
   'investment.paymentFrequency': { label: 'Payment Frequency', required: false, category: 'Investment' },
   'investment.lockupPeriod': { label: 'Lockup Period', required: false, category: 'Investment' },
-  'investment.investmentDate': { label: 'Investment Date', required: false, category: 'Investment' },
+  'investment.createdDate': { label: 'Investment Created Date', required: false, category: 'Investment' },
+  'investment.confirmedDate': { label: 'Investment Confirmed Date', required: false, category: 'Investment' },
   'investment.status': { label: 'Investment Status', required: false, category: 'Investment' },
   
   // Dates
@@ -84,19 +85,10 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
       amount: '',
       paymentFrequency: 'compounding',
       lockupPeriod: '1-year',
-      investmentDate: '',
+      createdDate: '',
+      confirmedDate: '',
       status: 'active'
-    },
-    distributions: [],
-    contributions: []
-  })
-  
-  // Transaction form state (for adding distributions/contributions)
-  const [transactionForm, setTransactionForm] = useState({
-    type: 'distribution',
-    amount: '',
-    date: '',
-    description: ''
+    }
   })
 
   // Handle CSV file upload
@@ -171,9 +163,11 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
         mapping[header] = 'investment.paymentFrequency'
       } else if (lowerHeader.includes('lockup')) {
         mapping[header] = 'investment.lockupPeriod'
-      } else if (lowerHeader.includes('date') && lowerHeader.includes('invest')) {
-        mapping[header] = 'investment.investmentDate'
-      } else if (lowerHeader.includes('created')) {
+      } else if (lowerHeader.includes('created') && (lowerHeader.includes('invest') || lowerHeader.includes('start'))) {
+        mapping[header] = 'investment.createdDate'
+      } else if (lowerHeader.includes('confirmed') || lowerHeader.includes('funded') || lowerHeader.includes('active')) {
+        mapping[header] = 'investment.confirmedDate'
+      } else if (lowerHeader.includes('created') && lowerHeader.includes('account')) {
         mapping[header] = 'createdAt'
       }
     })
@@ -278,7 +272,8 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
             amount: parseFloat(investor.investment.amount) || 0,
             paymentFrequency: investor.investment.paymentFrequency || 'compounding',
             lockupPeriod: investor.investment.lockupPeriod || '1-year',
-            investmentDate: investor.investment.investmentDate || new Date().toISOString(),
+            createdDate: investor.investment.createdDate || new Date().toISOString(),
+            confirmedDate: investor.investment.confirmedDate || investor.investment.createdDate || new Date().toISOString(),
             status: investor.investment.status || 'active'
           }]
           delete investor.investment
@@ -368,66 +363,6 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
     }
   }
 
-  // Handle transaction form changes
-  const handleTransactionFormChange = (field, value) => {
-    setTransactionForm(prev => ({
-      ...prev,
-      [field]: value
-    }))
-  }
-
-  // Add distribution or contribution
-  const handleAddTransaction = () => {
-    if (!transactionForm.amount || !transactionForm.date) {
-      setError('Amount and date are required for transactions')
-      return
-    }
-
-    const transaction = {
-      type: transactionForm.type,
-      amount: parseFloat(transactionForm.amount),
-      date: transactionForm.date,
-      description: transactionForm.description || '',
-      id: `TEMP-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-    }
-
-    if (transactionForm.type === 'distribution') {
-      setManualForm(prev => ({
-        ...prev,
-        distributions: [...prev.distributions, transaction]
-      }))
-    } else {
-      setManualForm(prev => ({
-        ...prev,
-        contributions: [...prev.contributions, transaction]
-      }))
-    }
-
-    // Reset transaction form
-    setTransactionForm({
-      type: transactionForm.type,
-      amount: '',
-      date: '',
-      description: ''
-    })
-    setError(null)
-  }
-
-  // Remove transaction
-  const handleRemoveTransaction = (transactionId, type) => {
-    if (type === 'distribution') {
-      setManualForm(prev => ({
-        ...prev,
-        distributions: prev.distributions.filter(t => t.id !== transactionId)
-      }))
-    } else {
-      setManualForm(prev => ({
-        ...prev,
-        contributions: prev.contributions.filter(t => t.id !== transactionId)
-      }))
-    }
-  }
-
   // Add manual form data to review
   const handleAddManualInvestor = () => {
     // Validate required fields
@@ -464,18 +399,10 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
         amount: '',
         paymentFrequency: 'compounding',
         lockupPeriod: '1-year',
-        investmentDate: '',
+        createdDate: '',
+        confirmedDate: '',
         status: 'active'
-      },
-      distributions: [],
-      contributions: []
-    })
-    
-    setTransactionForm({
-      type: 'distribution',
-      amount: '',
-      date: '',
-      description: ''
+      }
     })
     
     setError(null)
@@ -763,144 +690,24 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
                   </select>
                 </div>
                 <div className={styles.formGroup}>
-                  <label>Investment Date</label>
+                  <label>Investment Created Date</label>
                   <input
                     type="date"
-                    value={manualForm.investment.investmentDate}
-                    onChange={(e) => handleManualFormChange('investment.investmentDate', e.target.value)}
+                    value={manualForm.investment.createdDate}
+                    onChange={(e) => handleManualFormChange('investment.createdDate', e.target.value)}
+                  />
+                </div>
+                <div className={styles.formGroup}>
+                  <label>Investment Confirmed Date</label>
+                  <input
+                    type="date"
+                    value={manualForm.investment.confirmedDate}
+                    onChange={(e) => handleManualFormChange('investment.confirmedDate', e.target.value)}
                   />
                 </div>
               </div>
             </div>
 
-            {/* Transactions Section - Distributions & Contributions */}
-            <div className={styles.formSection}>
-              <h4>Historical Transactions (Optional)</h4>
-              <p className={styles.sectionNote}>
-                Add past distributions (payments to investor) and contributions (additional investments).
-              </p>
-              
-              {/* Add Transaction Form */}
-              <div className={styles.transactionForm}>
-                <div className={styles.formGrid}>
-                  <div className={styles.formGroup}>
-                    <label>Transaction Type</label>
-                    <select
-                      value={transactionForm.type}
-                      onChange={(e) => handleTransactionFormChange('type', e.target.value)}
-                      className={styles.transactionTypeSelect}
-                    >
-                      <option value="distribution">Distribution (Payment to Investor)</option>
-                      <option value="contribution">Contribution (Additional Investment)</option>
-                    </select>
-                  </div>
-                  <div className={styles.formGroup}>
-                    <label>Amount</label>
-                    <input
-                      type="number"
-                      value={transactionForm.amount}
-                      onChange={(e) => handleTransactionFormChange('amount', e.target.value)}
-                      placeholder="5000"
-                      min="0"
-                      step="0.01"
-                    />
-                  </div>
-                  <div className={styles.formGroup}>
-                    <label>Date</label>
-                    <input
-                      type="date"
-                      value={transactionForm.date}
-                      onChange={(e) => handleTransactionFormChange('date', e.target.value)}
-                    />
-                  </div>
-                  <div className={`${styles.formGroup} ${styles.fullWidth}`}>
-                    <label>Description (Optional)</label>
-                    <input
-                      type="text"
-                      value={transactionForm.description}
-                      onChange={(e) => handleTransactionFormChange('description', e.target.value)}
-                      placeholder="e.g., Q4 2024 distribution"
-                    />
-                  </div>
-                </div>
-                <button 
-                  type="button"
-                  onClick={handleAddTransaction} 
-                  className={styles.addTransactionButton}
-                >
-                  + Add {transactionForm.type === 'distribution' ? 'Distribution' : 'Contribution'}
-                </button>
-              </div>
-
-              {/* Display Added Transactions */}
-              {(manualForm.distributions.length > 0 || manualForm.contributions.length > 0) && (
-                <div className={styles.transactionsList}>
-                  {/* Distributions */}
-                  {manualForm.distributions.length > 0 && (
-                    <div className={styles.transactionGroup}>
-                      <h5>Distributions ({manualForm.distributions.length})</h5>
-                      <div className={styles.transactionItems}>
-                        {manualForm.distributions.map(dist => (
-                          <div key={dist.id} className={styles.transactionItem}>
-                            <div className={styles.transactionInfo}>
-                              <span className={styles.transactionAmount}>${dist.amount.toLocaleString()}</span>
-                              <span className={styles.transactionDate}>
-                                {new Date(dist.date).toLocaleDateString()}
-                              </span>
-                              {dist.description && (
-                                <span className={styles.transactionDesc}>{dist.description}</span>
-                              )}
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveTransaction(dist.id, 'distribution')}
-                              className={styles.transactionRemove}
-                            >
-                              ✕
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                      <div className={styles.transactionTotal}>
-                        Total Distributions: ${manualForm.distributions.reduce((sum, d) => sum + d.amount, 0).toLocaleString()}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Contributions */}
-                  {manualForm.contributions.length > 0 && (
-                    <div className={styles.transactionGroup}>
-                      <h5>Contributions ({manualForm.contributions.length})</h5>
-                      <div className={styles.transactionItems}>
-                        {manualForm.contributions.map(cont => (
-                          <div key={cont.id} className={styles.transactionItem}>
-                            <div className={styles.transactionInfo}>
-                              <span className={styles.transactionAmount}>${cont.amount.toLocaleString()}</span>
-                              <span className={styles.transactionDate}>
-                                {new Date(cont.date).toLocaleDateString()}
-                              </span>
-                              {cont.description && (
-                                <span className={styles.transactionDesc}>{cont.description}</span>
-                              )}
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveTransaction(cont.id, 'contribution')}
-                              className={styles.transactionRemove}
-                            >
-                              ✕
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                      <div className={styles.transactionTotal}>
-                        Total Contributions: ${manualForm.contributions.reduce((sum, c) => sum + c.amount, 0).toLocaleString()}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
           </div>
 
           <div className={styles.actions}>
@@ -909,11 +716,6 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
             </button>
             <button onClick={handleAddManualInvestor} className={styles.primaryButton}>
               Add to Review List
-              {(manualForm.distributions.length > 0 || manualForm.contributions.length > 0) && (
-                <span className={styles.transactionBadge}>
-                  {manualForm.distributions.length + manualForm.contributions.length} txn
-                </span>
-              )}
             </button>
           </div>
         </div>
@@ -991,18 +793,6 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
               <div className={styles.summaryLabel}>With Investments</div>
               <div className={styles.summaryValue}>
                 {editableData.filter(row => row.investment?.amount).length}
-              </div>
-            </div>
-            <div className={styles.summaryCard}>
-              <div className={styles.summaryLabel}>Total Distributions</div>
-              <div className={styles.summaryValue}>
-                {editableData.reduce((sum, row) => sum + (row.distributions?.length || 0), 0)}
-              </div>
-            </div>
-            <div className={styles.summaryCard}>
-              <div className={styles.summaryLabel}>Total Contributions</div>
-              <div className={styles.summaryValue}>
-                {editableData.reduce((sum, row) => sum + (row.contributions?.length || 0), 0)}
               </div>
             </div>
           </div>
@@ -1122,62 +912,22 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
                           <span>{row.investment.paymentFrequency || 'compounding'}</span>
                           <span>•</span>
                           <span>{row.investment.lockupPeriod || '1-year'}</span>
-                          {row.investment.investmentDate && (
+                          {row.investment.createdDate && (
                             <>
                               <span>•</span>
-                              <span>{new Date(row.investment.investmentDate).toLocaleDateString()}</span>
+                              <span>Created: {new Date(row.investment.createdDate).toLocaleDateString()}</span>
+                            </>
+                          )}
+                          {row.investment.confirmedDate && (
+                            <>
+                              <span>•</span>
+                              <span>Confirmed: {new Date(row.investment.confirmedDate).toLocaleDateString()}</span>
                             </>
                           )}
                         </div>
                       </div>
                       <div className={styles.note}>
-                        ℹ️ <strong>Note:</strong> Bank account will be linked when investor sets up their account
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Distributions */}
-                  {row.distributions && row.distributions.length > 0 && (
-                    <div className={styles.cardSection}>
-                      <h5>Distributions ({row.distributions.length})</h5>
-                      <div className={styles.transactionsDisplay}>
-                        {row.distributions.map((dist, idx) => (
-                          <div key={idx} className={styles.transactionRow}>
-                            <span className={styles.txAmount}>${dist.amount.toLocaleString()}</span>
-                            <span className={styles.txDate}>
-                              {new Date(dist.date).toLocaleDateString()}
-                            </span>
-                            {dist.description && (
-                              <span className={styles.txDesc}>{dist.description}</span>
-                            )}
-                          </div>
-                        ))}
-                        <div className={styles.txTotal}>
-                          Total: ${row.distributions.reduce((sum, d) => sum + d.amount, 0).toLocaleString()}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Contributions */}
-                  {row.contributions && row.contributions.length > 0 && (
-                    <div className={styles.cardSection}>
-                      <h5>Contributions ({row.contributions.length})</h5>
-                      <div className={styles.transactionsDisplay}>
-                        {row.contributions.map((cont, idx) => (
-                          <div key={idx} className={styles.transactionRow}>
-                            <span className={styles.txAmount}>${cont.amount.toLocaleString()}</span>
-                            <span className={styles.txDate}>
-                              {new Date(cont.date).toLocaleDateString()}
-                            </span>
-                            {cont.description && (
-                              <span className={styles.txDesc}>{cont.description}</span>
-                            )}
-                          </div>
-                        ))}
-                        <div className={styles.txTotal}>
-                          Total: ${row.contributions.reduce((sum, c) => sum + c.amount, 0).toLocaleString()}
-                        </div>
+                        ℹ️ <strong>Note:</strong> Distributions will be auto-calculated after import based on these dates
                       </div>
                     </div>
                   )}
@@ -1217,6 +967,12 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
       {stage === IMPORT_STAGES.COMPLETE && importResults && (
         <div className={styles.stage}>
           <h3>✅ Import Complete!</h3>
+          
+          {importResults.message && (
+            <div className={styles.importMessage}>
+              ℹ️ {importResults.message}
+            </div>
+          )}
           
           <div className={styles.results}>
             <div className={styles.resultCard}>

@@ -43,6 +43,16 @@
   margin-bottom: 20px;
 }
 
+.importMessage {
+  padding: 15px;
+  background: #e3f2fd;
+  border: 1px solid #90caf9;
+  border-radius: 5px;
+  color: #1976d2;
+  margin-bottom: 20px;
+  font-weight: 500;
+}
+
 .stage {
   padding: 20px 0;
 }
