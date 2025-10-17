@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getUsers, saveUsers } from '../../../../lib/supabaseDatabase.js'
+import { createServiceClient } from '../../../../lib/supabaseClient.js'
 import { requireAdmin, authErrorResponse } from '../../../../lib/authMiddleware'
 
 export async function DELETE(request) {
@@ -10,17 +10,94 @@ export async function DELETE(request) {
       return authErrorResponse('Admin access required', 403)
     }
 
-    const usersData = await getUsers()
+    const supabase = createServiceClient()
 
-    const beforeCount = usersData.users?.length || 0
-    usersData.users = (usersData.users || []).filter(user => user.isAdmin)
+    // First, get all non-admin users to count them
+    const { data: nonAdminUsers, error: countError } = await supabase
+      .from('users')
+      .select('id, auth_id')
+      .eq('is_admin', false)
 
-    const afterCount = usersData.users.length
-    const deletedCount = beforeCount - afterCount
-
-    if (!await saveUsers(usersData)) {
-      return NextResponse.json({ success: false, error: 'Failed to delete accounts' }, { status: 500 })
+    if (countError) {
+      console.error('Error counting users:', countError)
+      return NextResponse.json({ success: false, error: 'Failed to count users' }, { status: 500 })
     }
+
+    const deletedCount = nonAdminUsers?.length || 0
+
+    if (deletedCount === 0) {
+      return NextResponse.json({ success: true, deletedCount: 0 })
+    }
+
+    // Delete related data first (due to foreign key constraints)
+    // Delete in order: transactions, activity, withdrawals, bank_accounts, investments, users
+    
+    // Get all investment IDs for non-admin users
+    const { data: investments } = await supabase
+      .from('investments')
+      .select('id, user_id')
+      .in('user_id', nonAdminUsers.map(u => u.id))
+
+    const investmentIds = investments?.map(inv => inv.id) || []
+
+    // Delete transactions for these investments
+    if (investmentIds.length > 0) {
+      await supabase
+        .from('transactions')
+        .delete()
+        .in('investment_id', investmentIds)
+    }
+
+    // Delete activity for non-admin users
+    await supabase
+      .from('activity')
+      .delete()
+      .in('user_id', nonAdminUsers.map(u => u.id))
+
+    // Delete withdrawals for non-admin users
+    await supabase
+      .from('withdrawals')
+      .delete()
+      .in('user_id', nonAdminUsers.map(u => u.id))
+
+    // Delete bank accounts for non-admin users
+    await supabase
+      .from('bank_accounts')
+      .delete()
+      .in('user_id', nonAdminUsers.map(u => u.id))
+
+    // Delete investments for non-admin users
+    if (investmentIds.length > 0) {
+      await supabase
+        .from('investments')
+        .delete()
+        .in('id', investmentIds)
+    }
+
+    // Delete users from users table
+    const { error: deleteError } = await supabase
+      .from('users')
+      .delete()
+      .eq('is_admin', false)
+
+    if (deleteError) {
+      console.error('Error deleting users:', deleteError)
+      return NextResponse.json({ success: false, error: 'Failed to delete users from database' }, { status: 500 })
+    }
+
+    // Delete auth users (from Supabase Auth)
+    for (const user of nonAdminUsers) {
+      if (user.auth_id) {
+        try {
+          await supabase.auth.admin.deleteUser(user.auth_id)
+        } catch (authError) {
+          console.error('Failed to delete auth user:', user.auth_id, authError)
+          // Continue even if auth deletion fails
+        }
+      }
+    }
+
+    console.log(`Deleted ${deletedCount} non-admin accounts`)
 
     return NextResponse.json({ success: true, deletedCount })
   } catch (error) {
