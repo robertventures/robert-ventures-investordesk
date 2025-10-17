@@ -464,10 +464,20 @@ export default function AdminPage() {
       })
       const data = await res.json()
       if (!data.success) {
-        alert(data.error || 'Failed to delete accounts')
+        // Show detailed error including auth deletion failures
+        let errorMessage = data.error || 'Failed to delete accounts'
+        if (data.authDeletionFailures && data.authDeletionFailures.length > 0) {
+          errorMessage += '\n\nAuth deletion failures:\n'
+          data.authDeletionFailures.forEach(f => {
+            errorMessage += `- User ${f.userId} (auth_id: ${f.authId}): ${f.error}\n`
+          })
+          errorMessage += '\n⚠️ Users removed from database but still exist in Supabase Auth. You may need to delete them manually from the Supabase Auth dashboard.'
+        }
+        alert(errorMessage)
+        await refreshUsers(true)  // Force refresh to see updated state
         return
       }
-      alert('All non-admin accounts deleted. Reloading users...')
+      alert('All non-admin accounts deleted successfully. Reloading users...')
       await refreshUsers(true)  // Force refresh to bypass cache
     } catch (error) {
       console.error('Failed to delete accounts', error)

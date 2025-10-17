@@ -37,8 +37,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# database files
-/data
+# database files (but allow README)
+/data/*.json
+/data/*.db
 
 # testing and documentation
 /testing-docs

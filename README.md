@@ -51,11 +51,25 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 - Development: `http://localhost:3000` (or your dev port)
 - Production: Your actual domain (e.g., `https://investors.robertventures.com`)
 
+**Supabase (Database & Authentication):**
+- Sign up for a free account at [Supabase.com](https://supabase.com)
+- Create a new project
+- Get your credentials from Settings → API:
+  - `NEXT_PUBLIC_SUPABASE_URL` - Your project URL
+  - `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Anon/public key
+  - `SUPABASE_SERVICE_ROLE_KEY` - Service role key (⚠️ NEVER expose to frontend!)
+- The service role key is **required** for admin operations like deleting users
+
 **Example `.env.local`:**
 ```bash
 # JWT Authentication (REQUIRED)
 JWT_SECRET=a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6
 JWT_REFRESH_SECRET=z9y8x7w6v5u4t3s2r1q0p9o8n7m6l5k4
+
+# Supabase (Database & Auth)
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
 
 # Email Service
 RESEND_API_KEY=re_YourActualAPIKeyHere
@@ -71,13 +85,41 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 - ✅ Use different secrets for development and production
 - ✅ Rotate secrets if they are ever exposed
 
-### 3. Run the development server
+### 3. Verify Supabase connection (optional but recommended)
+```bash
+npm run verify-data
+```
+
+This will check:
+- ✅ All environment variables are set correctly
+- ✅ Supabase connection is working
+- ✅ User data is being read from Supabase (not local files)
+- ✅ Auth user deletion capability is available
+
+### 4. Run the development server
 ```bash
 npm run dev
 ```
 
-### 4. Open your browser
+### 5. Open your browser
 Navigate to [http://localhost:3000](http://localhost:3000) to see the application.
+
+## Data Storage
+
+**All application data is stored in Supabase PostgreSQL:**
+- ✅ Users, investments, transactions, withdrawals, bank accounts
+- ✅ Activity feed and audit logs
+- ✅ App settings (time machine, auto-approve flags)
+
+**Admin panel shows real-time data from Supabase:**
+- When you visit `/admin`, it fetches live data from the database
+- No local JSON files are used for user data
+- Changes are immediately visible across all sessions
+
+**For more details, see:**
+- [docs/DATA-SOURCES.md](docs/DATA-SOURCES.md) - Complete data architecture explanation
+- [docs/BACKEND-GUIDE.md](docs/BACKEND-GUIDE.md) - Database schema and API details
+- [docs/USER-DELETION-FIX.md](docs/USER-DELETION-FIX.md) - User deletion troubleshooting
 
 ## Project Structure
 
@@ -85,6 +127,9 @@ Navigate to [http://localhost:3000](http://localhost:3000) to see the applicatio
 - `app/components/Header.js` - Header component with Robert Ventures branding
 - `app/components/SignupForm.js` - Email signup form with human verification
 - `app/globals.css` - Global styles and wireframe utilities
+- `lib/supabaseDatabase.js` - All database operations (users, investments, transactions)
+- `lib/supabaseClient.js` - Supabase client configuration
+- `data/` - Local files for dev only (audit logs, master passwords)
 
 ## Design Philosophy
 

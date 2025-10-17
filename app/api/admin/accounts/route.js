@@ -86,18 +86,41 @@ export async function DELETE(request) {
     }
 
     // Delete auth users (from Supabase Auth)
+    const authDeletionFailures = []
     for (const user of nonAdminUsers) {
       if (user.auth_id) {
         try {
-          await supabase.auth.admin.deleteUser(user.auth_id)
+          const { error: authError } = await supabase.auth.admin.deleteUser(user.auth_id)
+          if (authError) {
+            console.error('Failed to delete auth user:', user.auth_id, authError)
+            authDeletionFailures.push({
+              userId: user.id,
+              authId: user.auth_id,
+              error: authError.message || 'Unknown error'
+            })
+          }
         } catch (authError) {
           console.error('Failed to delete auth user:', user.auth_id, authError)
-          // Continue even if auth deletion fails
+          authDeletionFailures.push({
+            userId: user.id,
+            authId: user.auth_id,
+            error: authError.message || 'Unknown error'
+          })
         }
       }
     }
 
-    console.log(`Deleted ${deletedCount} non-admin accounts`)
+    console.log(`Deleted ${deletedCount} non-admin accounts from database`)
+    
+    if (authDeletionFailures.length > 0) {
+      console.error(`Failed to delete ${authDeletionFailures.length} auth users:`, authDeletionFailures)
+      return NextResponse.json({ 
+        success: false, 
+        deletedCount,
+        error: `Deleted ${deletedCount} users from database, but failed to delete ${authDeletionFailures.length} auth users. Check console for details.`,
+        authDeletionFailures 
+      }, { status: 207 }) // 207 Multi-Status for partial success
+    }
 
     return NextResponse.json({ success: true, deletedCount })
   } catch (error) {
