@@ -631,7 +631,6 @@ function ClientContent() {
                 // Don't block redirect for banking update failure since investment was submitted successfully
               }
               
-              // Backend now handles consistency verification with read-after-write checks
               // Small delay to ensure UI doesn't flash before redirect
               console.log('Investment submitted successfully, redirecting to dashboard...')
               await new Promise(resolve => setTimeout(resolve, 500))

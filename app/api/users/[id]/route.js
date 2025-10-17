@@ -53,7 +53,6 @@ export async function GET(request, { params }) {
     }
 
     // Always include SSN indicator (encrypted or decrypted based on query param)
-    const { searchParams } = new URL(request.url)
     const includeSSN = searchParams.get('includeSSN') === 'true'
     
     // Helper to handle SSN masking/decryption
