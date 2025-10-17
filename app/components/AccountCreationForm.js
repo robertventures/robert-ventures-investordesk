@@ -61,7 +61,8 @@ export default function AccountCreationForm() {
     setAccountExistsError('')
     
     try {
-      const res = await fetch('/api/users', {
+      // Register as pending user (not added to Supabase yet)
+      const res = await fetch('/api/auth/register-pending', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -72,11 +73,12 @@ export default function AccountCreationForm() {
 
       const data = await res.json()
 
-      if (data.success && data.user) {
-        localStorage.setItem('currentUserId', data.user.id)
+      if (data.success) {
+        // Store email for confirmation page
         localStorage.setItem('signupEmail', form.email)
-        // Pass user data via URL to ensure it's available in production
-        router.push(`/confirmation?email=${encodeURIComponent(form.email)}&userId=${data.user.id}`)
+        localStorage.setItem('pendingRegistration', 'true')
+        // Redirect to confirmation page
+        router.push(`/confirmation?email=${encodeURIComponent(form.email)}`)
         return
       }
 

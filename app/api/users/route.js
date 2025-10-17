@@ -123,8 +123,9 @@ export async function GET(request) {
 }
 
 // POST - Create a new user
-// Public endpoint for user registration
-// Admin-created users can be created via the import system
+// NOTE: This endpoint is now primarily for admin/internal use (seeding, imports, etc.)
+// Regular user registration should use POST /api/auth/register-pending followed by
+// POST /api/auth/verify-and-create to ensure email verification before account creation
 export async function POST(request) {
   try {
     // Apply rate limiting for user creation

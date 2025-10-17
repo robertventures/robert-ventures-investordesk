@@ -9,7 +9,6 @@ export default function ConfirmationPage() {
   const router = useRouter()
   const [code, setCode] = useState(['', '', '', '', '', ''])
   const [email, setEmail] = useState('')
-  const [userId, setUserId] = useState('')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [countdown, setCountdown] = useState(26)
@@ -19,24 +18,20 @@ export default function ConfirmationPage() {
     // Try to get from URL parameters first (more reliable in production)
     const params = new URLSearchParams(window.location.search)
     const urlEmail = params.get('email')
-    const urlUserId = params.get('userId')
     
     // Fallback to localStorage
     const signupEmail = urlEmail || localStorage.getItem('signupEmail')
-    const userIdFromStorage = urlUserId || localStorage.getItem('currentUserId')
     
-    if (!signupEmail || !userIdFromStorage) {
-      // If no email/user found, redirect to sign-in
+    if (!signupEmail) {
+      // If no email found, redirect to sign-in
       router.push('/sign-in')
       return
     }
     
     // Store in localStorage if it came from URL
     if (urlEmail) localStorage.setItem('signupEmail', urlEmail)
-    if (urlUserId) localStorage.setItem('currentUserId', urlUserId)
     
     setEmail(signupEmail)
-    setUserId(userIdFromStorage)
 
     // Start countdown timer
     const timer = setInterval(() => {
@@ -115,31 +110,22 @@ export default function ConfirmationPage() {
       return
     }
 
-    // Check if code is correct (000000)
-    if (enteredCode !== '000000') {
-      setError('Invalid verification code. Please try again.')
-      setCode(['', '', '', '', '', ''])
-      inputRefs.current[0]?.focus()
-      return
-    }
-
     setIsLoading(true)
     
     try {
-      // Use the userId from state
-      if (!userId) {
-        setError('Session expired. Please sign in again.')
+      if (!email) {
+        setError('Session expired. Please sign up again.')
         setTimeout(() => router.push('/'), 2000)
         return
       }
 
-      // Call backend to verify the account
-      const res = await fetch(`/api/users/${userId}`, {
-        method: 'PUT',
+      // Call backend to verify code and create the actual user account
+      const res = await fetch('/api/auth/verify-and-create', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include', // Important: needed to receive auth cookies
         body: JSON.stringify({
-          _action: 'verifyAccount',
+          email: email,
           verificationCode: enteredCode
         })
       })
@@ -147,12 +133,15 @@ export default function ConfirmationPage() {
       const data = await res.json()
 
       if (!data.success) {
-        // Provide more helpful error messages
+        // Provide helpful error messages
         let errorMessage = data.error || 'Verification failed. Please try again.'
         
-        // If user not found, suggest trying again (might be eventual consistency issue)
-        if (errorMessage.includes('User not found')) {
-          errorMessage = 'Account is being set up. Please wait a moment and try again.'
+        // If pending registration expired or not found
+        if (errorMessage.includes('not found or expired')) {
+          errorMessage = 'Registration expired. Please sign up again.'
+          // Clear localStorage
+          localStorage.removeItem('signupEmail')
+          localStorage.removeItem('pendingRegistration')
         }
         
         setError(errorMessage)
@@ -161,12 +150,13 @@ export default function ConfirmationPage() {
         return
       }
 
-      // Verification successful! User is now automatically logged in via auth cookies
-      // Update localStorage with user info for backward compatibility
-      localStorage.setItem('currentUserId', userId)
-      localStorage.setItem('signupEmail', email)
+      // Verification successful! User account created and automatically logged in
+      // Update localStorage with user info
+      localStorage.setItem('currentUserId', data.user.id)
+      localStorage.setItem('signupEmail', data.user.email)
+      localStorage.removeItem('pendingRegistration') // Clear pending flag
       
-      console.log('✅ Verification successful, user auto-logged in, redirecting to investment page')
+      console.log('✅ Account created and verified successfully, user auto-logged in, redirecting to investment page')
       
       // Redirect to investment page to continue the onboarding flow
       router.push('/investment')
