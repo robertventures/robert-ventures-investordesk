@@ -8,6 +8,7 @@ import { calculateInvestmentValue, formatCurrency, formatDate, getInvestmentStat
 export default function PortfolioSummary() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const [mounted, setMounted] = useState(false)
   const [userData, setUserData] = useState(null)
   const [portfolioData, setPortfolioData] = useState({
     totalInvested: 0,
@@ -244,6 +245,7 @@ export default function PortfolioSummary() {
   }, [searchParams])
 
   useEffect(() => {
+    setMounted(true)
     loadData()
   }, [loadData])
 
@@ -269,7 +271,8 @@ export default function PortfolioSummary() {
     router.push(`/investment-details/${inv.id}`)
   }
 
-  if (!userData) {
+  // Prevent hydration mismatch by not rendering until mounted on client
+  if (!mounted || !userData) {
     return <div className={styles.loading}>Loading portfolio...</div>
   }
 

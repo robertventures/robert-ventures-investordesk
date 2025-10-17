@@ -12,10 +12,12 @@ import styles from './page.module.css'
 export default function DashboardPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const [mounted, setMounted] = useState(false)
   const [activeView, setActiveView] = useState('portfolio')
 
   // Guard against missing/removed account
   useEffect(() => {
+    setMounted(true)
     const verify = async () => {
       const userId = localStorage.getItem('currentUserId')
       if (!userId) { router.push('/'); return }
@@ -81,6 +83,17 @@ export default function DashboardPage() {
       default:
         return <PortfolioSummary />
     }
+  }
+
+  // Prevent hydration mismatch - don't render until mounted
+  if (!mounted) {
+    return (
+      <div className={styles.main}>
+        <div style={{ padding: '40px', textAlign: 'center' }}>
+          Loading...
+        </div>
+      </div>
+    )
   }
 
   return (
