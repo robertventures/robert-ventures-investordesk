@@ -29,6 +29,7 @@ function ClientContent() {
   const [payoutMethod, setPayoutMethod] = useState('bank-account')
   const [isSaving, setIsSaving] = useState(false)
   const [validationErrors, setValidationErrors] = useState([])
+  const [submitError, setSubmitError] = useState('')
   const [availableBanks, setAvailableBanks] = useState([])
   const [selectedBankId, setSelectedBankId] = useState('')
   const [agreeToTerms, setAgreeToTerms] = useState(false)
@@ -218,7 +219,7 @@ function ClientContent() {
               className={styles.downloadButton}
               onClick={() => {
                 if (!user || !investment) {
-                  alert('Unable to generate agreement. Please refresh the page and try again.')
+                  setSubmitError('Unable to generate agreement. Please refresh the page and try again.')
                   return
                 }
                 
@@ -598,7 +599,7 @@ function ClientContent() {
               console.log('Investment update result:', investmentUpdateData)
               if (!investmentUpdateData.success) {
                 console.error('Investment update failed:', investmentUpdateData.error)
-                alert(`Failed to submit investment: ${investmentUpdateData.error || 'Unknown error'}`)
+                setSubmitError(`Failed to submit investment: ${investmentUpdateData.error || 'Unknown error'}. Please try again.`)
                 return
               }
               console.log('Investment updated successfully, proceeding to banking update...')
@@ -640,7 +641,7 @@ function ClientContent() {
               window.location.href = '/dashboard?from=finalize'
             } catch (e) {
               console.error('Failed to save finalization data', e)
-              alert('An error occurred while submitting your investment. Please try again. If the problem persists, contact support.')
+              setSubmitError('An error occurred while submitting your investment. Please try again. If the problem persists, contact support.')
             } finally {
               setIsSaving(false)
             }
@@ -648,6 +649,11 @@ function ClientContent() {
         >
           {isSaving ? 'Saving...' : 'Continue & Submit'}
         </button>
+        {submitError && (
+          <div className={styles.submitError}>
+            <p className={styles.submitErrorText}>{submitError}</p>
+          </div>
+        )}
         {validationErrors.length > 0 && (
           <div className={styles.warning}>
             <div className={styles.warningTitle}>Please complete the following before continuing:</div>

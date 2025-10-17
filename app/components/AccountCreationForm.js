@@ -16,6 +16,7 @@ export default function AccountCreationForm() {
   const [showPassword, setShowPassword] = useState(false)
   const [isPasswordFocused, setIsPasswordFocused] = useState(false)
   const [accountExistsError, setAccountExistsError] = useState('')
+  const [generalError, setGeneralError] = useState('')
   
   const hasUppercase = /[A-Z]/.test(form.password)
   const hasNumber = /[0-9]/.test(form.password)
@@ -37,6 +38,7 @@ export default function AccountCreationForm() {
     setForm(prev => ({ ...prev, [name]: value }))
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }))
     if (accountExistsError) setAccountExistsError('')
+    if (generalError) setGeneralError('')
   }
 
   const validate = () => {
@@ -83,10 +85,10 @@ export default function AccountCreationForm() {
         return
       }
 
-      alert(data.error || 'Failed to create account')
+      setGeneralError(data.error || 'Failed to create account. Please try again.')
     } catch (err) {
       console.error('Signup error', err)
-      alert('Unexpected error, please try again')
+      setGeneralError('An unexpected error occurred. Please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -104,6 +106,12 @@ export default function AccountCreationForm() {
           >
             Sign In Instead
           </button>
+        </div>
+      )}
+      
+      {generalError && (
+        <div className={styles.generalError}>
+          <p className={styles.errorText}>{generalError}</p>
         </div>
       )}
       

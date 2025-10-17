@@ -42,6 +42,22 @@
   box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3);
 }
 
+.generalError {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.errorText {
+  color: #dc2626;
+  font-size: 14px;
+  margin: 0;
+  font-weight: 500;
+}
+
 .grid {
   display: grid;
   gap: 16px 20px;

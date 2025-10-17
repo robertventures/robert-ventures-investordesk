@@ -12,6 +12,7 @@ export default function SignInForm() {
   const [errors, setErrors] = useState({})
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [generalError, setGeneralError] = useState('')
 
   const handleInputChange = (e) => {
     const { name, value } = e.target
@@ -25,6 +26,9 @@ export default function SignInForm() {
         ...prev,
         [name]: ''
       }))
+    }
+    if (generalError) {
+      setGeneralError('')
     }
   }
 
@@ -75,7 +79,7 @@ export default function SignInForm() {
         if (res.status === 401) {
           setErrors({ password: 'Invalid email or password' })
         } else {
-          alert('Error: ' + (data.error || 'Failed to sign in'))
+          setGeneralError(data.error || 'Failed to sign in. Please try again.')
         }
         setIsLoading(false)
         return
@@ -98,7 +102,7 @@ export default function SignInForm() {
       }
     } catch (err) {
       console.error('Login error:', err)
-      alert('An error occurred. Please try again.')
+      setGeneralError('An unexpected error occurred. Please try again.')
     } finally {
       setIsLoading(false)
     }
@@ -107,6 +111,11 @@ export default function SignInForm() {
   return (
     <div className={styles.signInForm}>
       <form onSubmit={handleSubmit} className={styles.form}>
+        {generalError && (
+          <div className={styles.generalError}>
+            <p className={styles.errorText}>{generalError}</p>
+          </div>
+        )}
         <div className={styles.field}>
           <label htmlFor="email" className={styles.label}>
             Email Address

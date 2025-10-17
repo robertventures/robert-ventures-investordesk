@@ -15,6 +15,21 @@
   gap: 24px;
 }
 
+.generalError {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+}
+
+.errorText {
+  color: #dc2626;
+  font-size: 14px;
+  margin: 0;
+  font-weight: 500;
+}
+
 .field {
   display: flex;
   flex-direction: column;
