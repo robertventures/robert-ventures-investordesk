@@ -19,6 +19,7 @@ export default function FinalizeInvestmentPage() {
 }
 
 function ClientContent() {
+  const [mounted, setMounted] = useState(false)
   const [user, setUser] = useState(null)
   const [investment, setInvestment] = useState(null)
   const [accredited, setAccredited] = useState('')
@@ -34,6 +35,7 @@ function ClientContent() {
   const [showDetails, setShowDetails] = useState(false)
 
   useEffect(() => {
+    setMounted(true)
     const load = async () => {
       const userId = localStorage.getItem('currentUserId')
       const investmentId = localStorage.getItem('currentInvestmentId')
@@ -126,7 +128,8 @@ function ClientContent() {
     }
   }, [accredited, accreditedType, tenPercentConfirmed, fundingMethod, payoutMethod, selectedBankId, agreeToTerms])
 
-  if (!user) return <div className={styles.loading}>Loading...</div>
+  // Prevent hydration mismatch
+  if (!mounted || !user) return <div className={styles.loading}>Loading...</div>
 
   const isIra = investment?.accountType === 'ira'
   const requiresWireTransfer = investment?.amount > 100000
