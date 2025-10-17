@@ -68,6 +68,16 @@ export default function PortfolioSummary() {
             const investmentTransactions = Array.isArray(inv.transactions) ? inv.transactions : []
             const status = getInvestmentStatus(inv, currentAppTime)
             
+            // Fallback: If confirmedAt is not set, try to get it from activity log
+            let confirmedAt = inv.confirmedAt
+            if (!confirmedAt && (inv.status === 'active' || inv.status === 'withdrawal_notice' || inv.status === 'withdrawn')) {
+              const activity = data.user.activity || []
+              const confirmEvent = activity.find(a => a.type === 'investment_confirmed' && a.investmentId === inv.id)
+              if (confirmEvent && confirmEvent.date) {
+                confirmedAt = confirmEvent.date
+              }
+            }
+            
             // Calculate earnings for ALL investments (including withdrawn)
             // Total Earnings represents lifetime earnings across all investments
             if (inv.status === 'withdrawn') {
@@ -103,6 +113,7 @@ export default function PortfolioSummary() {
             
             investmentDetails.push({
               ...inv,
+              confirmedAt,  // Use the fallback value
               calculation,
               status
             })
