@@ -5,10 +5,12 @@ import styles from './DashboardHeader.module.css'
 
 export default function DashboardHeader({ onViewChange, activeView }) {
   const router = useRouter()
+  const [mounted, setMounted] = useState(false)
   const [userData, setUserData] = useState(null)
   const [showMobileNav, setShowMobileNav] = useState(false)
 
   useEffect(() => {
+    setMounted(true)
     const userId = localStorage.getItem('currentUserId')
     if (!userId) {
       router.push('/')
@@ -82,7 +84,8 @@ export default function DashboardHeader({ onViewChange, activeView }) {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [showMobileNav])
 
-  if (!userData) {
+  // Prevent hydration mismatch
+  if (!mounted || !userData) {
     return <div className={styles.loading}>Loading...</div>
   }
 

@@ -46,6 +46,7 @@ function eventMeta(ev) {
 
 const TransactionsList = memo(function TransactionsList({ limit = null, showViewAll = true, filterInvestmentId = null, expandable = false }) {
   const router = useRouter()
+  const [mounted, setMounted] = useState(false)
   const [events, setEvents] = useState([])
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -54,6 +55,7 @@ const TransactionsList = memo(function TransactionsList({ limit = null, showView
   const itemsPerPage = 20
 
   useEffect(() => {
+    setMounted(true)
     const load = async () => {
       const userId = localStorage.getItem('currentUserId')
       if (!userId) { setLoading(false); return }
@@ -91,7 +93,8 @@ const TransactionsList = memo(function TransactionsList({ limit = null, showView
     load()
   }, [])
 
-  if (loading) return <div className={styles.empty}>Loading activity…</div>
+  // Prevent hydration mismatch
+  if (!mounted || loading) return <div className={styles.empty}>Loading activity…</div>
   if (!user) return <div className={styles.empty}>No user found.</div>
   
   // PERFORMANCE: Memoize expensive filtering and pagination calculations
