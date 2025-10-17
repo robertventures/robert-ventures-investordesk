@@ -46,10 +46,38 @@ export async function GET(request) {
         verifiedAt: u.verified_at,
         createdAt: u.created_at,
         updatedAt: u.updated_at,
-        investments: u.investments || [],
+        investments: (u.investments || []).map(inv => ({
+          ...inv,
+          paymentFrequency: inv.payment_frequency,
+          lockupPeriod: inv.lockup_period,
+          accountType: inv.account_type,
+          paymentMethod: inv.payment_method,
+          personalInfo: inv.personal_info,
+          requiresManualApproval: inv.requires_manual_approval,
+          manualApprovalReason: inv.manual_approval_reason,
+          submittedAt: inv.submitted_at,
+          confirmedAt: inv.confirmed_at,
+          confirmedByAdminId: inv.confirmed_by_admin_id,
+          confirmationSource: inv.confirmation_source,
+          rejectedAt: inv.rejected_at,
+          rejectedByAdminId: inv.rejected_by_admin_id,
+          rejectionSource: inv.rejection_source,
+          lockupEndDate: inv.lockup_end_date,
+          withdrawnAt: inv.withdrawn_at,
+          createdAt: inv.created_at,
+          updatedAt: inv.updated_at,
+          totalEarnings: inv.total_earnings,
+          finalValue: inv.final_value,
+          withdrawalNoticeStartAt: inv.withdrawal_notice_start_at,
+          autoApproved: inv.auto_approved
+        })),
         withdrawals: u.withdrawals || [],
         bankAccounts: u.bank_accounts || [],
-        activity: u.activity || []
+        activity: u.activity || [],
+        jointHolder: u.joint_holder || null,
+        jointHoldingType: u.joint_holding_type || null,
+        entityName: u.entity_name || null,
+        authorizedRepresentative: u.authorized_representative || null
       }))
 
       return NextResponse.json({

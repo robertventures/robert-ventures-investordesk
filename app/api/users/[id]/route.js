@@ -42,7 +42,31 @@ export async function GET(request, { params }) {
       verifiedAt: user.verified_at,
       createdAt: user.created_at,
       updatedAt: user.updated_at,
-      investments: user.investments || [],
+      investments: (user.investments || []).map(inv => ({
+        ...inv,
+        paymentFrequency: inv.payment_frequency,
+        lockupPeriod: inv.lockup_period,
+        accountType: inv.account_type,
+        paymentMethod: inv.payment_method,
+        personalInfo: inv.personal_info,
+        requiresManualApproval: inv.requires_manual_approval,
+        manualApprovalReason: inv.manual_approval_reason,
+        submittedAt: inv.submitted_at,
+        confirmedAt: inv.confirmed_at,
+        confirmedByAdminId: inv.confirmed_by_admin_id,
+        confirmationSource: inv.confirmation_source,
+        rejectedAt: inv.rejected_at,
+        rejectedByAdminId: inv.rejected_by_admin_id,
+        rejectionSource: inv.rejection_source,
+        lockupEndDate: inv.lockup_end_date,
+        withdrawnAt: inv.withdrawn_at,
+        createdAt: inv.created_at,
+        updatedAt: inv.updated_at,
+        totalEarnings: inv.total_earnings,
+        finalValue: inv.final_value,
+        withdrawalNoticeStartAt: inv.withdrawal_notice_start_at,
+        autoApproved: inv.auto_approved
+      })),
       withdrawals: user.withdrawals || [],
       bankAccounts: user.bank_accounts || [],
       activity: user.activity || [],
@@ -173,9 +197,68 @@ export async function PUT(request, { params }) {
         )
       }
 
+      // Fetch the full user object with updated investments
+      const updatedUser = await getUser(id, true)
+      if (!updatedUser) {
+        return NextResponse.json(
+          { success: false, error: 'Failed to fetch updated user data' },
+          { status: 500 }
+        )
+      }
+
+      // Convert snake_case to camelCase for frontend
+      const safeUser = {
+        id: updatedUser.id,
+        email: updatedUser.email,
+        firstName: updatedUser.first_name,
+        lastName: updatedUser.last_name,
+        phoneNumber: updatedUser.phone_number,
+        dob: updatedUser.dob,
+        address: updatedUser.address,
+        accountType: updatedUser.account_type,
+        isAdmin: updatedUser.is_admin,
+        isVerified: updatedUser.is_verified,
+        verifiedAt: updatedUser.verified_at,
+        createdAt: updatedUser.created_at,
+        updatedAt: updatedUser.updated_at,
+        investments: (updatedUser.investments || []).map(inv => ({
+          ...inv,
+          paymentFrequency: inv.payment_frequency,
+          lockupPeriod: inv.lockup_period,
+          accountType: inv.account_type,
+          paymentMethod: inv.payment_method,
+          personalInfo: inv.personal_info,
+          requiresManualApproval: inv.requires_manual_approval,
+          manualApprovalReason: inv.manual_approval_reason,
+          submittedAt: inv.submitted_at,
+          confirmedAt: inv.confirmed_at,
+          confirmedByAdminId: inv.confirmed_by_admin_id,
+          confirmationSource: inv.confirmation_source,
+          rejectedAt: inv.rejected_at,
+          rejectedByAdminId: inv.rejected_by_admin_id,
+          rejectionSource: inv.rejection_source,
+          lockupEndDate: inv.lockup_end_date,
+          withdrawnAt: inv.withdrawn_at,
+          createdAt: inv.created_at,
+          updatedAt: inv.updated_at,
+          totalEarnings: inv.total_earnings,
+          finalValue: inv.final_value,
+          withdrawalNoticeStartAt: inv.withdrawal_notice_start_at,
+          autoApproved: inv.auto_approved
+        })),
+        withdrawals: updatedUser.withdrawals || [],
+        bankAccounts: updatedUser.bank_accounts || [],
+        activity: updatedUser.activity || [],
+        jointHolder: updatedUser.joint_holder || null,
+        jointHoldingType: updatedUser.joint_holding_type || null,
+        entityName: updatedUser.entity_name || null,
+        authorizedRepresentative: updatedUser.authorized_representative || null
+      }
+
       return NextResponse.json({
         success: true,
-        investment: result.investment
+        investment: result.investment,
+        user: safeUser
       })
     }
 
