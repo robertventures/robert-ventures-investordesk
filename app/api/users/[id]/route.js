@@ -13,8 +13,12 @@ import { setAuthCookies } from '../../../../lib/authMiddleware.js'
 export async function GET(request, { params }) {
   try {
     const { id } = params
+    
+    // Check if fresh data is requested (skip cache for post-finalization consistency)
+    const { searchParams } = new URL(request.url)
+    const skipCache = searchParams.get('fresh') === 'true'
 
-    const user = await getUser(id)
+    const user = await getUser(id, skipCache)
     
     if (!user) {
       return NextResponse.json(
