@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getUser, updateUser } from '../../../../lib/supabaseDatabase.js'
+import { getUser, updateUser, addInvestment, updateInvestment as updateInvestmentDB, deleteInvestment as deleteInvestmentDB } from '../../../../lib/supabaseDatabase.js'
 import { createServiceClient } from '../../../../lib/supabaseClient.js'
 import { getCurrentAppTime } from '../../../../lib/appTime.js'
 import { decrypt, isEncrypted } from '../../../../lib/encryption.js'
@@ -89,9 +89,88 @@ export async function PUT(request, { params }) {
   try {
     const { id } = params
     const body = await request.json()
-    const { _action, verificationCode, ...updateData } = body
+    const { _action, verificationCode, investment, investmentId, fields, ...updateData } = body
 
     // Handle special actions
+    if (_action === 'startInvestment') {
+      // Create a new investment
+      if (!investment) {
+        return NextResponse.json(
+          { success: false, error: 'Investment data is required' },
+          { status: 400 }
+        )
+      }
+
+      // Generate investment ID
+      const newInvestmentId = `INV-${Date.now()}`
+      
+      const result = await addInvestment(id, {
+        id: newInvestmentId,
+        ...investment,
+        status: 'draft'
+      })
+
+      if (!result.success) {
+        return NextResponse.json(
+          { success: false, error: result.error },
+          { status: 500 }
+        )
+      }
+
+      return NextResponse.json({
+        success: true,
+        investment: result.investment
+      })
+    }
+
+    if (_action === 'updateInvestment') {
+      // Update an existing investment
+      if (!investmentId) {
+        return NextResponse.json(
+          { success: false, error: 'Investment ID is required' },
+          { status: 400 }
+        )
+      }
+
+      const result = await updateInvestmentDB(investmentId, fields || {})
+
+      if (!result.success) {
+        return NextResponse.json(
+          { success: false, error: result.error },
+          { status: 500 }
+        )
+      }
+
+      return NextResponse.json({
+        success: true,
+        investment: result.investment
+      })
+    }
+
+    if (_action === 'deleteInvestment') {
+      // Delete an investment
+      if (!investmentId) {
+        return NextResponse.json(
+          { success: false, error: 'Investment ID is required' },
+          { status: 400 }
+        )
+      }
+
+      const result = await deleteInvestmentDB(investmentId)
+
+      if (!result.success) {
+        return NextResponse.json(
+          { success: false, error: result.error },
+          { status: 500 }
+        )
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: 'Investment deleted successfully'
+      })
+    }
+
     if (_action === 'verifyAccount') {
       // Verify the code (in production, you'd validate the actual code)
       if (verificationCode !== '000000') {
