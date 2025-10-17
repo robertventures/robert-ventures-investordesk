@@ -844,10 +844,29 @@ export default function AdminPage() {
                           className={styles.dangerButton}
                           onClick={async (e) => {
                             e.stopPropagation()
-                            if (!confirm(`Are you sure you want to delete ${user.firstName} ${user.lastName} (${user.email})? This will permanently delete:\n\n• Their account and profile\n• All investments and transactions\n• All activity and withdrawals\n• Their authentication access\n\nThis action cannot be undone.`)) return
+                            if (!confirm(`Are you sure you want to delete ${user.firstName} ${user.lastName} (${user.email})?\n\nThis will permanently delete:\n• Account and profile\n• All investments and transactions\n• All activity and withdrawals\n• Authentication access\n\nThis action cannot be undone.`)) return
+                            
+                            console.log(`[Frontend] Deleting user ${user.id} (${user.email})...`)
+                            
                             try {
-                              const res = await fetch(`/api/users/${user.id}`, { method: 'DELETE' })
+                              const res = await fetch(`/api/users/${user.id}`, { 
+                                method: 'DELETE',
+                                credentials: 'include',
+                                headers: {
+                                  'Content-Type': 'application/json'
+                                }
+                              })
+                              
+                              console.log(`[Frontend] Response status: ${res.status}`)
+                              
+                              if (!res.ok && res.status !== 207) {
+                                console.error('[Frontend] HTTP error:', res.status, res.statusText)
+                                alert(`Failed to delete user: HTTP ${res.status}`)
+                                return
+                              }
+                              
                               const data = await res.json()
+                              console.log('[Frontend] Response data:', data)
                               
                               // Handle partial success (database deleted but auth failed)
                               if (data.partialSuccess) {
@@ -862,11 +881,13 @@ export default function AdminPage() {
                                 return
                               }
                               
-                              // Success - refresh the list
+                              // Success
+                              console.log('[Frontend] ✅ User deleted successfully')
+                              alert(`✅ User ${user.email} deleted successfully!`)
                               await refreshUsers(true)  // Force refresh to bypass cache
                             } catch (e) {
-                              console.error('Delete failed', e)
-                              alert('An error occurred. Please try again.')
+                              console.error('[Frontend] Delete failed:', e)
+                              alert(`An error occurred: ${e.message}`)
                             }
                           }}
                         >
