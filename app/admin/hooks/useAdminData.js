@@ -120,10 +120,9 @@ export function useAdminData() {
         }
       }
       
-      // Clear cache if forcing refresh
+      // Clear cache if forcing refresh (but don't run migration - that's separate)
       if (forceRefresh) {
         clearCache(CACHE_KEY_USERS)
-        await fetch('/api/migrate-transactions', { method: 'POST' })
       }
       
       // Load users with all their activity events

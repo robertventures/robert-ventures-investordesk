@@ -233,7 +233,7 @@ export default function AdminPage() {
         alert(data.error || 'Failed to confirm investment')
         return
       }
-      await refreshUsers()
+      await refreshUsers(true)  // Force refresh to bypass cache
     } catch (e) {
       console.error('Confirm failed', e)
       alert('An error occurred. Please try again.')
@@ -260,7 +260,7 @@ export default function AdminPage() {
         alert(data.error || 'Failed to reject investment')
         return
       }
-      await refreshUsers()
+      await refreshUsers(true)  // Force refresh to bypass cache
     } catch (e) {
       console.error('Reject failed', e)
       alert('An error occurred. Please try again.')
@@ -282,8 +282,8 @@ export default function AdminPage() {
         alert(data.error || 'Failed to update withdrawal')
         return
       }
-      await refreshWithdrawals()
-      await refreshUsers()
+      await refreshWithdrawals(true)  // Force refresh to bypass cache
+      await refreshUsers(true)  // Force refresh to bypass cache
       alert('Withdrawal updated successfully')
     } catch (e) {
       console.error('Failed to update withdrawal', e)
@@ -305,8 +305,8 @@ export default function AdminPage() {
         return
       }
       alert(data.message || 'Payout updated successfully')
-      await refreshPayouts()
-      await refreshUsers()
+      await refreshPayouts(true)  // Force refresh to bypass cache
+      await refreshUsers(true)  // Force refresh to bypass cache
     } catch (e) {
       console.error('Failed to process payout action', e)
       alert('An error occurred')
@@ -452,7 +452,7 @@ export default function AdminPage() {
         return
       }
       alert('All non-admin accounts deleted. Reloading users...')
-      await refreshUsers()
+      await refreshUsers(true)  // Force refresh to bypass cache
     } catch (error) {
       console.error('Failed to delete accounts', error)
       alert('An error occurred while deleting accounts')
@@ -476,7 +476,7 @@ export default function AdminPage() {
         return
       }
       alert('Test accounts seeded successfully! Reloading users...')
-      await refreshUsers()
+      await refreshUsers(true)  // Force refresh to bypass cache
     } catch (error) {
       console.error('Failed to seed accounts', error)
       alert('An error occurred while seeding accounts')
@@ -489,7 +489,7 @@ export default function AdminPage() {
   const handleImportComplete = async (result) => {
     console.log('Import completed:', result)
     // Refresh users data to show newly imported investors
-    await refreshUsers()
+    await refreshUsers(true)  // Force refresh to bypass cache
   }
 
   // Loading state
@@ -819,7 +819,7 @@ export default function AdminPage() {
                                 alert(data.error || 'Failed to delete user')
                                 return
                               }
-                              await refreshUsers()
+                              await refreshUsers(true)  // Force refresh to bypass cache
                             } catch (e) {
                               console.error('Delete failed', e)
                               alert('An error occurred. Please try again.')
