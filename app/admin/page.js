@@ -223,11 +223,10 @@ export default function AdminPage() {
                       user.address.state && 
                       user.address.zip
     
-    // Check bank connection
-    const hasBankConnection = user.bankAccounts && 
-                             user.bankAccounts.length > 0
+    // Note: Bank connection check removed since users can't add bank accounts
+    // through the regular signup flow - only needed during investment finalization
     
-    return hasPersonalDetails && hasAddress && hasBankConnection
+    return hasPersonalDetails && hasAddress
   }
 
   // Investment operations
@@ -803,7 +802,7 @@ export default function AdminPage() {
                         <div className={styles.accountBadges}>
                           {user.isVerified && <span className={styles.verifiedBadge}>✓ Verified</span>}
                           {!isProfileComplete(user) && (
-                            <span className={styles.warningBadge} title="Profile incomplete: Personal details and bank connection required">
+                            <span className={styles.warningBadge} title="Profile incomplete: Missing personal details or address information">
                               ⚠ Profile Incomplete
                             </span>
                           )}
