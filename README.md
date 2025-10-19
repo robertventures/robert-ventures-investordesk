@@ -59,6 +59,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
   - `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Anon/public key
   - `SUPABASE_SERVICE_ROLE_KEY` - Service role key (⚠️ NEVER expose to frontend!)
 - The service role key is **required** for admin operations like deleting users
+- **Set up required tables:** See [docs/SUPABASE-SETUP.md](docs/SUPABASE-SETUP.md) for SQL setup
 
 **Example `.env.local`:**
 ```bash
@@ -118,21 +119,11 @@ Navigate to [http://localhost:3000](http://localhost:3000) to see the applicatio
 
 **For complete technical documentation:**
 - [docs/BACKEND-GUIDE.md](docs/BACKEND-GUIDE.md) - Complete backend implementation guide
-  - Database schema and API details
+  - Database schema and API details (including required `pending_users` table)
   - Supabase architecture and data storage
   - Auth + Users table explanation
-  - User deletion and syncing
+  - Interest calculations and transaction system
   - Troubleshooting and verification
-
-### Syncing Auth Users
-
-If you have users in Supabase Auth but they don't appear in the admin panel:
-
-```bash
-npm run sync-auth-users
-```
-
-This creates database records for auth users that are missing from the `users` table. See the "Supabase Architecture" section in BACKEND-GUIDE.md for details.
 
 ## Project Structure
 
