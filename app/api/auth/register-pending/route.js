@@ -67,8 +67,8 @@ export async function POST(request) {
     // Hash password
     const hashedPassword = await hashPassword(password)
 
-    // Store as pending user (not in Supabase yet)
-    const result = storePendingUser(validatedEmail, hashedPassword)
+    // Store as pending user (not in Supabase users table yet)
+    const result = await storePendingUser(validatedEmail, hashedPassword)
 
     if (result.success) {
       console.log('✅ Pending user registration created:', {
@@ -77,16 +77,26 @@ export async function POST(request) {
         timestamp: new Date().toISOString()
       })
 
-      // In production, here you would:
-      // 1. Generate a real verification code
-      // 2. Send verification email with the code
-      // For now, we'll use the hardcoded 000000 code
+      // Check if email verification is enabled
+      const emailVerificationEnabled = process.env.ENABLE_EMAIL_VERIFICATION === 'true'
+      
+      if (emailVerificationEnabled && result.verificationCode !== '000000') {
+        // TODO: Send verification email
+        // Example:
+        // await sendVerificationEmail(result.email, result.verificationCode)
+        console.log(`📧 Would send email to ${result.email} with code: ${result.verificationCode}`)
+      } else {
+        // Test mode: using hardcoded 000000 code (no email needed)
+        console.log(`🧪 Test mode: Use verification code 000000 for ${result.email}`)
+      }
 
       return NextResponse.json({
         success: true,
         pendingId: result.pendingId,
         email: result.email,
-        message: 'Verification code sent to your email'
+        message: emailVerificationEnabled 
+          ? 'Verification code sent to your email'
+          : 'Use verification code: 000000'
       }, { status: 200 })
     } else {
       return NextResponse.json(

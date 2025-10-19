@@ -22,7 +22,7 @@ export async function POST(request) {
     }
 
     // Verify the pending user and get their data
-    const verifyResult = verifyAndRemovePendingUser(email, verificationCode)
+    const verifyResult = await verifyAndRemovePendingUser(email, verificationCode)
 
     if (!verifyResult.success) {
       return NextResponse.json(

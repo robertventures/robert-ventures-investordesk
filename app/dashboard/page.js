@@ -23,7 +23,7 @@ export default function DashboardPage() {
       if (!userId) { router.push('/'); return }
       try {
         // Check if we're coming from investment finalization
-        // If so, request fresh data with extended retries to handle Netlify Blobs consistency
+        // If so, request fresh data to ensure we have the latest state
         const fromFinalize = searchParams.get('from') === 'finalize'
         const freshParam = fromFinalize ? '?fresh=true' : ''
         

@@ -8,18 +8,60 @@ This guide documents the exact business logic, calculations, and API requirement
 
 ## Table of Contents
 
-1. [Platform Overview](#platform-overview)
-2. [Core Business Rules](#core-business-rules)
-3. [Authentication & Security](#authentication--security)
-4. [Data Models](#data-models)
-5. [ID Architecture](#id-architecture)
-6. [Investment State Machine](#investment-state-machine)
-7. [Interest Calculations](#interest-calculations)
-8. [Transaction System](#transaction-system)
-9. [Withdrawal Rules](#withdrawal-rules)
-10. [API Endpoints](#api-endpoints)
-11. [Admin Features](#admin-features)
-12. [Testing Requirements](#testing-requirements)
+1. [Quick Setup](#quick-setup)
+2. [Platform Overview](#platform-overview)
+3. [Core Business Rules](#core-business-rules)
+4. [Authentication & Security](#authentication--security)
+5. [Data Models](#data-models)
+6. [ID Architecture](#id-architecture)
+7. [Investment State Machine](#investment-state-machine)
+8. [Interest Calculations](#interest-calculations)
+9. [Transaction System](#transaction-system)
+10. [Withdrawal Rules](#withdrawal-rules)
+11. [API Endpoints](#api-endpoints)
+12. [Admin Features](#admin-features)
+13. [Testing Requirements](#testing-requirements)
+
+---
+
+## Quick Setup
+
+### Required Supabase Tables
+
+The app requires a `pending_users` table for the registration flow. Create it using the Supabase SQL Editor:
+
+```sql
+-- Create pending_users table for temporary user registration storage
+CREATE TABLE IF NOT EXISTS pending_users (
+  id TEXT PRIMARY KEY,
+  email TEXT NOT NULL UNIQUE,
+  hashed_password TEXT NOT NULL,
+  verification_code TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Create indexes
+CREATE INDEX IF NOT EXISTS idx_pending_users_email ON pending_users(email);
+CREATE INDEX IF NOT EXISTS idx_pending_users_created_at ON pending_users(created_at);
+
+-- Enable RLS
+ALTER TABLE pending_users ENABLE ROW LEVEL SECURITY;
+
+-- Allow service role to manage pending users
+CREATE POLICY "Service role can manage pending users"
+  ON pending_users FOR ALL TO service_role
+  USING (true) WITH CHECK (true);
+```
+
+### Testing Accounts
+
+The default setup uses **test mode** for easy account creation:
+- No email verification needed
+- Use verification code: `000000` for any account
+- Works in both local dev AND production
+- Create unlimited test accounts instantly
+
+To enable real email verification later, set `ENABLE_EMAIL_VERIFICATION=true` in your environment.
 
 ---
 
@@ -3604,15 +3646,15 @@ app/
 - Comprehensive results returned at end
 
 **Storage:**
-- Netlify Blobs is globally distributed CDN
-- Fast uploads/downloads worldwide
-- No size limits (within reasonable range)
-- Automatic caching
+- Supabase Storage provides secure document storage
+- Fast uploads/downloads with CDN
+- Configurable size limits per bucket
+- Built-in access control with RLS
 
 **Scaling:**
 - Current implementation handles hundreds of users efficiently
 - For thousands of users: consider batch processing with queue system
-- Monitor blob storage usage and costs
+- Monitor storage usage in Supabase dashboard
 
 ### Future Enhancements (Optional)
 
