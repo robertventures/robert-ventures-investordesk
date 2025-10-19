@@ -8,13 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "seed-test-accounts": "node scripts/seed-test-accounts.js",
     "seed-supabase": "node --env-file=.env.local scripts/seed-supabase.js",
-    "verify-data": "node --env-file=.env.local scripts/verify-data-sources.js",
-    "sync-auth-users": "node --env-file=.env.local scripts/sync-auth-to-users.js",
-    "sync-display-names": "node --env-file=.env.local scripts/sync-display-names.js",
-    "diagnose-deletion": "node --env-file=.env.local scripts/diagnose-deletion.js",
-    "clean-orphaned-auth": "node --env-file=.env.local scripts/clean-orphaned-auth-users.js"
+    "verify-data": "node --env-file=.env.local scripts/verify-data-sources.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
