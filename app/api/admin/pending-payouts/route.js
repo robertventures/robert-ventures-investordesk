@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getUsers, saveUsers } from '../../../../lib/supabaseDatabase.js'
 import { requireAdmin, authErrorResponse } from '../../../../lib/authMiddleware.js'
 import { getCurrentAppTime } from '../../../../lib/appTime.js'
+import { createServiceClient } from '../../../../lib/supabaseClient.js'
 
 // GET - List all pending payouts across all users
 export async function GET(request) {
@@ -184,6 +185,30 @@ export async function POST(request) {
       return NextResponse.json({ 
         success: false, 
         error: 'Failed to save changes' 
+      }, { status: 500 })
+    }
+
+    // CRITICAL FIX: Also save to Supabase transactions table for proper data persistence
+    const supabase = createServiceClient()
+    const dbTransaction = {
+      id: transaction.id,
+      user_id: userId,
+      investment_id: investment.id,
+      type: transaction.type,
+      amount: transaction.amount,
+      status: transaction.status,
+      date: transaction.date
+    }
+    
+    const { error: transactionError } = await supabase
+      .from('transactions')
+      .upsert(dbTransaction, { onConflict: 'id' })
+    
+    if (transactionError) {
+      console.error('Failed to update transaction in database:', transactionError)
+      return NextResponse.json({ 
+        success: false, 
+        error: `Changes saved to users.json but failed to update database: ${transactionError.message}` 
       }, { status: 500 })
     }
 

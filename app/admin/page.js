@@ -314,17 +314,35 @@ export default function AdminPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, userId, transactionId, failureReason })
       })
+      
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`)
+      }
+      
       const data = await res.json()
       if (!data.success) {
         alert(data.error || 'Failed to process payout action')
         return
       }
+      
+      // Show success message
       alert(data.message || 'Payout updated successfully')
-      await refreshPayouts(true)  // Force refresh to bypass cache
-      await refreshUsers(true)  // Force refresh to bypass cache
+      
+      // CRITICAL FIX: Refresh both payouts and users data to ensure UI is in sync
+      console.log('Refreshing data after payout action...')
+      try {
+        await Promise.all([
+          refreshPayouts(true),  // Force refresh to bypass cache
+          refreshUsers(true)     // Force refresh to bypass cache
+        ])
+        console.log('Data refresh completed successfully')
+      } catch (refreshErr) {
+        console.error('Failed to refresh data:', refreshErr)
+        alert('Payout updated but failed to refresh data. Please reload the page manually.')
+      }
     } catch (e) {
-      console.error('Failed to process payout action', e)
-      alert('An error occurred')
+      console.error('Failed to process payout action:', e)
+      alert(`An error occurred: ${e.message}`)
     }
   }
 

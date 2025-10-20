@@ -507,7 +507,7 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
     
     setError(null)
     setShowForm(false)
-    setStage(IMPORT_STAGES.REVIEW)
+    // Note: Don't reset stage here - performImport already set it to COMPLETE
   }
 
   // Reset to start

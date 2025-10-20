@@ -505,6 +505,7 @@ export async function POST(request) {
                 : segmentEndDate.getUTCMonth() + 2
               const distributionDate = createEasternTime9AM(nextYear, nextMonth, 1)
               const distributionDateIso = distributionDate.toISOString()
+              const distributionDateMs = distributionDate.getTime()
               const txId = generateTransactionId('INV', inv.id, 'distribution', { date: distributionDate })
               const existingTx = findTransaction(txId)
               const legacyKey = `${inv.id}-${distributionDateIso}`
@@ -513,15 +514,24 @@ export async function POST(request) {
               // Determine status based on priority:
               // 1. If transaction exists with non-pending status, keep that status
               // 2. If legacy event has status, use that
-              // 3. If auto-approve is enabled AND this is a NEW distribution, auto-approve it
-              // 4. Otherwise, default to pending
+              // 3. If NEW distribution and date is in the past (imported historical data), auto-complete it
+              // 4. If auto-approve is enabled AND this is a NEW distribution, auto-approve it
+              // 5. Otherwise, default to pending
               let status = 'pending'
               let autoApproved = false
+              let completedAt = null
               
               if (existingTx && existingTx.status && existingTx.status !== 'pending') {
                 status = existingTx.status
+                completedAt = existingTx.completedAt || null
               } else if (legacyEvent) {
                 status = mapLegacyPayoutStatus(legacyEvent.payoutStatus)
+                completedAt = legacyEvent.completedAt || null
+              } else if (!existingTx && distributionDateMs < now.getTime()) {
+                // NEW distribution with past date (imported from Wealthblock) - auto-complete as already paid
+                status = 'received'
+                autoApproved = true
+                completedAt = distributionDateIso
               } else if (!existingTx && autoApproveDistributions) {
                 // NEW distribution and auto-approve is enabled
                 status = 'approved'
@@ -544,7 +554,7 @@ export async function POST(request) {
                 failureReason: legacyEvent?.failureReason || existingTx?.failureReason || null,
                 retryCount: legacyEvent?.retryCount ?? existingTx?.retryCount ?? 0,
                 lastRetryAt: legacyEvent?.lastRetryAt || existingTx?.lastRetryAt || null,
-                completedAt: legacyEvent?.completedAt || existingTx?.completedAt || null,
+                completedAt: completedAt || legacyEvent?.completedAt || existingTx?.completedAt || null,
                 manuallyCompleted: legacyEvent?.manuallyCompleted || existingTx?.manuallyCompleted || false,
                 failedAt: legacyEvent?.failedAt || existingTx?.failedAt || null
               })
@@ -801,6 +811,10 @@ export async function POST(request) {
     })
   } catch (error) {
     console.error('Error migrating transactions:', error)
-    return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ 
+      success: false, 
+      error: error.message || 'Internal server error',
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    }, { status: 500 })
   }
 }

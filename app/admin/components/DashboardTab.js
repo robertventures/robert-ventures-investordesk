@@ -59,6 +59,7 @@ const DashboardTab = memo(function DashboardTab({
     setIsProcessingBulk(true)
     let successCount = 0
     let failCount = 0
+    const errors = []
     
     try {
       for (const payoutId of selectedPayouts) {
@@ -74,14 +75,21 @@ const DashboardTab = memo(function DashboardTab({
                 transactionId: payout.id 
               })
             })
+            
+            if (!res.ok) {
+              throw new Error(`HTTP ${res.status}`)
+            }
+            
             const data = await res.json()
             if (data.success) {
               successCount++
             } else {
               failCount++
+              errors.push(`${payout.userName}: ${data.error || 'Unknown error'}`)
             }
           } catch (e) {
             failCount++
+            errors.push(`${payout.userName}: ${e.message}`)
           }
         }
       }
@@ -90,12 +98,17 @@ const DashboardTab = memo(function DashboardTab({
       if (failCount === 0) {
         alert(`Successfully completed ${successCount} payout(s)!`)
       } else {
-        alert(`Completed ${successCount} payout(s). ${failCount} failed.`)
+        const errorMsg = errors.length > 0 ? `\n\nErrors:\n${errors.slice(0, 5).join('\n')}` : ''
+        alert(`Completed ${successCount} payout(s). ${failCount} failed.${errorMsg}`)
       }
       
       // Refresh data
+      console.log('Refreshing data after bulk complete...')
       await onRefreshPayouts()
       setSelectedPayouts(new Set())
+    } catch (error) {
+      console.error('Bulk complete error:', error)
+      alert(`An error occurred during bulk processing: ${error.message}`)
     } finally {
       setIsProcessingBulk(false)
     }
@@ -111,6 +124,7 @@ const DashboardTab = memo(function DashboardTab({
     setIsProcessingBulk(true)
     let successCount = 0
     let failCount = 0
+    const errors = []
     
     try {
       for (const payoutId of selectedPayouts) {
@@ -127,14 +141,21 @@ const DashboardTab = memo(function DashboardTab({
                 failureReason: reason
               })
             })
+            
+            if (!res.ok) {
+              throw new Error(`HTTP ${res.status}`)
+            }
+            
             const data = await res.json()
             if (data.success) {
               successCount++
             } else {
               failCount++
+              errors.push(`${payout.userName}: ${data.error || 'Unknown error'}`)
             }
           } catch (e) {
             failCount++
+            errors.push(`${payout.userName}: ${e.message}`)
           }
         }
       }
@@ -143,12 +164,17 @@ const DashboardTab = memo(function DashboardTab({
       if (failCount === 0) {
         alert(`Successfully marked ${successCount} payout(s) as failed.`)
       } else {
-        alert(`Marked ${successCount} payout(s) as failed. ${failCount} operations failed.`)
+        const errorMsg = errors.length > 0 ? `\n\nErrors:\n${errors.slice(0, 5).join('\n')}` : ''
+        alert(`Marked ${successCount} payout(s) as failed. ${failCount} operations failed.${errorMsg}`)
       }
       
       // Refresh data
+      console.log('Refreshing data after bulk fail...')
       await onRefreshPayouts()
       setSelectedPayouts(new Set())
+    } catch (error) {
+      console.error('Bulk fail error:', error)
+      alert(`An error occurred during bulk processing: ${error.message}`)
     } finally {
       setIsProcessingBulk(false)
     }

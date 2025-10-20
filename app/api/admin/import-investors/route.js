@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '../../../../lib/supabaseClient.js'
 import { signUp } from '../../../../lib/supabaseAuth.js'
-import { generateUserId, generateTransactionId } from '../../../../lib/idGenerator.js'
+import { generateUserId, generateTransactionId, generateSequentialInvestmentId, validateInvestmentId } from '../../../../lib/idGenerator.js'
 import { requireAdmin, authErrorResponse } from '../../../../lib/authMiddleware.js'
 import { getCurrentAppTime } from '../../../../lib/appTime.js'
 
@@ -269,8 +269,14 @@ async function createInvestment(supabase, userId, investmentData, appTime) {
       return { success: false, error: 'Invalid investment amount' }
     }
 
-    // Generate investment ID
-    const investmentId = `INV-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    // Generate sequential investment ID from database
+    const investmentId = await generateSequentialInvestmentId()
+    
+    // Validate the generated ID
+    if (!validateInvestmentId(investmentId)) {
+      console.error(`Generated invalid investment ID: ${investmentId}`)
+      return { success: false, error: 'Failed to generate valid investment ID' }
+    }
     
     // Use provided dates or fallback to app time
     const timestamp = appTime || new Date().toISOString()

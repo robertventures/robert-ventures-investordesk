@@ -59,7 +59,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
   - `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Anon/public key
   - `SUPABASE_SERVICE_ROLE_KEY` - Service role key (⚠️ NEVER expose to frontend!)
 - The service role key is **required** for admin operations like deleting users
-- **Set up required tables:** See [docs/SUPABASE-SETUP.md](docs/SUPABASE-SETUP.md) for SQL setup
+- **Set up required tables:** See [docs/BACKEND-GUIDE.md](docs/BACKEND-GUIDE.md#quick-setup) for SQL setup
 
 **Example `.env.local`:**
 ```bash
@@ -117,13 +117,17 @@ Navigate to [http://localhost:3000](http://localhost:3000) to see the applicatio
 - No local JSON files are used for user data
 - Changes are immediately visible across all sessions
 
-**For complete technical documentation:**
-- [docs/BACKEND-GUIDE.md](docs/BACKEND-GUIDE.md) - Complete backend implementation guide
-  - Database schema and API details (including required `pending_users` table)
+**📚 Complete Technical Documentation:**
+- [docs/BACKEND-GUIDE.md](docs/BACKEND-GUIDE.md) - **Single source of truth for all technical documentation**
+  - Database schema and API endpoints
   - Supabase architecture and data storage
-  - Auth + Users table explanation
+  - Authentication & Security (JWT, passwords, master password)
   - Interest calculations and transaction system
-  - Troubleshooting and verification
+  - Investment state machine and business rules
+  - Migration & onboarding system
+  - Document manager system
+  - Testing requirements and troubleshooting
+- [CHANGELOG.md](CHANGELOG.md) - Version history and changes
 
 ## Project Structure
 
@@ -175,10 +179,11 @@ The platform includes a comprehensive import system for migrating investors from
 - Support for complete investor profiles, investments, and transaction history
 
 **Setup & Usage:**
-See [docs/INVESTOR-IMPORT-SETUP.md](docs/INVESTOR-IMPORT-SETUP.md) for detailed setup instructions including:
+See [docs/BACKEND-GUIDE.md](docs/BACKEND-GUIDE.md#migration--onboarding-system) for detailed instructions including:
 - Resend email service configuration
-- CSV format requirements
-- Field mapping guide
+- CSV/Excel import with field mapping
+- Historical transaction import
+- Automated welcome emails
 - Testing procedures
 
 **Environment Variables Required:**
