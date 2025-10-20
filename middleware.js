@@ -11,7 +11,7 @@
  */
 
 import { NextResponse } from 'next/server'
-import { getCorsHeaders, getPreflightHeaders, isOriginAllowed } from './lib/cors'
+import { getCorsHeaders, getPreflightHeaders, isOriginAllowed } from './lib/cors.js'
 
 export function middleware(request) {
   const { pathname, origin } = request.nextUrl
