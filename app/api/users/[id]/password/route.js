@@ -7,10 +7,27 @@ import { getCurrentAppTime } from '../../../../../lib/appTime.js'
 /**
  * POST /api/users/[id]/password
  * Change user password
+ * 
+ * ⚠️ DEPRECATION NOTICE:
+ * This endpoint is deprecated and will be removed in a future version.
+ * Please use POST /api/users/account/change-password instead.
+ * 
+ * Benefits of new endpoint:
+ * - No need to pass user ID (uses auth token)
+ * - Better rate limiting
+ * - Clearer intent
+ * - Better security monitoring
+ * 
+ * Migration guide: /docs/API-REFACTORING-QUICK-GUIDE.md
  */
 export async function POST(request, { params }) {
   try {
     const { id } = params
+    
+    // Log deprecation warning
+    console.warn(`⚠️ [DEPRECATED] POST /api/users/${id}/password is deprecated. Use POST /api/users/account/change-password instead.`)
+    console.warn(`   Migration guide: /docs/API-REFACTORING-QUICK-GUIDE.md`)
+    
     const { currentPassword, newPassword } = await request.json()
 
     if (!currentPassword || !newPassword) {

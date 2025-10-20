@@ -1538,12 +1538,19 @@ def process_withdrawal(investment, admin_id):
 ## API Endpoints
 
 ### Authentication
+
 ```python
-POST /api/users
-# Sign up (hashes password automatically)
+POST /api/auth/register-pending
+# Register new user (pending verification)
 Request: {"email": "user@example.com", "password": "Pass123!"}
-Response: {"success": true, "user": {...}}
+Response: {"success": true, "message": "Verification email sent"}
 Note: Password is hashed with bcrypt before storage
+
+POST /api/auth/verify-and-create
+# Verify email and create account
+Request: {"email": "user@example.com", "verificationCode": "000000"}
+Response: {"success": true, "user": {...}}
+Cookies: auth-token (7 days), refresh-token (30 days)
 
 POST /api/auth/login
 # Login (JWT-based, sets HTTP-only cookies)
@@ -1579,61 +1586,95 @@ POST /api/auth/reset-password
 # Reset password (auto-verifies account, hashes password)
 Request: {"token": "abc123", "newPassword": "NewPass123!"}
 Response: {"success": true, "message": "Password reset successful. Your account has been verified."}
+
+POST /api/auth/send-welcome
+# Send welcome email (admin only)
+Request: {"adminUserId": "USR-1000", "userIds": ["USR-1001", "USR-1002"]}
+Response: {"success": true, "totalSent": 2, "totalFailed": 0}
 ```
 
-### User Management
+### User Profile Management
+
 ```python
-GET /api/users/:id
-# Get user details
-Response: {"success": true, "user": {...}, "appTime": "2024-10-13T12:00:00.000Z"}
-
-PUT /api/users/:id
-# Update user profile
-Request: {"firstName": "John", "lastName": "Doe", ...}
+GET /api/users/profile
+# Get current user's profile (uses auth token)
+Headers: Cookie: auth-token=<jwt>
 Response: {"success": true, "user": {...}}
+Query: ?includeSSN=true (optional) - includes decrypted SSN
+Query: ?fresh=true (optional) - bypasses cache
 
-PUT /api/users/:id
-# Verify account
-Request: {"_action": "verifyAccount", "verificationCode": "000000"}
+PUT /api/users/profile
+# Update current user's profile
+Headers: Cookie: auth-token=<jwt>
+Request: {"firstName": "John", "lastName": "Doe", "phoneNumber": "+1234567890", ...}
 Response: {"success": true, "user": {...}}
+Note: Only profile fields can be updated (firstName, lastName, phone, address, etc.)
+```
 
-PUT /api/users/:id
-# Change password
-Request: {"_action": "changePassword", "currentPassword": "...", "newPassword": "..."}
-Response: {"success": true, "user": {...}}
+### Account Operations
+
+```python
+POST /api/users/account/verify
+# Verify account with verification code
+Headers: Cookie: auth-token=<jwt>
+Request: {"code": "000000"}
+Response: {"success": true, "message": "Account verified successfully", "user": {...}}
+Rate Limit: 5 requests per hour
+
+POST /api/users/account/change-password
+# Change password (requires current password)
+Headers: Cookie: auth-token=<jwt>
+Request: {"currentPassword": "OldPass123!", "newPassword": "NewPass456!"}
+Response: {"success": true, "message": "Password changed successfully"}
+Rate Limit: 10 requests per hour
 ```
 
 ### Investment Management
+
 ```python
-PUT /api/users/:id
-# Start investment (draft)
+POST /api/users/investments
+# Create new investment (draft status)
+Headers: Cookie: auth-token=<jwt>
 Request: {
-    "_action": "startInvestment",
-    "investment": {
-        "amount": 10000,
-        "lockupPeriod": "1-year",
-        "paymentFrequency": "compounding",
-        "accountType": "individual",
-        "paymentMethod": "ach"
-    }
+    "amount": 10000,
+    "lockupPeriod": "1-year",
+    "paymentFrequency": "compounding",
+    "accountType": "individual",
+    "paymentMethod": "ach"
 }
-Response: {"success": true, "user": {...}, "investment": {...}}
+Response: {"success": true, "investment": {...}}
 
-PUT /api/users/:id
+GET /api/users/investments
+# Get all user's investments
+Headers: Cookie: auth-token=<jwt>
+Response: {"success": true, "investments": [...]}
+
+GET /api/users/investments/:id
+# Get specific investment
+Headers: Cookie: auth-token=<jwt>
+Response: {"success": true, "investment": {...}}
+
+PUT /api/users/investments/:id
 # Update investment
-Request: {
-    "_action": "updateInvestment",
-    "investmentId": "INV-10000",
-    "fields": {
-        "status": "pending"  # ACH auto-approves → active
-    }
-}
-Response: {"success": true, "user": {...}, "investment": {...}}
+Headers: Cookie: auth-token=<jwt>
+Request: {"status": "pending"}  # ACH auto-approves → active
+Response: {"success": true, "investment": {...}}
+
+DELETE /api/users/investments/:id
+# Delete draft investment
+Headers: Cookie: auth-token=<jwt>
+Response: {"success": true, "message": "Investment deleted"}
+
+# Legacy Endpoints (Deprecated - use new endpoints above)
+GET /api/users/:id
+# Get user by ID (use GET /api/users/profile instead)
 
 PUT /api/users/:id
-# Delete draft investment
-Request: {"_action": "deleteInvestment", "investmentId": "INV-10000"}
-Response: {"success": true, "user": {...}}
+# Update user (use PUT /api/users/profile instead)
+# Also handles: _action=verifyAccount (use POST /api/users/account/verify)
+# Also handles: _action=startInvestment (use POST /api/users/investments)
+# Also handles: _action=updateInvestment (use PUT /api/users/investments/:id)
+# Also handles: _action=deleteInvestment (use DELETE /api/users/investments/:id)
 ```
 
 ### Admin Endpoints

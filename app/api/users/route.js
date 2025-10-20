@@ -73,7 +73,10 @@ export async function GET(request) {
         })),
         withdrawals: u.withdrawals || [],
         bankAccounts: u.bank_accounts || [],
-        activity: u.activity || [],
+        activity: (u.activity || []).map(act => ({
+          ...act,
+          investmentId: act.investment_id
+        })),
         jointHolder: u.joint_holder || null,
         jointHoldingType: u.joint_holding_type || null,
         entityName: u.entity_name || null,

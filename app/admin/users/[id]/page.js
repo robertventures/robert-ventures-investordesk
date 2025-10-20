@@ -837,6 +837,8 @@ export default function AdminUserDetailsPage({ params }) {
                     return { icon: '👤', title: 'Account Created', color: '#0369a1', showAmount: false }
                   case 'investment_created':
                     return { icon: '🧾', title: 'Investment Created', color: '#0369a1', showAmount: false }
+                  case 'investment_submitted':
+                    return { icon: '📋', title: 'Investment Submitted', color: '#0369a1', showAmount: false }
                   case 'investment_approved':
                     return { icon: '✓', title: 'Investment Approved', color: '#0891b2', showAmount: false }
                   case 'investment_confirmed':
@@ -978,7 +980,24 @@ export default function AdminUserDetailsPage({ params }) {
                             color: '#64748b'
                           }}>
                             {event.investmentId && (
-                              <div><b>Investment ID:</b> {event.investmentId}</div>
+                              <div>
+                                <b>Investment ID:</b>{' '}
+                                <button
+                                  onClick={() => router.push(`/admin/investments/${event.investmentId}`)}
+                                  style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    color: '#0369a1',
+                                    textDecoration: 'underline',
+                                    cursor: 'pointer',
+                                    padding: 0,
+                                    font: 'inherit'
+                                  }}
+                                  title="View investment details"
+                                >
+                                  {event.investmentId}
+                                </button>
+                              </div>
                             )}
                             <div><b>Date:</b> {event.date ? new Date(event.date).toLocaleDateString('en-US', {
                               timeZone: 'America/New_York',

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getUsers, saveUsers } from '../../../../lib/supabaseDatabase.js'
+import { getUsers, updateAppTimeSettings } from '../../../../lib/supabaseDatabase.js'
 import { requireAdmin, authErrorResponse } from '../../../../lib/authMiddleware'
 
 // GET - Get current app time
@@ -46,6 +46,15 @@ export async function POST(request) {
     const usersData = await getUsers()
     let needsSync = false
 
+    // Build settings object to update
+    const settings = {
+      timeOffset: usersData.timeOffset || null,
+      timeOffsetSetAt: usersData.timeOffsetSetAt || null,
+      timeMachineSetBy: usersData.timeMachineSetBy || null,
+      autoApproveDistributions: usersData.autoApproveDistributions || false,
+      isActive: (usersData.timeOffset !== undefined && usersData.timeOffset !== null)
+    }
+
     // Update app time if provided
     if (appTime !== undefined) {
       // Validate the date
@@ -57,35 +66,38 @@ export async function POST(request) {
       // Calculate and store the time offset (in milliseconds)
       // This allows time to continue flowing from the set point
       const realTime = new Date()
-      usersData.timeOffset = desiredTime.getTime() - realTime.getTime()
-      usersData.timeOffsetSetAt = realTime.toISOString()
-      usersData.timeMachineSetBy = admin.userId
+      settings.timeOffset = desiredTime.getTime() - realTime.getTime()
+      settings.timeOffsetSetAt = realTime.toISOString()
+      settings.timeMachineSetBy = admin.userId
+      settings.isActive = true
       needsSync = true
       
       console.log('Time Machine set:', {
         desiredTime: desiredTime.toISOString(),
         realTime: realTime.toISOString(),
-        offsetMs: usersData.timeOffset,
-        offsetDays: Math.round(usersData.timeOffset / (1000 * 60 * 60 * 24))
+        offsetMs: settings.timeOffset,
+        offsetDays: Math.round(settings.timeOffset / (1000 * 60 * 60 * 24))
       })
     }
 
     // Update auto-approve distributions if provided
     if (autoApproveDistributions !== undefined) {
-      usersData.autoApproveDistributions = autoApproveDistributions === true
+      settings.autoApproveDistributions = autoApproveDistributions === true
       // Auto-approve toggle changes require transaction sync to apply to new distributions
       needsSync = true
     }
 
-    if (!await saveUsers(usersData)) {
-      return NextResponse.json({ success: false, error: 'Failed to save settings' }, { status: 500 })
+    // Save settings to Supabase
+    const saveResult = await updateAppTimeSettings(settings)
+    if (!saveResult.success) {
+      return NextResponse.json({ success: false, error: saveResult.error || 'Failed to save settings' }, { status: 500 })
     }
 
     // Calculate current app time for response
     const realTime = new Date()
     let currentAppTime
-    if (usersData.timeOffset !== undefined && usersData.timeOffset !== null) {
-      currentAppTime = new Date(realTime.getTime() + usersData.timeOffset).toISOString()
+    if (settings.timeOffset !== undefined && settings.timeOffset !== null) {
+      currentAppTime = new Date(realTime.getTime() + settings.timeOffset).toISOString()
     } else {
       currentAppTime = realTime.toISOString()
     }
@@ -95,8 +107,8 @@ export async function POST(request) {
       success: true,
       appTime: currentAppTime,
       realTime: realTime.toISOString(),
-      timeOffset: usersData.timeOffset || null,
-      autoApproveDistributions: usersData.autoApproveDistributions === true,
+      timeOffset: settings.timeOffset || null,
+      autoApproveDistributions: settings.autoApproveDistributions === true,
       message: needsSync ? 'Settings updated successfully. Transactions will sync in background.' : 'Settings updated successfully.'
     })
 
@@ -128,20 +140,25 @@ export async function DELETE(request) {
     const usersData = await getUsers()
 
     // Reset to real time (but preserve auto-approve setting)
-    delete usersData.timeOffset
-    delete usersData.timeOffsetSetAt
-    delete usersData.timeMachineSetBy
-    // Keep autoApproveDistributions setting - it should persist independently
+    const settings = {
+      timeOffset: null,
+      timeOffsetSetAt: null,
+      timeMachineSetBy: null,
+      autoApproveDistributions: usersData.autoApproveDistributions || false,
+      isActive: false
+    }
 
-    if (!await saveUsers(usersData)) {
-      return NextResponse.json({ success: false, error: 'Failed to reset app time' }, { status: 500 })
+    // Save settings to Supabase
+    const saveResult = await updateAppTimeSettings(settings)
+    if (!saveResult.success) {
+      return NextResponse.json({ success: false, error: saveResult.error || 'Failed to reset app time' }, { status: 500 })
     }
 
     // Respond immediately - let transaction sync happen in background
     const response = NextResponse.json({
       success: true,
       appTime: new Date().toISOString(),
-      autoApproveDistributions: usersData.autoApproveDistributions === true,
+      autoApproveDistributions: settings.autoApproveDistributions === true,
       message: 'App time reset to real time. Transactions will sync in background.'
     })
 

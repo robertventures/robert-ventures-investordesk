@@ -6,9 +6,31 @@ A day-by-day record of progress on Robert Ventures Investor Desk.
 
 ## October 2024
 
+### Monday, October 21
+
+#### 📚 **Documentation Consolidation - API Endpoints** (Latest)
+- **Consolidated all API documentation into BACKEND-GUIDE.md**:
+  - Updated "API Endpoints" section with new refactored RESTful endpoints:
+    - Authentication endpoints (register-pending, verify-and-create, login, logout, etc.)
+    - User Profile Management (GET/PUT /api/users/profile)
+    - Account Operations (verify, change-password)
+    - Investment Management (CRUD operations with RESTful routes)
+    - Legacy endpoint documentation maintained for backward compatibility
+  - Deleted redundant API refactoring documentation files:
+    - ❌ `docs/API-REFACTORING-SUMMARY.md`
+    - ❌ `docs/API-REFACTORING-QUICK-GUIDE.md`
+    - ❌ `docs/API-REFACTORING-SPRINT-PLAN.md`
+    - ❌ `docs/API-ENDPOINTS-ANALYSIS.md`
+    - ❌ `docs/API-VISUAL-COMPARISON.md`
+    - ❌ `docs/API-TESTING-GUIDE.md`
+    - ❌ `docs/IMPLEMENTATION-SUMMARY.md`
+    - ❌ `docs/QUICK-REFERENCE-NEW-ENDPOINTS.md`
+  - Updated `docs/README.md` with API changes section and removed references to deleted files
+  - All API documentation now centralized in single source: BACKEND-GUIDE.md
+
 ### Friday, October 18
 
-#### 🔧 **Individual User Deletion Fix** (Latest)
+#### 🔧 **Individual User Deletion Fix**
 - **Fixed DELETE /api/users/[id] endpoint**:
   - Individual user deletion now removes user from both database AND Supabase Auth
   - Previously only deleted from database, leaving auth users orphaned
@@ -403,4 +425,4 @@ A day-by-day record of progress on Robert Ventures Investor Desk.
 
 ---
 
-**Last Updated:** October 16, 2024
+**Last Updated:** October 21, 2024

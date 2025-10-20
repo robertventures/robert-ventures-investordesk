@@ -69,7 +69,10 @@ export async function GET(request, { params }) {
       })),
       withdrawals: user.withdrawals || [],
       bankAccounts: user.bank_accounts || [],
-      activity: user.activity || [],
+      activity: (user.activity || []).map(act => ({
+        ...act,
+        investmentId: act.investment_id
+      })),
       jointHolder: user.joint_holder || null,
       jointHoldingType: user.joint_holding_type || null,
       entityName: user.entity_name || null,
@@ -136,6 +139,17 @@ export async function GET(request, { params }) {
  * PUT /api/users/[id]
  * Update user profile data
  * 
+ * ⚠️ DEPRECATION NOTICE:
+ * This endpoint's _action-based operations are deprecated and will be removed in a future version.
+ * Please use the new dedicated endpoints instead:
+ * 
+ * - Profile updates: PUT /api/users/profile (NEW - RECOMMENDED)
+ * - Verify account: POST /api/users/account/verify (NEW - replaces _action: 'verifyAccount')
+ * - Password changes: POST /api/users/account/change-password (NEW)
+ * - Create investment: POST /api/users/investments (NEW - replaces _action: 'startInvestment')
+ * - Update investment: PUT /api/users/investments/[id] (NEW - replaces _action: 'updateInvestment')
+ * - Delete investment: DELETE /api/users/investments/[id] (NEW - replaces _action: 'deleteInvestment')
+ * 
  * For specific operations, use dedicated endpoints:
  * - Password changes: POST /api/users/[id]/password
  * - Investments: POST /api/users/[id]/investments
@@ -147,8 +161,17 @@ export async function PUT(request, { params }) {
     const body = await request.json()
     const { _action, verificationCode, investment, investmentId, fields, ...updateData } = body
 
+    // Add deprecation warning if _action is used
+    if (_action) {
+      console.warn(`⚠️ [DEPRECATED] PUT /api/users/${id} with _action parameter is deprecated.`)
+      console.warn(`   See /docs/API-REFACTORING-SUMMARY.md for migration guide.`)
+    }
+
     // Handle special actions
     if (_action === 'startInvestment') {
+      // ⚠️ DEPRECATED: Use POST /api/users/investments instead
+      console.warn(`⚠️ [DEPRECATED] PUT /api/users/${id} with _action=startInvestment is deprecated. Use POST /api/users/investments instead.`)
+      console.warn(`   Migration guide: /docs/API-REFACTORING-QUICK-GUIDE.md`)
       // Create a new investment
       if (!investment) {
         return NextResponse.json(
@@ -180,6 +203,9 @@ export async function PUT(request, { params }) {
     }
 
     if (_action === 'updateInvestment') {
+      // ⚠️ DEPRECATED: Use PUT /api/users/investments/[id] instead
+      console.warn(`⚠️ [DEPRECATED] PUT /api/users/${id} with _action=updateInvestment is deprecated. Use PUT /api/users/investments/[investmentId] instead.`)
+      console.warn(`   Migration guide: /docs/API-REFACTORING-QUICK-GUIDE.md`)
       // Update an existing investment
       if (!investmentId) {
         return NextResponse.json(
@@ -263,6 +289,9 @@ export async function PUT(request, { params }) {
     }
 
     if (_action === 'deleteInvestment') {
+      // ⚠️ DEPRECATED: Use DELETE /api/users/investments/[id] instead
+      console.warn(`⚠️ [DEPRECATED] PUT /api/users/${id} with _action=deleteInvestment is deprecated. Use DELETE /api/users/investments/[investmentId] instead.`)
+      console.warn(`   Migration guide: /docs/API-REFACTORING-QUICK-GUIDE.md`)
       // Delete an investment
       if (!investmentId) {
         return NextResponse.json(
@@ -287,6 +316,9 @@ export async function PUT(request, { params }) {
     }
 
     if (_action === 'verifyAccount') {
+      // ⚠️ DEPRECATED: Use POST /api/users/account/verify instead
+      console.warn(`⚠️ [DEPRECATED] PUT /api/users/${id} with _action=verifyAccount is deprecated. Use POST /api/users/account/verify instead.`)
+      console.warn(`   Migration guide: /docs/API-REFACTORING-QUICK-GUIDE.md`)
       // Verify the code (in production, you'd validate the actual code)
       if (verificationCode !== '000000') {
         return NextResponse.json(
