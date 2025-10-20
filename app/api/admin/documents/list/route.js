@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getUsers } from '../../../../../lib/supabaseDatabase.js'
-import { requireAdmin, authErrorResponse } from '../../../../../lib/authMiddleware'
+import { requireAdmin, authErrorResponse } from '../../../../../lib/authMiddleware.js'
 
 /**
  * GET /api/admin/documents/list

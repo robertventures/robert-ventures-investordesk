@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getUsers, saveUsers } from '../../../lib/supabaseDatabase.js'
-import { calculateInvestmentValue, calculateWithdrawalAmount } from '../../../lib/investmentCalculations'
-import { getCurrentAppTime } from '../../../lib/appTime'
-import { generateWithdrawalId, generateTransactionId } from '../../../lib/idGenerator'
+import { calculateInvestmentValue, calculateWithdrawalAmount } from '../../../lib/investmentCalculations.js'
+import { getCurrentAppTime } from '../../../lib/appTime.js'
+import { generateWithdrawalId, generateTransactionId } from '../../../lib/idGenerator.js'
 
 // POST - Create withdrawal request
 export async function POST(request) {

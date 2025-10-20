@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getUsers, saveUsers } from '../../../../lib/supabaseDatabase.js'
-import { requireAdmin, authErrorResponse } from '../../../../lib/authMiddleware'
+import { requireAdmin, authErrorResponse } from '../../../../lib/authMiddleware.js'
 
 // POST - Update bank connection status for testing
 // Body: { userId, bankId, connectionStatus: 'connected' | 'disconnected' | 'error' }

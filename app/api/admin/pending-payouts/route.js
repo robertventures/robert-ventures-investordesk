@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getUsers, saveUsers } from '../../../../lib/supabaseDatabase.js'
-import { requireAdmin, authErrorResponse } from '../../../../lib/authMiddleware'
-import { getCurrentAppTime } from '../../../../lib/appTime'
+import { requireAdmin, authErrorResponse } from '../../../../lib/authMiddleware.js'
+import { getCurrentAppTime } from '../../../../lib/appTime.js'
 
 // GET - List all pending payouts across all users
 export async function GET(request) {

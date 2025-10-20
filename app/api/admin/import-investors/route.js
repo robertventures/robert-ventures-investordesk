@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '../../../../lib/supabaseClient.js'
 import { signUp } from '../../../../lib/supabaseAuth.js'
-import { generateUserId, generateTransactionId } from '../../../../lib/idGenerator'
-import { requireAdmin, authErrorResponse } from '../../../../lib/authMiddleware'
+import { generateUserId, generateTransactionId } from '../../../../lib/idGenerator.js'
+import { requireAdmin, authErrorResponse } from '../../../../lib/authMiddleware.js'
 import { getCurrentAppTime } from '../../../../lib/appTime.js'
 
 /**

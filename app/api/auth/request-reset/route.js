@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getUserByEmail, updateUser } from '../../../../lib/supabaseDatabase.js'
 import crypto from 'crypto'
-import { rateLimit, RATE_LIMIT_CONFIGS } from '../../../../lib/rateLimit'
+import { rateLimit, RATE_LIMIT_CONFIGS } from '../../../../lib/rateLimit.js'
 
 // POST /api/auth/request-reset
 // Request a password reset link

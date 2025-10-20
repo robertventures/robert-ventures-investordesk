@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
 import { getUsers } from '../../../lib/supabaseDatabase.js'
-import { getCurrentAppTime, getAutoApproveDistributions } from '../../../lib/appTime'
-import { generateTransactionId } from '../../../lib/idGenerator'
+import { getCurrentAppTime, getAutoApproveDistributions } from '../../../lib/appTime.js'
+import { generateTransactionId } from '../../../lib/idGenerator.js'
 import { createServiceClient } from '../../../lib/supabaseClient.js'
-import { requireAdmin, authErrorResponse } from '../../../lib/authMiddleware'
+import { requireAdmin, authErrorResponse } from '../../../lib/authMiddleware.js'
 
 // Helper functions matching investmentCalculations.js
 const MS_PER_DAY = 24 * 60 * 60 * 1000

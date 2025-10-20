@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
 import { getUsers, addUser, getUserByEmail } from '../../../lib/supabaseDatabase.js'
-import { getCurrentAppTime } from '../../../lib/appTime'
-import { hashPassword } from '../../../lib/auth'
-import { requireAdmin, requireAuth, authErrorResponse } from '../../../lib/authMiddleware'
-import { rateLimit, RATE_LIMIT_CONFIGS } from '../../../lib/rateLimit'
-import { validateEmail, validatePassword, ValidationError } from '../../../lib/validation'
+import { getCurrentAppTime } from '../../../lib/appTime.js'
+import { hashPassword } from '../../../lib/auth.js'
+import { requireAdmin, requireAuth, authErrorResponse } from '../../../lib/authMiddleware.js'
+import { rateLimit, RATE_LIMIT_CONFIGS } from '../../../lib/rateLimit.js'
+import { validateEmail, validatePassword, ValidationError } from '../../../lib/validation.js'
 
 // GET - Retrieve all users or a specific user by email
 // REQUIRES AUTHENTICATION: Admin for all users, or authenticated user for their own data

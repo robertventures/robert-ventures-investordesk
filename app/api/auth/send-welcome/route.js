@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getUser, updateUser } from '../../../../lib/supabaseDatabase.js'
 import { createServiceClient } from '../../../../lib/supabaseClient.js'
-import { sendWelcomeEmail, sendBulkWelcomeEmails } from '../../../../lib/emailService'
+import { sendWelcomeEmail, sendBulkWelcomeEmails } from '../../../../lib/emailService.js'
 import crypto from 'crypto'
 
 /**

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '../../../../lib/supabaseClient.js'
-import { hashPassword } from '../../../../lib/auth'
+import { hashPassword } from '../../../../lib/auth.js'
 
 // POST /api/auth/reset-password
 // Reset password with a valid token

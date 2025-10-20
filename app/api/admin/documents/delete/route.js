@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getUsers, updateUser, saveUsers } from '../../../../../lib/supabaseDatabase.js'
-import { deleteDocument } from '../../../../../lib/supabaseStorage'
-import { requireAdmin, authErrorResponse } from '../../../../../lib/authMiddleware'
+import { deleteDocument } from '../../../../../lib/supabaseStorage.js'
+import { requireAdmin, authErrorResponse } from '../../../../../lib/authMiddleware.js'
 
 /**
  * POST /api/admin/documents/delete

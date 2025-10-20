@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
 import { getUsers, saveUsers } from '../../../../lib/supabaseDatabase.js'
-import { getCurrentAppTime } from '../../../../lib/appTime'
-import { calculateFinalWithdrawalPayout } from '../../../../lib/investmentCalculations'
-import { generateTransactionId } from '../../../../lib/idGenerator'
-import { requireAdmin, authErrorResponse } from '../../../../lib/authMiddleware'
+import { getCurrentAppTime } from '../../../../lib/appTime.js'
+import { calculateFinalWithdrawalPayout } from '../../../../lib/investmentCalculations.js'
+import { generateTransactionId } from '../../../../lib/idGenerator.js'
+import { requireAdmin, authErrorResponse } from '../../../../lib/authMiddleware.js'
 
 // GET - list all withdrawals pending admin action
 export async function GET(request) {

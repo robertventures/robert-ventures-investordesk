@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getUser, updateUser } from '../../../../lib/supabaseDatabase.js'
-import { requireAuth, authErrorResponse } from '../../../../lib/authMiddleware'
-import { validateEmail, ValidationError } from '../../../../lib/validation'
+import { requireAuth, authErrorResponse } from '../../../../lib/authMiddleware.js'
+import { validateEmail, ValidationError } from '../../../../lib/validation.js'
 import { decrypt, isEncrypted } from '../../../../lib/encryption.js'
 
 /**

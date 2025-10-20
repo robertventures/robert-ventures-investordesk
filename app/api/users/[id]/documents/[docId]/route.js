@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getUsers } from '../../../../../../lib/supabaseDatabase.js'
-import { getDocument, downloadDocument } from '../../../../../../lib/supabaseStorage'
+import { getDocument, downloadDocument } from '../../../../../../lib/supabaseStorage.js'
 
 /**
  * GET /api/users/[id]/documents/[docId]

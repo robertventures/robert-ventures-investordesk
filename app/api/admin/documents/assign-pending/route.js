@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
 import { getUsers, updateUser } from '../../../../../lib/supabaseDatabase.js'
-import { uploadDocument, isPDF } from '../../../../../lib/supabaseStorage'
-import { sendDocumentNotification } from '../../../../../lib/emailService'
-import { generateTransactionId } from '../../../../../lib/idGenerator'
-import { requireAdmin, authErrorResponse } from '../../../../../lib/authMiddleware'
+import { uploadDocument, isPDF } from '../../../../../lib/supabaseStorage.js'
+import { sendDocumentNotification } from '../../../../../lib/emailService.js'
+import { generateTransactionId } from '../../../../../lib/idGenerator.js'
+import { requireAdmin, authErrorResponse } from '../../../../../lib/authMiddleware.js'
 
 /**
  * POST /api/admin/documents/assign-pending

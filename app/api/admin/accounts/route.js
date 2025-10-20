@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '../../../../lib/supabaseClient.js'
-import { requireAdmin, authErrorResponse } from '../../../../lib/authMiddleware'
+import { requireAdmin, authErrorResponse } from '../../../../lib/authMiddleware.js'
 
 export async function DELETE(request) {
   try {
