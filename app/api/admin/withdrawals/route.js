@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { getUsers, saveUsers } from '../../../../lib/supabaseDatabase.js'
+import { getUser } from '../../../../lib/supabaseDatabase.js'
+import { createServiceClient } from '../../../../lib/supabaseClient.js'
 import { getCurrentAppTime } from '../../../../lib/appTime.js'
 import { calculateFinalWithdrawalPayout } from '../../../../lib/investmentCalculations.js'
 import { generateTransactionId } from '../../../../lib/idGenerator.js'
@@ -13,17 +14,33 @@ export async function GET(request) {
     if (!admin) {
       return authErrorResponse('Admin access required', 403)
     }
-    const usersData = await getUsers()
-    const all = []
-    for (const user of usersData.users) {
-      const withdrawals = Array.isArray(user.withdrawals) ? user.withdrawals : []
-      withdrawals.forEach(wd => {
-        all.push({ ...wd, userId: user.id, userEmail: user.email })
-      })
+    
+    const supabase = createServiceClient()
+    
+    // Get all withdrawals with user info
+    const { data: withdrawals, error } = await supabase
+      .from('withdrawals')
+      .select(`
+        *,
+        users!inner(id, email, first_name, last_name)
+      `)
+      .in('status', ['notice', 'pending'])
+      .order('requested_at', { ascending: true })
+    
+    if (error) {
+      console.error('Error listing withdrawals:', error)
+      return NextResponse.json({ success: false, error: 'Failed to fetch withdrawals' }, { status: 500 })
     }
-    const pending = all.filter(w => w.status === 'notice' || w.status === 'pending')
-      .sort((a, b) => new Date(a.requestedAt) - new Date(b.requestedAt))
-    return NextResponse.json({ success: true, withdrawals: pending })
+    
+    // Format withdrawals with user info
+    const formatted = (withdrawals || []).map(wd => ({
+      ...wd,
+      userId: wd.users.id,
+      userEmail: wd.users.email,
+      userName: `${wd.users.first_name} ${wd.users.last_name}`.trim()
+    }))
+    
+    return NextResponse.json({ success: true, withdrawals: formatted })
   } catch (e) {
     console.error('Error listing withdrawals', e)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
@@ -44,172 +61,223 @@ export async function POST(request) {
     if (!action || !userId || !withdrawalId) {
       return NextResponse.json({ success: false, error: 'Missing fields' }, { status: 400 })
     }
+    
     const normalizedAction = action === 'approve' ? 'complete' : action
-    const usersData = await getUsers()
-    const userIndex = usersData.users.findIndex(u => u.id === userId)
-    if (userIndex === -1) return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 })
-    const user = usersData.users[userIndex]
-    const withdrawals = Array.isArray(user.withdrawals) ? user.withdrawals : []
-    const wdIndex = withdrawals.findIndex(w => w.id === withdrawalId)
-    if (wdIndex === -1) return NextResponse.json({ success: false, error: 'Withdrawal not found' }, { status: 404 })
-    const wd = withdrawals[wdIndex]
+    const supabase = createServiceClient()
+    
+    // Get user with investment data
+    const user = await getUser(userId)
+    if (!user) {
+      return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 })
+    }
+
+    // Get withdrawal record
+    const { data: withdrawal, error: wdError } = await supabase
+      .from('withdrawals')
+      .select('*')
+      .eq('id', withdrawalId)
+      .eq('user_id', userId)
+      .maybeSingle()
+    
+    if (wdError || !withdrawal) {
+      return NextResponse.json({ success: false, error: 'Withdrawal not found' }, { status: 404 })
+    }
 
     const appTime = await getCurrentAppTime()
     const now = new Date(appTime || new Date().toISOString())
+    const nowIso = now.toISOString()
 
     if (normalizedAction === 'complete') {
       // Admin finalizes payout anytime within the 90-day window
       // Robert Ventures must pay principal + accrued interest at payout time
-      const invs = Array.isArray(user.investments) ? user.investments : []
-      const invIdx = invs.findIndex(inv => inv.id === wd.investmentId)
+      const investments = Array.isArray(user.investments) ? user.investments : []
+      const investment = investments.find(inv => inv.id === withdrawal.investment_id)
       
-      if (invIdx !== -1) {
-        const investment = invs[invIdx]
-
+      if (investment) {
         // Calculate final payout including interest accrued up to payout time
-        const finalPayout = calculateFinalWithdrawalPayout(investment, now.toISOString())
+        const finalPayout = calculateFinalWithdrawalPayout(investment, nowIso)
 
         // Update withdrawal record with final calculated amounts
-        wd.status = 'approved'
-        wd.approvedAt = now.toISOString()
-        wd.paidAt = now.toISOString()
-        wd.finalAmount = finalPayout.finalValue
-        wd.finalEarnings = finalPayout.totalEarnings
-        wd.payoutCalculatedAt = now.toISOString()
-        wd.amount = finalPayout.finalValue
-        wd.principalAmount = finalPayout.principalAmount
-        wd.earningsAmount = finalPayout.totalEarnings
-
-        // Update investment status to withdrawn with final values
-        const transactions = Array.isArray(investment.transactions) ? investment.transactions : []
-        const redemptionTxId = generateTransactionId('INV', investment.id, 'redemption', { withdrawalId })
-        const txIdx = transactions.findIndex(tx => tx.id === redemptionTxId)
-        const existingRedemption = txIdx !== -1 ? transactions[txIdx] : null
-        const accrualNotice = wd.accrualNotice || existingRedemption?.accrualNotice || 'This investment keeps earning interest until the withdrawal is paid out. The final payout amount is calculated when funds are sent.'
-        if (txIdx !== -1) {
-          transactions[txIdx] = {
-            ...transactions[txIdx],
-            status: 'received',
+        const { error: updateWdError } = await supabase
+          .from('withdrawals')
+          .update({
+            status: 'approved',
+            approved_at: nowIso,
+            paid_at: nowIso,
+            final_amount: finalPayout.finalValue,
+            final_earnings: finalPayout.totalEarnings,
+            payout_calculated_at: nowIso,
             amount: finalPayout.finalValue,
-            finalAmount: finalPayout.finalValue,
-            finalEarnings: finalPayout.totalEarnings,
-            payoutCalculatedAt: now.toISOString(),
-            accrualNotice,
-            approvedAt: now.toISOString(),
-            paidAt: now.toISOString(),
-            updatedAt: now.toISOString()
-          }
-        } else {
-          transactions.push({
+            principal_amount: finalPayout.principalAmount,
+            earnings_amount: finalPayout.totalEarnings,
+            updated_at: nowIso
+          })
+          .eq('id', withdrawalId)
+
+        if (updateWdError) {
+          console.error('Error updating withdrawal:', updateWdError)
+          return NextResponse.json({ success: false, error: 'Failed to update withdrawal' }, { status: 500 })
+        }
+
+        // Create or update redemption transaction
+        const redemptionTxId = generateTransactionId('INV', investment.id, 'redemption', { withdrawalId })
+        const accrualNotice = withdrawal.accrual_notice || 'This investment keeps earning interest until the withdrawal is paid out. The final payout amount is calculated when funds are sent.'
+        
+        const { error: txError } = await supabase
+          .from('transactions')
+          .upsert({
             id: redemptionTxId,
+            investment_id: investment.id,
+            user_id: userId,
             type: 'redemption',
             amount: finalPayout.finalValue,
-            finalAmount: finalPayout.finalValue,
-            finalEarnings: finalPayout.totalEarnings,
-            payoutCalculatedAt: now.toISOString(),
-            accrualNotice,
+            final_amount: finalPayout.finalValue,
+            final_earnings: finalPayout.totalEarnings,
+            payout_calculated_at: nowIso,
+            accrual_notice: accrualNotice,
             status: 'received',
-            date: wd.requestedAt || wd.noticeStartAt || now.toISOString(),
-            withdrawalId,
-            payoutDueBy: wd.payoutDueBy || null,
-            approvedAt: now.toISOString(),
-            paidAt: now.toISOString(),
-            rejectedAt: null,
-            createdAt: now.toISOString(),
-            updatedAt: now.toISOString()
+            date: withdrawal.requested_at || withdrawal.notice_start_at || nowIso,
+            withdrawal_id: withdrawalId,
+            payout_due_by: withdrawal.payout_due_by || null,
+            approved_at: nowIso,
+            paid_at: nowIso,
+            rejected_at: null,
+            updated_at: nowIso
           })
+
+        if (txError) {
+          console.error('Error updating transaction:', txError)
+          return NextResponse.json({ success: false, error: 'Failed to update transaction' }, { status: 500 })
         }
 
-        invs[invIdx] = {
-          ...investment,
-          status: 'withdrawn',
-          withdrawnAt: now.toISOString(),
-          finalValue: finalPayout.finalValue,
-          totalEarnings: finalPayout.totalEarnings,
-          transactions,
-          updatedAt: now.toISOString()
+        // Update investment status to withdrawn
+        const { error: invError } = await supabase
+          .from('investments')
+          .update({
+            status: 'withdrawn',
+            withdrawn_at: nowIso,
+            final_value: finalPayout.finalValue,
+            total_earnings: finalPayout.totalEarnings,
+            updated_at: nowIso
+          })
+          .eq('id', investment.id)
+
+        if (invError) {
+          console.error('Error updating investment:', invError)
+          return NextResponse.json({ success: false, error: 'Failed to update investment' }, { status: 500 })
         }
+
+        // Add activity event
+        await supabase
+          .from('activity')
+          .insert({
+            id: generateTransactionId('USR', userId, 'withdrawal_approved'),
+            user_id: userId,
+            type: 'withdrawal_approved',
+            date: nowIso,
+            investment_id: investment.id,
+            withdrawal_id: withdrawalId,
+            amount: finalPayout.finalValue
+          })
       } else {
-        // Investment not found - this is a data consistency error
-        // In production, this should fail. For testing/development, we'll warn but allow it.
-        console.warn(`⚠️ WARNING: Completing withdrawal ${withdrawalId} for missing investment ${wd.investmentId}`)
-        console.warn(`   This may happen during testing when accounts are deleted with pending withdrawals.`)
-        console.warn(`   In production, this should return an error instead.`)
-
-        // Mark withdrawal as approved but flag it as potentially problematic
-        wd.status = 'approved'
-        wd.approvedAt = now.toISOString()
-        wd.paidAt = now.toISOString()
-        wd.dataInconsistency = true // Flag for audit purposes
-        wd.inconsistencyReason = `Investment ${wd.investmentId} not found at approval time`
-
-        // Use the originally requested amount since we can't recalculate
-        // Leave principalAmount and earningsAmount undefined to indicate incomplete data
-      }
-      
-      user.investments = invs
-    } else if (normalizedAction === 'reject') {
-      wd.status = 'rejected'
-      wd.rejectedAt = now.toISOString()
-      // Revert investment status
-      const invs = Array.isArray(user.investments) ? user.investments : []
-      const invIdx = invs.findIndex(inv => inv.id === wd.investmentId)
-      if (invIdx !== -1) {
-        const investment = invs[invIdx]
-        const transactions = Array.isArray(investment.transactions) ? investment.transactions : []
-        const redemptionTxId = generateTransactionId('INV', investment.id, 'redemption', { withdrawalId })
-        const txIdx = transactions.findIndex(tx => tx.id === redemptionTxId)
-        if (txIdx !== -1) {
-          transactions[txIdx] = {
-            ...transactions[txIdx],
-            status: 'rejected',
-            rejectedAt: now.toISOString(),
-            updatedAt: now.toISOString()
-          }
-        } else {
-          transactions.push({
-            id: redemptionTxId,
-            type: 'redemption',
-            amount: wd.amount || 0,
-            status: 'rejected',
-            date: wd.requestedAt || wd.noticeStartAt || now.toISOString(),
-            withdrawalId,
-            payoutDueBy: wd.payoutDueBy || null,
-            approvedAt: null,
-            paidAt: null,
-            rejectedAt: now.toISOString(),
-            createdAt: now.toISOString(),
-            updatedAt: now.toISOString()
+        // Investment not found - data consistency error
+        console.warn(`⚠️ WARNING: Completing withdrawal ${withdrawalId} for missing investment ${withdrawal.investment_id}`)
+        
+        // Update withdrawal as approved but flag inconsistency
+        await supabase
+          .from('withdrawals')
+          .update({
+            status: 'approved',
+            approved_at: nowIso,
+            paid_at: nowIso,
+            data_inconsistency: true,
+            inconsistency_reason: `Investment ${withdrawal.investment_id} not found at approval time`,
+            updated_at: nowIso
           })
-        }
-        invs[invIdx] = { 
-          ...investment, 
-          status: 'active', 
-          updatedAt: now.toISOString(), 
-          withdrawalId: undefined, 
-          withdrawalNoticeStartAt: undefined, 
-          payoutDueBy: undefined,
-          transactions
-        }
+          .eq('id', withdrawalId)
       }
-      user.investments = invs
+    } else if (normalizedAction === 'reject') {
+      // Update withdrawal to rejected
+      const { error: updateWdError } = await supabase
+        .from('withdrawals')
+        .update({
+          status: 'rejected',
+          rejected_at: nowIso,
+          updated_at: nowIso
+        })
+        .eq('id', withdrawalId)
+
+      if (updateWdError) {
+        console.error('Error rejecting withdrawal:', updateWdError)
+        return NextResponse.json({ success: false, error: 'Failed to reject withdrawal' }, { status: 500 })
+      }
+
+      // Revert investment status to active
+      const investments = Array.isArray(user.investments) ? user.investments : []
+      const investment = investments.find(inv => inv.id === withdrawal.investment_id)
+      
+      if (investment) {
+        // Update or create rejected redemption transaction
+        const redemptionTxId = generateTransactionId('INV', investment.id, 'redemption', { withdrawalId })
+        
+        await supabase
+          .from('transactions')
+          .upsert({
+            id: redemptionTxId,
+            investment_id: investment.id,
+            user_id: userId,
+            type: 'redemption',
+            amount: withdrawal.amount || 0,
+            status: 'rejected',
+            date: withdrawal.requested_at || withdrawal.notice_start_at || nowIso,
+            withdrawal_id: withdrawalId,
+            payout_due_by: withdrawal.payout_due_by || null,
+            approved_at: null,
+            paid_at: null,
+            rejected_at: nowIso,
+            updated_at: nowIso
+          })
+
+        // Revert investment to active status
+        await supabase
+          .from('investments')
+          .update({
+            status: 'active',
+            withdrawal_id: null,
+            withdrawal_notice_start_at: null,
+            payout_due_by: null,
+            updated_at: nowIso
+          })
+          .eq('id', investment.id)
+
+        // Add activity event
+        await supabase
+          .from('activity')
+          .insert({
+            id: generateTransactionId('USR', userId, 'withdrawal_rejected'),
+            user_id: userId,
+            type: 'withdrawal_rejected',
+            date: nowIso,
+            investment_id: investment.id,
+            withdrawal_id: withdrawalId
+          })
+      }
     } else {
       return NextResponse.json({ success: false, error: 'Invalid action' }, { status: 400 })
     }
 
-    withdrawals[wdIndex] = wd
-    user.withdrawals = withdrawals
-    usersData.users[userIndex] = user
-    const saved = await saveUsers(usersData)
-    if (!saved) return NextResponse.json({ success: false, error: 'Failed to save' }, { status: 500 })
-
     // Sync transactions immediately after withdrawal action
-    // This updates redemption transaction status and activity events
-    // Direct call to transaction sync (no HTTP needed, works in all environments)
     const { syncTransactionsNonBlocking } = await import('../../../../lib/transactionSync.js')
     await syncTransactionsNonBlocking()
 
-    return NextResponse.json({ success: true, withdrawal: wd })
+    // Fetch updated withdrawal
+    const { data: updatedWithdrawal } = await supabase
+      .from('withdrawals')
+      .select('*')
+      .eq('id', withdrawalId)
+      .single()
+
+    return NextResponse.json({ success: true, withdrawal: updatedWithdrawal })
   } catch (e) {
     console.error('Error updating withdrawal', e)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })

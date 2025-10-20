@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { getUsers, saveUsers } from '../../../../lib/supabaseDatabase.js'
+import { getUser } from '../../../../lib/supabaseDatabase.js'
+import { createServiceClient } from '../../../../lib/supabaseClient.js'
 import { requireAdmin, authErrorResponse } from '../../../../lib/authMiddleware.js'
 
 // POST - Update bank connection status for testing
@@ -28,45 +29,42 @@ export async function POST(request) {
       }, { status: 400 })
     }
 
-    const usersData = await getUsers()
-    const userIndex = usersData.users.findIndex(u => u.id === userId)
+    const supabase = createServiceClient()
+    const user = await getUser(userId)
 
-    if (userIndex === -1) {
+    if (!user) {
       return NextResponse.json({ 
         success: false, 
         error: 'User not found' 
       }, { status: 404 })
     }
 
-    const user = usersData.users[userIndex]
     const now = new Date().toISOString()
     let updated = false
 
-    // Update bank accounts array if exists
-    if (Array.isArray(user.bankAccounts) && bankId) {
-      const bankIndex = user.bankAccounts.findIndex(b => b.id === bankId)
-      if (bankIndex !== -1) {
-        user.bankAccounts[bankIndex].connectionStatus = connectionStatus
-        user.bankAccounts[bankIndex].lastCheckedAt = now
-        updated = true
-      }
-    }
-
-    // Update investment-specific bank accounts
-    if (Array.isArray(user.investments)) {
-      user.investments.forEach((inv, invIndex) => {
-        if (inv.banking?.bank && (!bankId || inv.banking.bank.id === bankId)) {
-          if (!user.investments[invIndex].banking) {
-            user.investments[invIndex].banking = {}
-          }
-          if (!user.investments[invIndex].banking.bank) {
-            user.investments[invIndex].banking.bank = {}
-          }
-          user.investments[invIndex].banking.bank.connectionStatus = connectionStatus
-          user.investments[invIndex].banking.bank.lastCheckedAt = now
+    // Update bank accounts in bank_accounts table
+    if (bankId) {
+      const { data: bankAccount, error: bankError } = await supabase
+        .from('bank_accounts')
+        .select('*')
+        .eq('id', bankId)
+        .eq('user_id', userId)
+        .maybeSingle()
+      
+      if (bankAccount) {
+        const { error: updateError } = await supabase
+          .from('bank_accounts')
+          .update({
+            connection_status: connectionStatus,
+            last_checked_at: now,
+            updated_at: now
+          })
+          .eq('id', bankId)
+        
+        if (!updateError) {
           updated = true
         }
-      })
+      }
     }
 
     if (!updated && bankId) {
@@ -76,21 +74,19 @@ export async function POST(request) {
       }, { status: 404 })
     }
 
-    user.updatedAt = now
-    usersData.users[userIndex] = user
+    // Update user timestamp
+    await supabase
+      .from('users')
+      .update({ updated_at: now })
+      .eq('id', userId)
 
-    const saved = await saveUsers(usersData)
-    if (!saved) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Failed to save changes' 
-      }, { status: 500 })
-    }
+    // Fetch updated user data
+    const updatedUser = await getUser(userId)
 
     return NextResponse.json({ 
       success: true,
       message: `Bank connection status updated to: ${connectionStatus}`,
-      user
+      user: updatedUser
     })
 
   } catch (error) {
@@ -120,8 +116,7 @@ export async function GET(request) {
       }, { status: 400 })
     }
 
-    const usersData = await getUsers()
-    const user = usersData.users.find(u => u.id === userId)
+    const user = await getUser(userId)
 
     if (!user) {
       return NextResponse.json({ 
@@ -130,24 +125,11 @@ export async function GET(request) {
       }, { status: 404 })
     }
 
-    const bankAccounts = Array.isArray(user.bankAccounts) ? user.bankAccounts : []
-    const investmentBanks = []
-
-    if (Array.isArray(user.investments)) {
-      user.investments.forEach(inv => {
-        if (inv.banking?.bank) {
-          investmentBanks.push({
-            investmentId: inv.id,
-            bank: inv.banking.bank
-          })
-        }
-      })
-    }
+    const bankAccounts = Array.isArray(user.bank_accounts) ? user.bank_accounts : []
 
     return NextResponse.json({ 
       success: true,
-      bankAccounts,
-      investmentBanks
+      bankAccounts
     })
 
   } catch (error) {

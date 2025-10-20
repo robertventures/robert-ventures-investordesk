@@ -28,7 +28,50 @@ This guide documents the exact business logic, calculations, and API requirement
 
 ### Required Supabase Tables
 
-The app requires a `pending_users` table for the registration flow. Create it using the Supabase SQL Editor:
+#### Core Tables (Must Exist)
+
+The app requires these tables with proper structure. If you migrated from a file-based system or are setting up fresh, ensure these tables exist:
+
+- `users` - User accounts and profiles
+- `investments` - Investment records
+- `transactions` - Transaction history (distributions, redemptions)
+- `withdrawals` - Withdrawal requests and payouts
+- `activity` - User activity log
+- `bank_accounts` - Bank account connections
+- `pending_users` - Temporary user registration storage
+- `app_settings` - Application configuration (time machine, etc.)
+- `audit_log` - Security audit trail
+
+#### Withdrawal System Columns (Updated 2025-01-20)
+
+⚠️ **IMPORTANT:** The investment termination and withdrawal system requires specific columns. Run this migration to add them:
+
+**File:** `scripts/add-withdrawal-columns.sql`
+
+```bash
+# Open Supabase Dashboard → SQL Editor
+# Copy/paste the contents of scripts/add-withdrawal-columns.sql
+# Click "Run"
+```
+
+This adds columns for:
+- Admin-initiated terminations
+- Lockup period overrides
+- Final payout calculations
+- Interest accrual tracking
+- Withdrawal notice periods
+
+**Columns Added:**
+- `withdrawals`: `admin_terminated`, `admin_user_id`, `lockup_overridden`, `investment_snapshot`, etc.
+- `transactions`: `final_amount`, `final_earnings`, `payout_calculated_at`, `accrual_notice`, etc.
+- `investments`: `withdrawal_notice_start_at`, `payout_due_by`, `admin_terminated`, etc.
+- `activity`: `admin_user_id`, `lockup_overridden`
+
+✅ The migration is **safe to run multiple times** (uses `IF NOT EXISTS`)
+
+#### Pending Users Table
+
+For the registration flow:
 
 ```sql
 -- Create pending_users table for temporary user registration storage
@@ -1532,6 +1575,321 @@ def process_withdrawal(investment, admin_id):
     # Create redemption transaction
     create_redemption_transaction(investment, payout)
 ```
+
+---
+
+## Investment Termination (Admin-Initiated)
+
+### Overview
+Admin-initiated termination allows immediate investment closure, bypassing the standard 90-day withdrawal notice period. This is used for:
+- Emergency situations requiring immediate settlement
+- Investor-requested early withdrawal with admin approval
+- Business requirements for immediate closure
+- Can override lockup periods with explicit confirmation
+
+### How It Works
+
+#### 1. Calculation
+- Calculates **principal + ALL interest** up to exact termination moment
+- Includes partial month interest (prorated daily)
+- Uses same calculation as normal withdrawals: `calculateFinalWithdrawalPayout()`
+
+#### 2. Mock Payment System
+Since no real bank/payment system is integrated yet:
+- Withdrawal record: `status: 'approved'`, `paid_at: [timestamp]`
+- Redemption transaction: `status: 'received'`
+- This simulates instant payment completion
+
+**Future Integration:** Will connect to Stripe/ACH/Wire for actual payouts
+
+#### 3. Database Operations
+All operations use proper Supabase queries (no legacy file-based storage):
+
+```python
+# A. Create/Update Withdrawal Record
+INSERT INTO withdrawals (
+    id,
+    investment_id,
+    user_id,
+    amount,                    # Final payout (principal + interest)
+    principal_amount,          # Original investment
+    earnings_amount,           # Total interest earned
+    status,                    # 'approved' (mocked as paid)
+    approved_at,               # Current timestamp
+    paid_at,                   # Current timestamp (MOCKED)
+    payout_calculated_at,
+    admin_terminated,          # TRUE
+    admin_user_id,
+    lockup_overridden,         # TRUE if lockup bypassed
+    ...
+)
+
+# B. Create Redemption Transaction
+INSERT INTO transactions (
+    id,                        # "INV_xxx_redemption_WD_yyy"
+    investment_id,
+    user_id,
+    type,                      # 'redemption'
+    amount,                    # Final payout
+    status,                    # 'received' (MOCKED)
+    date,                      # Termination timestamp
+    withdrawal_id,
+    admin_terminated,          # TRUE
+    ...
+)
+
+# C. Update Investment Status
+UPDATE investments
+SET
+    status = 'withdrawn',
+    withdrawn_at = [current timestamp],
+    withdrawal_id = [withdrawal ID],
+    final_value = [calculated payout],
+    total_earnings = [calculated earnings],
+    admin_terminated = TRUE,
+    admin_user_id = [admin who initiated],
+    lockup_overridden = [TRUE if lockup bypassed]
+WHERE id = [investment ID]
+
+# D. Log Activity Event
+INSERT INTO activity (
+    id,
+    user_id,
+    type,                      # 'admin_withdrawal_processed'
+    date,
+    investment_id,
+    withdrawal_id,
+    amount,
+    admin_user_id,
+    lockup_overridden
+)
+```
+
+### Calculation Examples
+
+#### Example 1: Compounding Investment
+```python
+# Initial Investment: $100,000
+# Confirmed: July 1, 2024
+# Terminated: January 15, 2025 (6.5 months)
+# Payment Frequency: Compounding
+# APY: 10% (3-year lockup)
+
+Monthly Rate = 10% / 12 = 0.833%
+
+Month 1 (July):     $100,000 × 0.00833 = $833.00 → Balance: $100,833.00
+Month 2 (Aug):      $100,833 × 0.00833 = $839.94 → Balance: $101,672.94
+Month 3 (Sep):      $101,673 × 0.00833 = $846.93 → Balance: $102,519.87
+Month 4 (Oct):      $102,520 × 0.00833 = $854.00 → Balance: $103,373.87
+Month 5 (Nov):      $103,374 × 0.00833 = $861.13 → Balance: $104,235.00
+Month 6 (Dec):      $104,235 × 0.00833 = $868.36 → Balance: $105,103.36
+Partial Jan (15 of 31 days): $105,103 × (0.00833 / 31) × 15 = $424.43
+
+Final Payout: $105,527.79
+Total Earnings: $5,527.79
+Principal: $100,000.00
+```
+
+#### Example 2: Monthly Payout Investment
+```python
+# Initial Investment: $50,000
+# Confirmed: July 1, 2024
+# Terminated: January 15, 2025 (6.5 months)
+# Payment Frequency: Monthly
+# APY: 8% (1-year lockup)
+
+Monthly Distribution = $50,000 × (8% / 12) = $333.33
+
+Distributions Paid:
+July:    $333.33
+Aug:     $333.33
+Sep:     $333.33
+Oct:     $333.33
+Nov:     $333.33
+Dec:     $333.33
+Partial Jan (15 of 31 days): $333.33 × (15 / 31) = $161.29
+
+Final Payout: $52,161.27
+Total Earnings: $2,161.27
+Principal: $50,000.00
+```
+
+### Investor Dashboard Impact
+
+#### What Investor Sees After Termination:
+1. **Investment Status:** Shows as "Withdrawn" (grey badge)
+2. **Investment List:** Still visible (for historical records)
+3. **Portfolio Metrics:**
+   - ✅ **Lifetime Earnings:** INCLUDES this investment's earnings
+   - ❌ **Current Invested:** EXCLUDES withdrawn amount
+   - ❌ **Current Value:** EXCLUDES withdrawn investment
+4. **Activity Feed:** New entries appear:
+   - 🏦 Redemption - $X received on [date]
+   - ✅ Withdrawal Processed - [date]
+
+#### What Admin Sees:
+- Investment status: "withdrawn"
+- Withdrawal record in distributions tab
+- Activity log shows `admin_withdrawal_processed` event
+- `admin_terminated: true` flag in database
+
+### API Endpoint
+
+```python
+POST /api/admin/withdrawals/terminate
+# Admin only - immediate investment termination
+
+Request:
+{
+    "userId": "user_xxx",
+    "investmentId": "INV_yyy",
+    "adminUserId": "admin_zzz",
+    "overrideLockup": false  # Set true to bypass lockup period
+}
+
+Response (Success):
+{
+    "success": true,
+    "withdrawal": {
+        "id": "WD_abc",
+        "amount": 105527.79,
+        "status": "approved",
+        "paid_at": "2025-01-15T10:30:00Z"
+    },
+    "finalPayout": {
+        "finalValue": 105527.79,
+        "principalAmount": 100000,
+        "totalEarnings": 5527.79,
+        "withdrawalDate": "2025-01-15T10:30:00Z",
+        "monthsElapsed": 6.5
+    },
+    "message": "Investment terminated successfully. Withdrawal processed immediately."
+}
+
+Response (Lockup Error):
+{
+    "success": false,
+    "error": "Investment is still in lockup period. 180 day(s) remaining until 2025-07-01. Use overrideLockup flag to bypass.",
+    "lockupEndDate": "2025-07-01T00:00:00Z",
+    "requiresOverride": true
+}
+```
+
+### Implementation Notes
+
+#### Fixed Issues (Updated 2025-01-20)
+The termination endpoint was using legacy `saveUsers()` function designed for file-based storage. This has been **completely refactored** to use proper Supabase operations:
+
+**Before (BROKEN):**
+```javascript
+// ❌ Legacy - doesn't actually save to database
+const usersData = await getUsers()
+// ... manual data manipulation ...
+await saveUsers(usersData)  // This does nothing!
+```
+
+**After (FIXED):**
+```javascript
+// ✅ Direct Supabase operations
+const supabase = createServiceClient()
+await supabase.from('withdrawals').insert(...)
+await supabase.from('investments').update(...)
+await supabase.from('transactions').upsert(...)
+await supabase.from('activity').insert(...)
+```
+
+#### Other Routes Needing Updates
+The following routes still use the legacy pattern and may cause similar issues:
+- `/api/withdrawals/route.js` (user-initiated withdrawals) ⚠️ **CRITICAL**
+- `/api/admin/withdrawals/route.js` (approve/reject withdrawals)
+- `/api/admin/pending-payouts/route.js` (mark payouts as paid)
+- `/api/admin/bank-connection/route.js` (testing helper)
+- `/api/admin/documents/delete/route.js` (document deletion)
+
+### Testing Checklist
+
+#### Test 1: Normal Termination (Outside Lockup)
+1. Navigate to `/admin/investments/[id]`
+2. Click "Terminate Investment"
+3. Confirm termination
+4. **Verify:**
+   - Success message shows payout breakdown
+   - Investment status = "withdrawn"
+   - Withdrawal record created in database
+   - Redemption transaction created
+   - Activity logged with `admin_terminated: true`
+
+#### Test 2: Lockup Override
+1. Find investment still in lockup period
+2. Click "Terminate Investment"
+3. Check "Override Lockup" checkbox
+4. Confirm termination
+5. **Verify:**
+   - Warning about lockup override shown
+   - Termination proceeds successfully
+   - `lockup_overridden: true` in all records
+
+#### Test 3: Investor Dashboard
+1. Log in as investor whose investment was terminated
+2. Navigate to dashboard
+3. **Verify:**
+   - Investment shows "Withdrawn" status
+   - Lifetime earnings includes terminated investment
+   - Current portfolio value excludes terminated investment
+   - Redemption transaction in activity feed
+   - Investment still visible (not hidden)
+
+#### Test 4: Calculation Accuracy
+1. Terminate a compounding investment
+2. Manually calculate expected payout
+3. **Verify:**
+   - Payout matches calculation
+   - Includes completed months + partial month
+   - Compound growth applied correctly
+
+### Common Issues & Solutions
+
+**Issue:** "Failed to save termination"  
+**Cause:** Old code using legacy `saveUsers()` function  
+**Fixed:** Route updated to use Supabase operations (2025-01-20)
+
+**Issue:** Investment not showing as withdrawn  
+**Cause:** Cache issues or transaction sync not running  
+**Solution:** Transaction sync called after termination
+
+**Issue:** Wrong payout amount  
+**Cause:** Partial month not included  
+**Solution:** Uses `includePartialMonth: true` in calculation
+
+**Issue:** Investor sees incorrect portfolio value  
+**Cause:** Withdrawn investments counted in current value  
+**Solution:** Code excludes withdrawn investments from metrics
+
+### Future Enhancements
+
+1. **Real Payment Integration**
+   - Stripe Connect payouts
+   - ACH transfers via Plaid
+   - Wire transfers
+   - Payment status tracking
+
+2. **Email Notifications**
+   - Notify investor immediately on termination
+   - Send termination summary with payout details
+   - Provide receipt/confirmation document
+
+3. **Tax Documents**
+   - Generate 1099-INT forms
+   - Track year-to-date interest for tax reporting
+   - Export tax statements
+
+4. **Partial Withdrawal**
+   - Allow terminating only a portion of investment
+   - Keep remainder active
+
+5. **Scheduled Termination**
+   - Schedule termination for future date
+   - Auto-process on specified date
 
 ---
 

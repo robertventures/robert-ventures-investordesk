@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { getUsers, saveUsers } from '../../../lib/supabaseDatabase.js'
+import { getUser } from '../../../lib/supabaseDatabase.js'
+import { createServiceClient } from '../../../lib/supabaseClient.js'
 import { calculateInvestmentValue, calculateWithdrawalAmount } from '../../../lib/investmentCalculations.js'
 import { getCurrentAppTime } from '../../../lib/appTime.js'
 import { generateWithdrawalId, generateTransactionId } from '../../../lib/idGenerator.js'
@@ -17,24 +18,25 @@ export async function POST(request) {
       )
     }
 
-    const usersData = await getUsers()
-    const userIndex = usersData.users.findIndex(u => u.id === userId)
-    if (userIndex === -1) {
+    const supabase = createServiceClient()
+    
+    // Get user with investment data
+    const user = await getUser(userId)
+    
+    if (!user) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 })
     }
 
-    const user = usersData.users[userIndex]
-    if (user.isAdmin) {
+    if (user.is_admin) {
       return NextResponse.json({ success: false, error: 'Admins cannot withdraw investments' }, { status: 403 })
     }
 
     const investments = Array.isArray(user.investments) ? user.investments : []
-    const invIndex = investments.findIndex(inv => inv.id === investmentId)
-    if (invIndex === -1) {
+    const investment = investments.find(inv => inv.id === investmentId)
+    
+    if (!investment) {
       return NextResponse.json({ success: false, error: 'Investment not found' }, { status: 404 })
     }
-
-    const investment = investments[invIndex]
 
     // Check if investment is eligible for withdrawal
     if (investment.status !== 'active') {
@@ -48,8 +50,8 @@ export async function POST(request) {
     const appTime = await getCurrentAppTime()
     const now = new Date(appTime || new Date().toISOString())
 
-    if (investment.lockupEndDate) {
-      const lockupEnd = new Date(investment.lockupEndDate)
+    if (investment.lockup_end_date) {
+      const lockupEnd = new Date(investment.lockup_end_date)
       if (now < lockupEnd) {
         const daysRemaining = Math.ceil((lockupEnd - now) / (1000 * 60 * 60 * 24))
         return NextResponse.json({
@@ -69,108 +71,133 @@ export async function POST(request) {
     const payoutDueBy = payoutDueByDate.toISOString()
 
     // For monthly payout investments: withdraw principal only
-    const isMonthly = investment.paymentFrequency === 'monthly'
+    const isMonthly = investment.payment_frequency === 'monthly'
     const principalAmount = investment.amount
     const compAmount = currentValue.currentValue
     const withdrawableAmount = isMonthly ? principalAmount : compAmount
     const earningsAmount = isMonthly ? 0 : (currentValue.totalEarnings || 0)
 
-    // Create withdrawal record with sequential ID
-    const withdrawalId = generateWithdrawalId(usersData.users)
+    // Generate withdrawal ID
+    const { data: allUsers } = await supabase.from('users').select('id')
+    const withdrawalId = generateWithdrawalId((allUsers || []).map(u => ({ id: u.id })))
+    
     const nowIso = now.toISOString()
     const accrualNotice = 'This investment keeps earning interest until the withdrawal is paid out. The final payout amount is calculated when funds are sent (within 90 days of your request).'
-    const withdrawal = {
-      id: withdrawalId,
-      investmentId,
-      userId,
-      amount: withdrawableAmount,
-      principalAmount: principalAmount,
-      earningsAmount: earningsAmount,
-      quotedAmount: withdrawableAmount,
-      quotedEarnings: earningsAmount,
-      finalAmount: null,
-      finalEarnings: null,
-      payoutCalculatedAt: null,
-      accrualNotice,
-      status: 'notice',
-      requestedAt: nowIso,
-      noticeStartAt,
-      payoutDueBy,
-      investment: {
-        originalAmount: investment.amount,
-        lockupPeriod: investment.lockupPeriod,
-        paymentFrequency: investment.paymentFrequency,
-        confirmedAt: investment.confirmedAt,
-        lockupEndDate: investment.lockupEndDate,
-        statusAtRequest: investment.status,
-        accruesUntilPayout: true
-      }
+    
+    // Create withdrawal record in Supabase
+    const { data: withdrawalRecord, error: withdrawalError } = await supabase
+      .from('withdrawals')
+      .insert({
+        id: withdrawalId,
+        investment_id: investmentId,
+        user_id: userId,
+        amount: withdrawableAmount,
+        principal_amount: principalAmount,
+        earnings_amount: earningsAmount,
+        quoted_amount: withdrawableAmount,
+        quoted_earnings: earningsAmount,
+        final_amount: null,
+        final_earnings: null,
+        payout_calculated_at: null,
+        accrual_notice: accrualNotice,
+        status: 'notice',
+        requested_at: nowIso,
+        notice_start_at: noticeStartAt,
+        payout_due_by: payoutDueBy,
+        investment_snapshot: {
+          originalAmount: investment.amount,
+          lockupPeriod: investment.lockup_period,
+          paymentFrequency: investment.payment_frequency,
+          confirmedAt: investment.confirmed_at,
+          lockupEndDate: investment.lockup_end_date,
+          statusAtRequest: investment.status,
+          accruesUntilPayout: true
+        },
+        created_at: nowIso,
+        updated_at: nowIso
+      })
+      .select()
+      .single()
+
+    if (withdrawalError) {
+      console.error('Error creating withdrawal:', withdrawalError)
+      return NextResponse.json({ success: false, error: 'Failed to create withdrawal' }, { status: 500 })
     }
 
-    // Update investment status to reflect withdrawal notice period
-    const investmentTransactions = Array.isArray(investment.transactions) ? investment.transactions : []
+    // Create redemption transaction in Supabase
     const redemptionTxId = generateTransactionId('INV', investmentId, 'redemption', { withdrawalId })
-    const existingRedemptionIndex = investmentTransactions.findIndex(tx => tx.id === redemptionTxId)
-    const redemptionTransaction = {
-      id: redemptionTxId,
-      type: 'redemption',
-      amount: withdrawableAmount,
-      quotedAmount: withdrawableAmount,
-      quotedEarnings: earningsAmount,
-      quotedAt: nowIso,
-      finalAmount: null,
-      finalEarnings: null,
-      payoutCalculatedAt: null,
-      accrualNotice,
-      status: 'pending',
-      date: nowIso,
-      withdrawalId,
-      payoutDueBy,
-      approvedAt: null,
-      paidAt: null,
-      rejectedAt: null,
-      createdAt: nowIso,
-      updatedAt: nowIso
-    }
-    if (existingRedemptionIndex === -1) {
-      investmentTransactions.push(redemptionTransaction)
-    } else {
-      investmentTransactions[existingRedemptionIndex] = {
-        ...investmentTransactions[existingRedemptionIndex],
-        ...redemptionTransaction
-      }
-    }
+    
+    const { error: txError } = await supabase
+      .from('transactions')
+      .upsert({
+        id: redemptionTxId,
+        investment_id: investmentId,
+        user_id: userId,
+        type: 'redemption',
+        amount: withdrawableAmount,
+        quoted_amount: withdrawableAmount,
+        quoted_earnings: earningsAmount,
+        quoted_at: nowIso,
+        final_amount: null,
+        final_earnings: null,
+        payout_calculated_at: null,
+        accrual_notice: accrualNotice,
+        status: 'pending',
+        date: nowIso,
+        withdrawal_id: withdrawalId,
+        payout_due_by: payoutDueBy,
+        approved_at: null,
+        paid_at: null,
+        rejected_at: null,
+        created_at: nowIso,
+        updated_at: nowIso
+      })
 
-    investments[invIndex] = {
-      ...investment,
-      status: 'withdrawal_notice',
-      withdrawalNoticeStartAt: noticeStartAt,
-      payoutDueBy,
-      withdrawalId,
-      finalValue: withdrawableAmount,
-      totalEarnings: earningsAmount,
-      transactions: investmentTransactions,
-      updatedAt: nowIso
+    if (txError) {
+      console.error('Error creating redemption transaction:', txError)
+      return NextResponse.json({ success: false, error: 'Failed to create transaction' }, { status: 500 })
     }
 
-    // Add withdrawal to user's withdrawals array
-    const withdrawals = Array.isArray(user.withdrawals) ? user.withdrawals : []
-    const updatedUser = {
-      ...user,
-      investments,
-      withdrawals: [...withdrawals, withdrawal],
-      updatedAt: new Date().toISOString()
+    // Update investment status to withdrawal_notice
+    const { error: invError } = await supabase
+      .from('investments')
+      .update({
+        status: 'withdrawal_notice',
+        withdrawal_notice_start_at: noticeStartAt,
+        payout_due_by: payoutDueBy,
+        withdrawal_id: withdrawalId,
+        final_value: withdrawableAmount,
+        total_earnings: earningsAmount,
+        updated_at: nowIso
+      })
+      .eq('id', investmentId)
+
+    if (invError) {
+      console.error('Error updating investment:', invError)
+      return NextResponse.json({ success: false, error: 'Failed to update investment' }, { status: 500 })
     }
 
-    usersData.users[userIndex] = updatedUser
+    // Add activity event
+    const { error: activityError } = await supabase
+      .from('activity')
+      .insert({
+        id: generateTransactionId('USR', userId, 'withdrawal_requested'),
+        user_id: userId,
+        type: 'withdrawal_requested',
+        date: nowIso,
+        investment_id: investmentId,
+        withdrawal_id: withdrawalId,
+        amount: withdrawableAmount
+      })
 
-    if (!await saveUsers(usersData)) {
-      return NextResponse.json({ success: false, error: 'Failed to process withdrawal' }, { status: 500 })
+    if (activityError) {
+      console.error('Error creating activity:', activityError)
+      // Don't fail the whole operation if activity logging fails
     }
 
     return NextResponse.json({ 
       success: true, 
-      withdrawal,
+      withdrawal: withdrawalRecord,
       message: 'Withdrawal request submitted successfully. This investment keeps earning interest until funds are sent (within 90 days of your request).'
     })
   } catch (error) {
@@ -192,17 +219,34 @@ export async function GET(request) {
       )
     }
 
-    const usersData = await getUsers()
-    const user = usersData.users.find(u => u.id === userId)
-    if (!user) {
+    const supabase = createServiceClient()
+    
+    // Check if user exists
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('id', userId)
+      .maybeSingle()
+    
+    if (userError || !user) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 })
     }
 
-    const withdrawals = Array.isArray(user.withdrawals) ? user.withdrawals : []
+    // Get withdrawals for this user
+    const { data: withdrawals, error: withdrawalsError } = await supabase
+      .from('withdrawals')
+      .select('*')
+      .eq('user_id', userId)
+      .order('requested_at', { ascending: false })
+    
+    if (withdrawalsError) {
+      console.error('Error fetching withdrawals:', withdrawalsError)
+      return NextResponse.json({ success: false, error: 'Failed to fetch withdrawals' }, { status: 500 })
+    }
     
     return NextResponse.json({ 
       success: true, 
-      withdrawals: withdrawals.sort((a, b) => new Date(b.requestedAt) - new Date(a.requestedAt))
+      withdrawals: withdrawals || []
     })
   } catch (error) {
     console.error('Error fetching withdrawals:', error)

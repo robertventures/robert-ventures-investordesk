@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
-import { getUsers, saveUsers } from '../../../../lib/supabaseDatabase.js'
+import { getUser } from '../../../../lib/supabaseDatabase.js'
+import { createServiceClient } from '../../../../lib/supabaseClient.js'
 import { requireAdmin, authErrorResponse } from '../../../../lib/authMiddleware.js'
 import { getCurrentAppTime } from '../../../../lib/appTime.js'
-import { createServiceClient } from '../../../../lib/supabaseClient.js'
 
 // GET - List all pending payouts across all users
 export async function GET(request) {
@@ -12,62 +12,70 @@ export async function GET(request) {
     if (!admin) {
       return authErrorResponse('Admin access required', 403)
     }
-    const usersData = await getUsers()
+    
+    const supabase = createServiceClient()
     
     // Get current app time to filter out future-dated distributions
     const currentAppTime = await getCurrentAppTime()
     const currentAppTimeMs = new Date(currentAppTime).getTime()
     
     console.log('🕐 Pending Payouts - Current App Time:', currentAppTime)
-    console.log('🕐 Current App Time (ms):', currentAppTimeMs)
-    console.log('🕐 Current Date Object:', new Date(currentAppTime))
     
-    const pendingPayouts = []
-
-    for (const user of usersData.users) {
-      if (user.isAdmin) continue
-      const investments = Array.isArray(user.investments) ? user.investments : []
-
-      investments.forEach(investment => {
-        if (!investment || !Array.isArray(investment.transactions)) return
-
-        investment.transactions.forEach(tx => {
-          if (tx.type !== 'distribution') return
-          // Only include pending/approved status distributions
-          if (tx.status !== 'pending' && tx.status !== 'approved') return
-          // Exclude compounding investments - they don't require manual approval
-          // Compounding distributions are auto-approved and reinvested
-          if (investment.paymentFrequency === 'compounding' || tx.paymentFrequency === 'compounding') return
-          
-          // CRITICAL: Only show distributions that are due (scheduled date <= current app time)
-          // This prevents future-dated distributions from showing when Time Machine is reset
-          const scheduledDateMs = new Date(tx.date || 0).getTime()
-          console.log(`📅 Checking transaction ${tx.id}: scheduled=${tx.date}, scheduledMs=${scheduledDateMs}, currentMs=${currentAppTimeMs}, isFuture=${scheduledDateMs > currentAppTimeMs}`)
-          if (scheduledDateMs > currentAppTimeMs) {
-            console.log(`  ❌ FILTERED OUT - Future date`)
-            return
-          }
-          console.log(`  ✅ INCLUDED - Date is due`)
-
-          pendingPayouts.push({
-            ...tx,
-            userId: user.id,
-            userEmail: user.email,
-            userName: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
-            investmentId: investment.id,
-            investmentAmount: investment.amount || 0,
-            lockupPeriod: investment.lockupPeriod || tx.lockupPeriod,
-            paymentFrequency: investment.paymentFrequency || tx.paymentFrequency,
-            payoutBankNickname: tx.payoutBankNickname || 'Unknown',
-            failureReason: tx.failureReason || null,
-            retryCount: tx.retryCount || 0,
-            lastRetryAt: tx.lastRetryAt || null
-          })
-        })
-      })
+    // Get all pending/approved distribution transactions with investment and user info
+    const { data: transactions, error } = await supabase
+      .from('transactions')
+      .select(`
+        *,
+        investments!inner(
+          id,
+          amount,
+          lockup_period,
+          payment_frequency,
+          user_id,
+          users!inner(
+            id,
+            email,
+            first_name,
+            last_name,
+            is_admin
+          )
+        )
+      `)
+      .eq('type', 'distribution')
+      .in('status', ['pending', 'approved'])
+      .lte('date', currentAppTime)
+      .order('date', { ascending: true })
+    
+    if (error) {
+      console.error('Error fetching pending payouts:', error)
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Failed to fetch pending payouts' 
+      }, { status: 500 })
     }
-
-    pendingPayouts.sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0))
+    
+    // Filter out compounding investments and format response
+    const pendingPayouts = (transactions || [])
+      .filter(tx => {
+        const investment = tx.investments
+        // Exclude compounding investments - they don't require manual approval
+        return investment.payment_frequency !== 'compounding' && tx.payment_frequency !== 'compounding'
+      })
+      .filter(tx => !tx.investments.users.is_admin) // Exclude admin users
+      .map(tx => ({
+        ...tx,
+        userId: tx.investments.users.id,
+        userEmail: tx.investments.users.email,
+        userName: `${tx.investments.users.first_name || ''} ${tx.investments.users.last_name || ''}`.trim(),
+        investmentId: tx.investments.id,
+        investmentAmount: tx.investments.amount || 0,
+        lockupPeriod: tx.investments.lockup_period || tx.lockup_period,
+        paymentFrequency: tx.investments.payment_frequency || tx.payment_frequency,
+        payoutBankNickname: tx.payout_bank_nickname || 'Unknown',
+        failureReason: tx.failure_reason || null,
+        retryCount: tx.retry_count || 0,
+        lastRetryAt: tx.last_retry_at || null
+      }))
 
     return NextResponse.json({ 
       success: true, 
@@ -110,31 +118,24 @@ export async function POST(request) {
       }, { status: 400 })
     }
 
-    const usersData = await getUsers()
-    const userIndex = usersData.users.findIndex(u => u.id === userId)
-
-    if (userIndex === -1) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'User not found' 
-      }, { status: 404 })
-    }
-
-    const user = usersData.users[userIndex]
-    const investments = Array.isArray(user.investments) ? user.investments : []
-    const investment = investments.find(inv => Array.isArray(inv.transactions) && inv.transactions.some(tx => tx.id === transactionId))
-
-    if (!investment) {
+    const supabase = createServiceClient()
+    
+    // Get transaction from database
+    const { data: transaction, error: txError } = await supabase
+      .from('transactions')
+      .select('*, investments!inner(id, user_id)')
+      .eq('id', transactionId)
+      .eq('investments.user_id', userId)
+      .maybeSingle()
+    
+    if (txError || !transaction) {
       return NextResponse.json({ 
         success: false, 
         error: 'Transaction not found' 
       }, { status: 404 })
     }
 
-    const txIndex = investment.transactions.findIndex(tx => tx.id === transactionId)
-    const transaction = investment.transactions[txIndex]
-
-    if (!transaction || transaction.type !== 'distribution') {
+    if (transaction.type !== 'distribution') {
       return NextResponse.json({ 
         success: false, 
         error: 'Only distribution transactions can be managed' 
@@ -142,79 +143,59 @@ export async function POST(request) {
     }
 
     const now = new Date().toISOString()
+    const updates = { updated_at: now }
 
     if (action === 'retry') {
       // TESTING MODE: Simulate retry logic with mock bank transfer
       // In production, this would call the actual bank API
       // For testing, we simulate an 80% success rate
       
-      const retryCount = (transaction.retryCount || 0) + 1
+      const retryCount = (transaction.retry_count || 0) + 1
       const retrySuccess = Math.random() > 0.2
 
-      transaction.retryCount = retryCount
-      transaction.lastRetryAt = now
+      updates.retry_count = retryCount
+      updates.last_retry_at = now
 
       if (retrySuccess) {
-        transaction.status = 'received'
-        transaction.completedAt = now
-        transaction.failureReason = null
+        updates.status = 'received'
+        updates.completed_at = now
+        updates.failure_reason = null
       } else {
-        transaction.status = 'rejected'
-        transaction.failureReason = failureReason || 'Mock bank transfer failed during retry'
+        updates.status = 'rejected'
+        updates.failure_reason = failureReason || 'Mock bank transfer failed during retry'
       }
 
     } else if (action === 'complete') {
-      transaction.status = 'received'
-      transaction.completedAt = now
-      transaction.manuallyCompleted = true
-      transaction.failureReason = null
+      updates.status = 'received'
+      updates.completed_at = now
+      updates.manually_completed = true
+      updates.failure_reason = null
 
     } else if (action === 'fail') {
-      transaction.status = 'rejected'
-      transaction.failedAt = now
-      transaction.failureReason = failureReason || 'Manually marked as failed by admin'
+      updates.status = 'rejected'
+      updates.failed_at = now
+      updates.failure_reason = failureReason || 'Manually marked as failed by admin'
     }
 
-    investment.transactions[txIndex] = transaction
-    investment.updatedAt = now
-    user.updatedAt = now
-    usersData.users[userIndex] = user
-
-    const saved = await saveUsers(usersData)
-    if (!saved) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Failed to save changes' 
-      }, { status: 500 })
-    }
-
-    // CRITICAL FIX: Also save to Supabase transactions table for proper data persistence
-    const supabase = createServiceClient()
-    const dbTransaction = {
-      id: transaction.id,
-      user_id: userId,
-      investment_id: investment.id,
-      type: transaction.type,
-      amount: transaction.amount,
-      status: transaction.status,
-      date: transaction.date
-    }
-    
-    const { error: transactionError } = await supabase
+    // Update transaction in database
+    const { data: updatedTransaction, error: updateError } = await supabase
       .from('transactions')
-      .upsert(dbTransaction, { onConflict: 'id' })
+      .update(updates)
+      .eq('id', transactionId)
+      .select()
+      .single()
     
-    if (transactionError) {
-      console.error('Failed to update transaction in database:', transactionError)
+    if (updateError) {
+      console.error('Failed to update transaction:', updateError)
       return NextResponse.json({ 
         success: false, 
-        error: `Changes saved to users.json but failed to update database: ${transactionError.message}` 
+        error: 'Failed to update transaction' 
       }, { status: 500 })
     }
 
     return NextResponse.json({ 
       success: true, 
-      transaction,
+      transaction: updatedTransaction,
       message: `Payout ${action === 'retry' ? 'retried' : action === 'complete' ? 'marked as completed' : 'marked as failed'} successfully`
     })
 

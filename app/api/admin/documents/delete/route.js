@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { getUsers, updateUser, saveUsers } from '../../../../../lib/supabaseDatabase.js'
+import { updateUser } from '../../../../../lib/supabaseDatabase.js'
+import { createServiceClient } from '../../../../../lib/supabaseClient.js'
 import { deleteDocument } from '../../../../../lib/supabaseStorage.js'
 import { requireAdmin, authErrorResponse } from '../../../../../lib/authMiddleware.js'
 
@@ -27,7 +28,7 @@ export async function POST(request) {
       )
     }
 
-    const usersData = await getUsers()
+    const supabase = createServiceClient()
 
     if (mode === 'single') {
       // Delete single document for a specific user
@@ -38,32 +39,38 @@ export async function POST(request) {
         )
       }
 
-      const user = usersData.users.find(u => u.id === userId)
-      if (!user) {
+      const { data: user, error: userError } = await supabase
+        .from('users')
+        .select('id, documents')
+        .eq('id', userId)
+        .maybeSingle()
+      
+      if (userError || !user) {
         return NextResponse.json(
           { success: false, error: 'User not found' },
           { status: 404 }
         )
       }
 
-      const docIndex = user.documents?.findIndex(d => d.id === documentId)
-      if (docIndex === -1 || docIndex === undefined) {
+      const documents = user.documents || []
+      const docIndex = documents.findIndex(d => d.id === documentId)
+      
+      if (docIndex === -1) {
         return NextResponse.json(
           { success: false, error: 'Document not found' },
           { status: 404 }
         )
       }
 
-      const document = user.documents[docIndex]
+      const document = documents[docIndex]
 
       // Delete from Supabase Storage
-      // Use storagePath if available (new), otherwise fallback to blobKey (legacy)
       const storagePath = document.storagePath || document.blobKey
       await deleteDocument(storagePath)
 
       // Remove from user record
-      user.documents.splice(docIndex, 1)
-      await updateUser(user.id, { documents: user.documents })
+      documents.splice(docIndex, 1)
+      await updateUser(user.id, { documents })
 
       return NextResponse.json({
         success: true,
@@ -80,20 +87,30 @@ export async function POST(request) {
       const deletedDocs = []
       const errors = []
 
-      for (const user of usersData.users) {
+      // Get all users with documents
+      const { data: users, error: usersError } = await supabase
+        .from('users')
+        .select('id, email, documents')
+        .not('documents', 'is', null)
+
+      if (usersError) {
+        return NextResponse.json(
+          { success: false, error: 'Failed to fetch users' },
+          { status: 500 }
+        )
+      }
+
+      for (const user of (users || [])) {
         if (!user.documents || user.documents.length === 0) continue
 
         const docs = user.documents.filter(d => d.type === 'document')
+        const updatedDocuments = user.documents.filter(d => d.type !== 'document')
 
         for (const doc of docs) {
           try {
             // Delete from Supabase Storage
-            // Use storagePath if available (new), otherwise fallback to blobKey (legacy)
             const storagePath = doc.storagePath || doc.blobKey
             await deleteDocument(storagePath)
-
-            // Remove from user's documents
-            user.documents = user.documents.filter(d => d.id !== doc.id)
 
             deletedDocs.push({
               userId: user.id,
@@ -109,10 +126,13 @@ export async function POST(request) {
             })
           }
         }
-      }
 
-      // Save all user updates
-      await saveUsers(usersData)
+        // Update user's documents in database
+        await supabase
+          .from('users')
+          .update({ documents: updatedDocuments })
+          .eq('id', user.id)
+      }
 
       return NextResponse.json({
         success: true,
