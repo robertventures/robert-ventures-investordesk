@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
-import { getUser, updateUser } from '../../../../../../lib/supabaseDatabase.js'
-import { createServiceClient } from '../../../../../../lib/supabaseClient.js'
-import { requireAuth, authErrorResponse } from '../../../../../../lib/authMiddleware.js'
-import { getCurrentAppTime } from '../../../../../../lib/appTime.js'
-import { rateLimit, RATE_LIMIT_CONFIGS } from '../../../../../../lib/rateLimit.js'
-import { validatePassword, ValidationError } from '../../../../../../lib/validation.js'
+import { getUser, updateUser } from '../../../../../lib/supabaseDatabase.js'
+import { createServiceClient } from '../../../../../lib/supabaseClient.js'
+import { requireAuth, authErrorResponse } from '../../../../../lib/authMiddleware.js'
+import { getCurrentAppTime } from '../../../../../lib/appTime.js'
+import { rateLimit, RATE_LIMIT_CONFIGS } from '../../../../../lib/rateLimit.js'
+import { validatePassword, ValidationError } from '../../../../../lib/validation.js'
 
 /**
  * POST /api/users/account/change-password

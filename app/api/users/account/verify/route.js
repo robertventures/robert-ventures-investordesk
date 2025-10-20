@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
-import { updateUser } from '../../../../../../lib/supabaseDatabase.js'
-import { requireAuth, authErrorResponse, setAuthCookies } from '../../../../../../lib/authMiddleware.js'
-import { signToken, signRefreshToken } from '../../../../../../lib/auth.js'
-import { getCurrentAppTime } from '../../../../../../lib/appTime.js'
-import { rateLimit, RATE_LIMIT_CONFIGS } from '../../../../../../lib/rateLimit.js'
+import { updateUser } from '../../../../../lib/supabaseDatabase.js'
+import { requireAuth, authErrorResponse, setAuthCookies } from '../../../../../lib/authMiddleware.js'
+import { signToken, signRefreshToken } from '../../../../../lib/auth.js'
+import { getCurrentAppTime } from '../../../../../lib/appTime.js'
+import { rateLimit, RATE_LIMIT_CONFIGS } from '../../../../../lib/rateLimit.js'
 
 /**
  * POST /api/users/account/verify
