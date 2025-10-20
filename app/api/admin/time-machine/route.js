@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getUsers, updateAppTimeSettings } from '../../../../lib/supabaseDatabase.js'
-import { requireAdmin, authErrorResponse } from '../../../../lib/authMiddleware'
+import { requireAdmin, authErrorResponse } from '../../../../lib/authMiddleware.js'
 
 // GET - Get current app time
 export async function GET(request) {
