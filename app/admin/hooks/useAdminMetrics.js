@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { calculateInvestmentValue } from '../../../lib/investmentCalculations'
+import { calculateInvestmentValue } from '../../../lib/investmentCalculations.js'
 
 /**
  * Custom hook to calculate dashboard metrics from users data

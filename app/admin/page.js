@@ -8,7 +8,7 @@ import DashboardTab from './components/DashboardTab'
 import OperationsTab from './components/OperationsTab'
 import ActivityTab from './components/ActivityTab'
 import DistributionsTab from './components/DistributionsTab'
-import { calculateInvestmentValue } from '../../lib/investmentCalculations'
+import { calculateInvestmentValue } from '../../lib/investmentCalculations.js'
 import styles from './page.module.css'
 
 /**

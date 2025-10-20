@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import AdminHeader from '../../../components/AdminHeader'
-import { calculateInvestmentValue } from '../../../../lib/investmentCalculations'
+import { calculateInvestmentValue } from '../../../../lib/investmentCalculations.js'
 import styles from './page.module.css'
 
 export default function AdminInvestmentDetailsPage({ params }) {

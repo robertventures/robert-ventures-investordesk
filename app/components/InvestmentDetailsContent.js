@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import styles from './InvestmentDetailsContent.module.css'
 import TransactionsList from './TransactionsList'
-import { calculateInvestmentValue, formatCurrency, formatDate, getInvestmentStatus } from '../../lib/investmentCalculations'
+import { calculateInvestmentValue, formatCurrency, formatDate, getInvestmentStatus } from '../../lib/investmentCalculations.js'
 
 export default function InvestmentDetailsContent({ investmentId }) {
   const router = useRouter()
