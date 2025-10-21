@@ -73,6 +73,7 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
     lastName: '',
     phoneNumber: '',
     dob: '',
+    accountCreatedDate: '', // Date when account was originally created on Wealthblock
     accountType: 'individual',
     address: {
       street1: '',
@@ -458,6 +459,7 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
       lastName: '',
       phoneNumber: '',
       dob: '',
+      accountCreatedDate: '',
       accountType: 'individual',
       address: {
         street1: '',
@@ -639,6 +641,15 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
                     type="date"
                     value={manualForm.dob}
                     onChange={(e) => handleManualFormChange('dob', e.target.value)}
+                  />
+                </div>
+                <div className={styles.formGroup}>
+                  <label>Account Created Date</label>
+                  <input
+                    type="date"
+                    value={manualForm.accountCreatedDate}
+                    onChange={(e) => handleManualFormChange('accountCreatedDate', e.target.value)}
+                    placeholder="When was this account created on Wealthblock?"
                   />
                 </div>
               </div>

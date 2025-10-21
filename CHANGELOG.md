@@ -6,6 +6,58 @@ A day-by-day record of progress on Robert Ventures Investor Desk.
 
 ## October 2025
 
+### Tuesday, October 21
+
+#### 📥 **Wealthblock Investor Import System**
+- **Built comprehensive investor import interface**:
+  - Single-user import workflow with immediate processing
+  - Support for all account types: Individual, Joint, Entity, IRA
+  - Dynamic form fields that adapt based on account type selected
+  - Full address collection for primary account holder
+  - Joint account support with separate holder information and address
+  - Entity account support with entity details, tax ID, and authorized representative
+  - IRA account support with custodian and account number
+  - Investment history with historical dates (creation and confirmation dates)
+  - Multiple investments per user with detailed tracking
+  - Real-time form validation with helpful error messages
+  - Phone number formatting (US format: (555) 123-4567)
+  - Name input validation (letters, spaces, hyphens, apostrophes, periods only)
+  - ZIP code formatting (5 digits)
+  - Date handling that preserves exact dates without timezone shifting
+
+- **Enhanced import API endpoint** (`/api/admin/import-investors`):
+  - Creates Supabase Auth users with default password (`Test1234!`)
+  - Auto-verifies imported accounts (admin-created)
+  - Creates complete database user records with all account-type-specific fields
+  - Creates primary address records in `addresses` table
+  - Preserves historical account creation dates from Wealthblock
+  - Creates investments with historical dates using `dateOnlyToISO()`
+  - Generates investment IDs using sequential system (INV-10000, INV-10001, etc.)
+  - Creates `account_created` activity event with historical date
+  - Creates `investment_created` and `investment_confirmed` activity events
+  - **Auto-triggers transaction regeneration** after successful import
+  - Automatically generates all historical monthly distributions
+  - Proper error handling with rollback (deletes auth user if database insert fails)
+  - Returns detailed results with success/failure counts and error messages
+
+- **Automatic transaction generation**:
+  - After import completes, system automatically calls `/api/migrate-transactions`
+  - Calculates all historical monthly distributions based on investment dates
+  - Generates activity events for every distribution
+  - Users see complete investment history immediately after import
+  - Success message confirms all distributions calculated
+  - Fallback instruction to manually regenerate if auto-generation fails
+
+- **User experience improvements**:
+  - Three-stage workflow: Add Investor → Review & Edit → Import
+  - Collapsible form with "+ Import New Investor" button
+  - Investment list with add/remove functionality
+  - Display formatting for dates (MM/DD/YYYY) and currency
+  - Success/warning messages after import
+  - Option to send welcome emails to imported users
+  - "Import Another Investor" button for batch workflows
+  - Real-time investment total calculation
+
 ### Monday, October 20
 
 #### 📚 **Documentation Consolidation - API Endpoints** (Latest)
@@ -27,6 +79,56 @@ A day-by-day record of progress on Robert Ventures Investor Desk.
     - ❌ `docs/QUICK-REFERENCE-NEW-ENDPOINTS.md`
   - Updated `docs/README.md` with API changes section and removed references to deleted files
   - All API documentation now centralized in single source: BACKEND-GUIDE.md
+
+### Sunday, October 19
+
+#### 🔄 **User Registration Flow Refactoring**
+- **Migrated pending users to Supabase database**:
+  - Moved from in-memory storage to persistent `pending_users` table in Supabase
+  - Enhanced reliability and persistence across server restarts
+  - Database-driven cleanup for expired pending users (auto-removes after expiry)
+  - Email verification codes now stored in database with expiration tracking
+  - Support for both test mode (hardcoded `123456` code) and production mode (random 6-digit code)
+
+- **Updated registration endpoints**:
+  - `/api/auth/register-pending` - Now stores pending users in Supabase
+  - `/api/auth/verify-and-create` - Validates codes from database before user creation
+  - Removed deprecated `/api/users/[id]/verify` endpoint (streamlined flow)
+  - Enhanced error handling and validation
+
+- **Documentation updates**:
+  - Updated `docs/BACKEND-GUIDE.md` with new registration flow details
+  - Removed redundant `docs/REGISTRATION-FLOW.md` (consolidated into BACKEND-GUIDE)
+  - Added required database table schema for `pending_users`
+
+#### 🧹 **Code Cleanup & Script Management**
+- **Removed deprecated user management scripts** (513 lines deleted):
+  - ❌ Deleted `scripts/clean-orphaned-auth-users.js` (no longer needed after registration refactor)
+  - ❌ Deleted `scripts/diagnose-deletion.js` (debugging script no longer required)
+  - ❌ Deleted `scripts/sync-auth-to-users.js` (obsolete after Supabase migration)
+  - ❌ Deleted `scripts/sync-display-names.js` (deprecated functionality)
+  - Updated `package.json` to remove all references to deleted scripts
+
+#### 📚 **Supabase Setup Documentation**
+- **Created comprehensive setup guide** (`docs/SUPABASE-SETUP.md`):
+  - Complete SQL schema for `pending_users` table
+  - Step-by-step Supabase project setup instructions
+  - Environment variable configuration guide
+  - Table creation and RLS policy setup
+  - Troubleshooting section
+
+- **Added diagnostic scripts**:
+  - Created `scripts/check-pending-users-table.js` - Verifies pending_users table exists and structure
+  - Created `scripts/test-pending-users-connection.js` - Tests database connection
+  - Created `scripts/verify-supabase-keys.js` - Validates Supabase environment configuration
+  - All scripts provide detailed output for debugging setup issues
+
+#### 🔧 **Admin Dashboard Improvements**
+- **Updated profile completeness checks** (`app/admin/page.js`):
+  - Removed bank connection requirement from profile completeness
+  - Updated warning message to reflect current requirements
+  - Simplified profile completion logic
+  - Better user experience for admin reviewing incomplete profiles
 
 ### Friday, October 17
 

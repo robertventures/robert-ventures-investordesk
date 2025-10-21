@@ -114,8 +114,8 @@ export async function POST(request) {
           phone_number: investorData.phoneNumber || '',
           dob: investorData.dob || '',
           ssn: '', // Will be filled during onboarding
-          is_verified: false, // Needs email verification
-          verified_at: null,
+          is_verified: true, // Auto-verify imported accounts (admin-created)
+          verified_at: timestamp, // Set verification timestamp
           is_admin: false,
           account_type: investorData.accountType || 'individual',
           created_at: timestamp,
@@ -186,13 +186,19 @@ export async function POST(request) {
         }
 
         // 3. Create account_created activity
+        // Use provided accountCreatedDate if available (for Wealthblock imports),
+        // otherwise use current timestamp
+        const accountCreatedDate = investorData.accountCreatedDate
+          ? dateOnlyToISO(investorData.accountCreatedDate)
+          : timestamp
+        
         await supabase
           .from('activity')
           .insert({
             id: generateTransactionId('USR', userId, 'account_created'),
             user_id: userId,
             type: 'account_created',
-            date: timestamp
+            date: accountCreatedDate
           })
 
         // 4. Process investments if provided
