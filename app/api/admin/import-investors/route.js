@@ -4,6 +4,7 @@ import { signUp } from '../../../../lib/supabaseAuth.js'
 import { generateUserId, generateTransactionId, generateSequentialInvestmentId, validateInvestmentId } from '../../../../lib/idGenerator.js'
 import { requireAdmin, authErrorResponse } from '../../../../lib/authMiddleware.js'
 import { getCurrentAppTime } from '../../../../lib/appTime.js'
+import { dateOnlyToISO, addYears } from '../../../../lib/dateUtils.js'
 
 /**
  * Import investors from Wealthblock CSV migration
@@ -116,7 +117,6 @@ export async function POST(request) {
           is_verified: false, // Needs email verification
           verified_at: null,
           is_admin: false,
-          address: investorData.address || null,
           account_type: investorData.accountType || 'individual',
           created_at: timestamp,
           updated_at: timestamp
@@ -153,6 +153,36 @@ export async function POST(request) {
           })
           results.skipped++
           continue
+        }
+
+        // 2.5. Create primary address in addresses table if provided
+        if (investorData.address && (
+          investorData.address.street1 || 
+          investorData.address.city || 
+          investorData.address.state || 
+          investorData.address.zip
+        )) {
+          const { error: addressError } = await supabase
+            .from('addresses')
+            .insert({
+              id: `addr-${userId}-${Date.now()}`,
+              user_id: userId,
+              street1: investorData.address.street1 || '',
+              street2: investorData.address.street2 || '',
+              city: investorData.address.city || '',
+              state: investorData.address.state || '',
+              zip: investorData.address.zip || '',
+              country: investorData.address.country || 'United States',
+              label: 'Home',
+              is_primary: true,
+              created_at: timestamp,
+              updated_at: timestamp
+            })
+
+          if (addressError) {
+            console.error(`Failed to create address for ${normalizedEmail}:`, addressError)
+            // Don't fail the whole import for address errors
+          }
         }
 
         // 3. Create account_created activity
@@ -279,15 +309,30 @@ async function createInvestment(supabase, userId, investmentData, appTime) {
     }
     
     // Use provided dates or fallback to app time
+    // IMPORTANT: Use dateOnlyToISO to prevent timezone shifting
+    // If user enters "2024-11-20", we store "2024-11-20T00:00:00.000Z" (not shifted by timezone)
     const timestamp = appTime || new Date().toISOString()
-    const createdDate = investmentData.createdDate || timestamp
-    const confirmedDate = investmentData.confirmedDate || investmentData.createdDate || timestamp
+    
+    console.log(`📅 Processing investment dates for user ${userId}:`)
+    console.log(`   Raw createdDate: ${investmentData.createdDate}`)
+    console.log(`   Raw confirmedDate: ${investmentData.confirmedDate}`)
+    console.log(`   Fallback timestamp: ${timestamp}`)
+    
+    const createdDate = investmentData.createdDate 
+      ? dateOnlyToISO(investmentData.createdDate) 
+      : timestamp
+    const confirmedDate = investmentData.confirmedDate 
+      ? dateOnlyToISO(investmentData.confirmedDate)
+      : (investmentData.createdDate ? dateOnlyToISO(investmentData.createdDate) : timestamp)
+    
+    console.log(`   Converted createdDate (submitted_at): ${createdDate}`)
+    console.log(`   Converted confirmedDate (confirmed_at): ${confirmedDate}`)
     
     // Calculate lockup end date
+    // IMPORTANT: Use addYears to prevent timezone shifting
     const lockupPeriod = investmentData.lockupPeriod || '1-year'
     const lockupYears = lockupPeriod === '3-year' ? 3 : 1
-    const lockupEndDate = new Date(confirmedDate)
-    lockupEndDate.setFullYear(lockupEndDate.getFullYear() + lockupYears)
+    const lockupEndDate = addYears(confirmedDate, lockupYears)
 
     // Calculate bonds (amount / 10)
     const bonds = Math.floor(amount / 10)
@@ -306,7 +351,7 @@ async function createInvestment(supabase, userId, investmentData, appTime) {
         status: investmentData.status || 'active',
         submitted_at: createdDate,
         confirmed_at: confirmedDate,
-        lockup_end_date: lockupEndDate.toISOString(),
+        lockup_end_date: lockupEndDate,
         created_at: createdDate,
         updated_at: confirmedDate
       })

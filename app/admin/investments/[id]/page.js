@@ -5,6 +5,24 @@ import AdminHeader from '../../../components/AdminHeader'
 import { calculateInvestmentValue } from '../../../../lib/investmentCalculations.js'
 import styles from './page.module.css'
 
+// Format date for display without timezone conversion
+const formatDateForDisplay = (dateString) => {
+  if (!dateString) return '-'
+  const datePart = dateString.split('T')[0]
+  const [year, month, day] = datePart.split('-')
+  return `${month}/${day}/${year}`
+}
+
+// Format datetime for display without timezone conversion
+const formatDateTimeForDisplay = (dateString) => {
+  if (!dateString) return '-'
+  const date = new Date(dateString)
+  const datePart = dateString.split('T')[0]
+  const [year, month, day] = datePart.split('-')
+  const time = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+  return `${month}/${day}/${year} ${time}`
+}
+
 export default function AdminInvestmentDetailsPage({ params }) {
   const router = useRouter()
   const { id: investmentId } = params
@@ -370,20 +388,20 @@ export default function AdminInvestmentDetailsPage({ params }) {
             <div className={styles.metricCard}>
               <div className={styles.metricLabel}>Created</div>
               <div className={styles.metricValue}>
-                {investment.createdAt ? new Date(investment.createdAt).toLocaleDateString() : '-'}
+                {formatDateForDisplay(investment.createdAt)}
               </div>
             </div>
             <div className={styles.metricCard}>
               <div className={styles.metricLabel}>Submitted</div>
               <div className={styles.metricValue}>
-                {investment.submittedAt ? new Date(investment.submittedAt).toLocaleDateString() : '-'}
+                {formatDateForDisplay(investment.submittedAt)}
               </div>
             </div>
             {investment.confirmedAt && (
               <div className={styles.metricCard}>
                 <div className={styles.metricLabel}>Confirmed</div>
                 <div className={styles.metricValue}>
-                  {new Date(investment.confirmedAt).toLocaleDateString()}
+                  {formatDateForDisplay(investment.confirmedAt)}
                 </div>
               </div>
             )}
@@ -522,25 +540,25 @@ export default function AdminInvestmentDetailsPage({ params }) {
                 <div>
                   <label>Created At</label>
                   <div className={styles.readOnly}>
-                    {investment.createdAt ? new Date(investment.createdAt).toLocaleString() : '-'}
+                    {formatDateTimeForDisplay(investment.createdAt)}
                   </div>
                 </div>
                 <div>
                   <label>Submitted At</label>
                   <div className={styles.readOnly}>
-                    {investment.submittedAt ? new Date(investment.submittedAt).toLocaleString() : '-'}
+                    {formatDateTimeForDisplay(investment.submittedAt)}
                   </div>
                 </div>
                 <div>
                   <label>Confirmed At</label>
                   <div className={styles.readOnly}>
-                    {investment.confirmedAt ? new Date(investment.confirmedAt).toLocaleString() : '-'}
+                    {formatDateTimeForDisplay(investment.confirmedAt)}
                   </div>
                 </div>
                 <div>
                   <label>Lockup End Date</label>
                   <div className={styles.readOnly}>
-                    {investment.lockupEndDate ? new Date(investment.lockupEndDate).toLocaleDateString() : '-'}
+                    {formatDateForDisplay(investment.lockupEndDate)}
                   </div>
                 </div>
               </div>
@@ -1028,7 +1046,7 @@ export default function AdminInvestmentDetailsPage({ params }) {
 function getEventMeta(eventType) {
   switch (eventType) {
     case 'investment':
-      return { icon: '🧾', title: 'Investment Transaction', color: '#0369a1' }
+      return { icon: '✅', title: 'Investment Confirmed', color: '#16a34a' }
     case 'distribution':
       return { icon: '💸', title: 'Distribution', color: '#5b21b6' }
     case 'monthly_distribution':

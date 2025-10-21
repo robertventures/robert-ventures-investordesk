@@ -29,7 +29,6 @@ export async function GET(request) {
         lastName: user.last_name,
         phoneNumber: user.phone_number,
         dob: user.dob,
-        address: user.address,
         isAdmin: user.is_admin || false,
         isVerified: user.is_verified || false,
         verifiedAt: user.verified_at,

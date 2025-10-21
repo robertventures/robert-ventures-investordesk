@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Header from '../components/Header'
 import styles from './page.module.css'
 import stepStyles from '../components/TabbedSignup.module.css'
@@ -11,6 +11,8 @@ import TabbedResidentialIdentity from '../components/TabbedResidentialIdentity'
 
 export default function InvestmentPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const context = searchParams?.get('context') // 'onboarding' or 'new'
   const [activeStep, setActiveStep] = useState(1)
   const [isStep1Completed, setIsStep1Completed] = useState(false)
   const [isStep2Completed, setIsStep2Completed] = useState(false)
@@ -293,22 +295,35 @@ export default function InvestmentPage() {
             >
               Continue
             </button>
+            {context !== 'onboarding' && (
+              <p className={styles.cancelText}>
+                <button
+                  type="button"
+                  className={styles.cancelLink}
+                  onClick={() => router.push('/dashboard')}
+                >
+                  Cancel and return to Dashboard
+                </button>
+              </p>
+            )}
           </div>
         )}
       </div>
 
-      <div className={styles.footer}>
-        <p className={styles.footerText}>
-          Want to explore first?{' '}
-          <button
-            type="button"
-            onClick={() => router.push('/dashboard')}
-            className={styles.linkButton}
-          >
-            Continue to Dashboard
-          </button>
-        </p>
-      </div>
+      {context === 'onboarding' && (
+        <div className={styles.footer}>
+          <p className={styles.footerText}>
+            Want to explore first?{' '}
+            <button
+              type="button"
+              onClick={() => router.push('/dashboard')}
+              className={styles.linkButton}
+            >
+              Continue to Dashboard
+            </button>
+          </p>
+        </div>
+      )}
     </main>
   )
 }

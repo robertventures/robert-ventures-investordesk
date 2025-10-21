@@ -43,3 +43,28 @@
   color: #1d4ed8;
 }
 
+.cancelText {
+  margin-top: 16px;
+  text-align: center;
+  font-size: 14px;
+  color: #6b7280;
+  font-family: 'Inter', sans-serif;
+}
+
+.cancelLink {
+  background: none;
+  border: none;
+  color: #6b7280;
+  font-size: 14px;
+  font-weight: 400;
+  cursor: pointer;
+  text-decoration: underline;
+  font-family: 'Inter', sans-serif;
+  transition: color 0.2s ease;
+  padding: 0;
+}
+
+.cancelLink:hover {
+  color: #374151;
+}
+

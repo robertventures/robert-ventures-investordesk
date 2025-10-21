@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import styles from './ImportInvestorsTab.module.css'
+import { isoToDateOnly } from '../../../lib/dateUtils.js'
 
 const IMPORT_STAGES = {
   ADD: 'add',
@@ -42,6 +43,20 @@ const formatZip = (value = '') => value.replace(/\D/g, '').slice(0, 5)
 
 // Names: Allow only letters, spaces, hyphens, apostrophes, and periods
 const formatName = (value = '') => value.replace(/[^a-zA-Z\s'\-\.]/g, '')
+
+// Format date for display without timezone conversion
+// Input: "2024-11-20" or "2024-11-20T00:00:00.000Z"
+// Output: "11/20/2024"
+const formatDateForDisplay = (dateString) => {
+  if (!dateString) return ''
+  
+  // Extract just the date part (YYYY-MM-DD)
+  const datePart = dateString.split('T')[0]
+  const [year, month, day] = datePart.split('-')
+  
+  // Return in MM/DD/YYYY format
+  return `${month}/${day}/${year}`
+}
 
 export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
   const [stage, setStage] = useState(IMPORT_STAGES.ADD)
@@ -175,9 +190,12 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
             amount: parseFloat(inv.amount) || 0,
             paymentFrequency: inv.paymentFrequency || 'compounding',
             lockupPeriod: inv.lockupPeriod || '1-year',
-            createdDate: inv.createdDate || new Date().toISOString(),
-            confirmedDate: inv.confirmedDate || inv.createdDate || new Date().toISOString(),
-            status: inv.status || 'active'
+            // Keep dates in YYYY-MM-DD format from date inputs (don't convert to ISO yet)
+            // The API will convert them using dateOnlyToISO to prevent timezone shifts
+            createdDate: inv.createdDate || null,
+            confirmedDate: inv.confirmedDate || inv.createdDate || null,
+            status: inv.status || 'active',
+            accountType: investor.accountType || 'individual'
           })).filter(inv => inv.amount > 0) // Only include investments with amount
         }
         
@@ -1112,12 +1130,12 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
                           </span>
                           {inv.createdDate && (
                             <span className={styles.investmentDate}>
-                              Created: {new Date(inv.createdDate).toLocaleDateString()}
+                              Created: {formatDateForDisplay(inv.createdDate)}
                             </span>
                           )}
                           {inv.confirmedDate && (
                             <span className={styles.investmentDate}>
-                              Confirmed: {new Date(inv.confirmedDate).toLocaleDateString()}
+                              Confirmed: {formatDateForDisplay(inv.confirmedDate)}
                             </span>
                           )}
                         </div>
@@ -1313,13 +1331,13 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
                             {inv.createdDate && (
                               <>
                                 <span>•</span>
-                                <span>Created: {new Date(inv.createdDate).toLocaleDateString()}</span>
+                                <span>Created: {formatDateForDisplay(inv.createdDate)}</span>
                               </>
                             )}
                             {inv.confirmedDate && (
                               <>
                                 <span>•</span>
-                                <span>Confirmed: {new Date(inv.confirmedDate).toLocaleDateString()}</span>
+                                <span>Confirmed: {formatDateForDisplay(inv.confirmedDate)}</span>
                               </>
                             )}
                           </div>

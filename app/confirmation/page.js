@@ -159,7 +159,7 @@ export default function ConfirmationPage() {
       console.log('✅ Account created and verified successfully, user auto-logged in, redirecting to investment page')
       
       // Redirect to investment page to continue the onboarding flow
-      router.push('/investment')
+      router.push('/investment?context=onboarding')
     } catch (err) {
       console.error('Verification error:', err)
       setError('An error occurred. Please try again.')

@@ -1,0 +1,160 @@
+# Robert Ventures InvestorDesk - Cursor Rules
+
+## Technology Stack
+
+### Backend
+- **CRITICAL**: Backend logic must be implemented in Python to mirror production
+- Use FastAPI for backend services
+- Backend should read from the same data store (Supabase)
+- Generate activity events including proration and compounding tied to admin-set app time
+- Keep backend logic separate from Next.js API routes when possible
+
+### Frontend
+- Next.js 14+ with App Router
+- React functional components with hooks
+- CSS Modules for styling (prefer `.module.css` files)
+- No inline styles unless absolutely necessary
+
+### Database
+- Supabase for database, authentication, and storage
+- Use the Supabase client from `lib/supabaseClient.js`
+- Always use environment variables for sensitive keys
+
+## Code Style & Conventions
+
+### JavaScript/React
+- Use ES6+ modern JavaScript syntax
+- Functional components over class components
+- Descriptive variable and function names
+- Keep components small and focused (single responsibility)
+- Use async/await over promises for better readability
+
+### File Organization
+- Components go in `app/components/` with corresponding `.module.css` files
+- API routes in `app/api/` following Next.js App Router conventions
+- Utility functions in `lib/` directory
+- Keep admin-specific components in `app/admin/components/`
+
+### Naming Conventions
+- Components: PascalCase (e.g., `DashboardHeader.js`)
+- CSS Modules: PascalCase with `.module.css` extension
+- Utility functions: camelCase
+- API routes: lowercase with hyphens (e.g., `reset-password`)
+
+## Security Practices
+
+### Authentication & Authorization
+- Always validate user authentication before processing sensitive operations
+- Use the auth middleware from `lib/authMiddleware.js`
+- Never expose sensitive keys or tokens in client-side code
+- Use `NEXT_PUBLIC_` prefix only for truly public environment variables
+
+### Data Handling
+- Validate all user inputs using `lib/validation.js`
+- Use encryption utilities from `lib/encryption.js` for sensitive data
+- Implement rate limiting for public-facing endpoints using `lib/rateLimit.js`
+- Log important actions using the audit log system (`lib/auditLog.js`)
+
+## Environment Configuration
+
+### Development
+- Local development runs on port **3000** (not 3001)
+- Use `.env.local` for environment variables
+- `NEXT_PUBLIC_APP_URL` and `NEXT_PUBLIC_BASE_URL` should point to `http://localhost:3000`
+
+### Terminal & Server Management
+- **ALWAYS check if the development server is already running** on port 3000 before starting a new one
+- Use `lsof -i :3000` to check if port 3000 is in use
+- Do NOT create multiple terminals or server instances unnecessarily
+- If the server is already running, inform the user rather than starting a duplicate
+- Only restart the server if explicitly requested or if configuration changes require it
+
+### Environment Variables
+- Never commit `.env.local` to version control
+- Document new environment variables in README or relevant documentation
+- Use Supabase service role key only in server-side code
+
+## Testing & Quality
+
+### Before Committing
+- Check for linter errors and fix them
+- Test functionality in the browser
+- Verify API endpoints return expected responses
+- Ensure no console errors in browser developer tools
+
+### Code Review Checklist
+- Are sensitive operations properly authenticated?
+- Are inputs validated?
+- Are errors handled gracefully?
+- Is the code readable and maintainable?
+- Are environment variables used correctly?
+
+## Documentation
+
+### Single Source of Truth
+- **PRIMARY DOCUMENTATION**: `docs/BACKEND-GUIDE.md` is the authoritative source for all technical documentation
+- **DO NOT** create multiple documentation files (README, MD files at root, etc.) that duplicate information
+- If you need to document something, update `docs/BACKEND-GUIDE.md` instead of creating a new file
+- Temporary test scripts should be deleted after use - do not commit them
+
+### Code Comments
+- Add comments for complex business logic
+- Document utility functions with JSDoc-style comments
+- Explain "why" not "what" in comments
+
+### Changelog Policy
+- **ONLY update CHANGELOG.md when a feature or fix is complete AND committed**
+- Do not update CHANGELOG.md during development or debugging
+- Each changelog entry should be concise and describe the user-facing impact
+- Include the date and a brief description of what changed
+
+## Time Machine Feature
+- The app has a time manipulation system (`lib/appTime.js`)
+- Activity events, proration, and compounding should respect the admin-set app time
+- When working with dates, use the app time system, not system time
+
+## Date Handling (CRITICAL)
+- **NEVER modify investment dates from user input** - dates entered by admin must be stored exactly as-is
+- Use `dateOnlyToISO()` from `lib/dateUtils.js` to prevent timezone shifting
+  - Example: User enters "2024-11-20" → Store as "2024-11-20T00:00:00.000Z" (NOT shifted by timezone)
+- **Accrual starts the DAY AFTER confirmation**, not on confirmation date
+  - Example: Investment confirmed Nov 20 → Accrual begins Nov 21
+- For date arithmetic (adding years, days), use functions from `lib/dateUtils.js`
+- See `docs/BACKEND-GUIDE.md` section "Date Handling and Accrual Rules" for detailed examples and calculations
+
+## Investment Calculations
+- Use functions from `lib/investmentCalculations.js`
+- Ensure accuracy in financial calculations
+- Consider edge cases (leap years, month boundaries, etc.)
+
+## Error Handling
+- Always return appropriate HTTP status codes in API routes
+- Provide user-friendly error messages on the frontend
+- Log errors for debugging but don't expose sensitive details to users
+- Use try-catch blocks for async operations
+
+## Performance
+- Minimize API calls where possible
+- Use caching appropriately (`lib/cache.js`)
+- Optimize React re-renders with proper hooks usage (useMemo, useCallback)
+- Lazy load components when appropriate
+
+## Git Practices
+- Write clear, descriptive commit messages
+- Keep commits focused on a single concern
+- Don't commit sensitive data or credentials
+- Test changes before committing
+
+## General Principles
+- **Readability over cleverness**: Write code that others can understand
+- **Security first**: Always consider security implications
+- **User experience matters**: Make the UI intuitive and responsive
+- **Data integrity**: Financial data must be accurate and auditable
+- **Fail gracefully**: Handle errors without breaking the entire application
+
+## Questions or Clarifications
+- When in doubt, ask the user for clarification
+- Don't make assumptions about financial calculations
+- Verify requirements for admin vs. user permissions
+- Confirm before making database schema changes
+

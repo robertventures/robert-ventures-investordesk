@@ -215,6 +215,79 @@ def validate_ira_restrictions(account_type, payment_frequency, payment_method):
     return True
 ```
 
+### Date Handling and Accrual Rules
+
+**CRITICAL:** Date inputs from admin forms must NOT be shifted by timezone conversions.
+
+#### Key Rules
+1. **Store dates exactly as entered** - If admin enters "2024-11-20", store it as "2024-11-20T00:00:00.000Z" (UTC midnight)
+2. **Never modify investment dates** - `created_at` and `confirmed_at` should reflect the exact dates entered
+3. **Accrual starts NEXT day** - If investment confirmed on Nov 20, accrual begins Nov 21
+
+```python
+from datetime import datetime, timedelta
+
+def date_only_to_iso(date_string):
+    """
+    Convert date-only string (YYYY-MM-DD) to ISO string without timezone shift.
+    
+    Args:
+        date_string: "2024-11-20" (from HTML date input)
+    
+    Returns:
+        "2024-11-20T00:00:00.000Z" (UTC midnight, no shift)
+    """
+    if 'T' in date_string:
+        date_string = date_string.split('T')[0]
+    
+    year, month, day = map(int, date_string.split('-'))
+    dt = datetime(year, month, day, 0, 0, 0)
+    return dt.isoformat() + 'Z'
+
+def calculate_accrual_start(confirmed_at):
+    """
+    Calculate when interest accrual begins.
+    
+    Rule: Accrual starts the DAY AFTER confirmation
+    Example: Confirmed Nov 20 → Accrual starts Nov 21
+    
+    Args:
+        confirmed_at: ISO string of confirmation date
+    
+    Returns:
+        ISO string of accrual start date (confirmed_at + 1 day)
+    """
+    confirmed_date = datetime.fromisoformat(confirmed_at.replace('Z', '+00:00'))
+    accrual_start = confirmed_date + timedelta(days=1)
+    return accrual_start.isoformat() + 'Z'
+
+# Example usage:
+# User enters: "2024-11-20" in Investment Confirmed Date field
+# Store as: date_only_to_iso("2024-11-20") → "2024-11-20T00:00:00.000Z"
+# Accrual starts: calculate_accrual_start("2024-11-20T00:00:00.000Z") → "2024-11-21T00:00:00.000Z"
+```
+
+#### Common Timezone Pitfalls to Avoid
+
+❌ **WRONG:**
+```python
+# This causes timezone shift!
+confirmed_date = datetime.strptime("2024-11-20", "%Y-%m-%d")
+# In EST timezone, this becomes 2024-11-19T19:00:00.000Z
+```
+
+✅ **CORRECT:**
+```python
+# This preserves the exact date
+confirmed_date = datetime(2024, 11, 20, 0, 0, 0)  # UTC midnight
+# Results in 2024-11-20T00:00:00.000Z
+```
+
+#### Reference Implementation
+- JavaScript: `/lib/dateUtils.js`
+- Import-Investors API: `/app/api/admin/import-investors/route.js`
+- Transaction Generation: `/app/api/migrate-transactions/route.js` (lines 456, 580)
+
 ---
 
 ## Authentication & Security

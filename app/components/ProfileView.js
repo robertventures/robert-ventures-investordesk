@@ -1,8 +1,12 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import styles from './ProfileView.module.css'
+import BankConnectionModal from './BankConnectionModal'
 
 export default function ProfileView() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const MIN_DOB = '1900-01-01'
   const maxDob = useMemo(() => {
     const now = new Date()
@@ -73,7 +77,9 @@ export default function ProfileView() {
     const adultCutoff = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate())
     return date <= adultCutoff
   }
+
   const [mounted, setMounted] = useState(false)
+  const [activeTab, setActiveTab] = useState('investor-info')
   const [userData, setUserData] = useState(null)
   const [formData, setFormData] = useState(null)
   const [isSaving, setIsSaving] = useState(false)
@@ -85,105 +91,126 @@ export default function ProfileView() {
   const [showSSN, setShowSSN] = useState(false)
   const [showJointSSN, setShowJointSSN] = useState(false)
   const [showRepSSN, setShowRepSSN] = useState(false)
+  const [showBankModal, setShowBankModal] = useState(false)
+  const [isRemovingBank, setIsRemovingBank] = useState(null)
+  const [showAddressModal, setShowAddressModal] = useState(false)
+  const [isRemovingAddress, setIsRemovingAddress] = useState(null)
+  const [addressForm, setAddressForm] = useState({
+    street1: '',
+    street2: '',
+    city: '',
+    state: '',
+    zip: '',
+    country: 'United States',
+    label: 'Home'
+  })
 
   useEffect(() => {
     setMounted(true)
-    const loadUser = async () => {
-      const userId = localStorage.getItem('currentUserId')
-      if (!userId) return
-
-      try {
-        const res = await fetch(`/api/users/${userId}?includeSSN=true`)
-        const data = await res.json()
-        if (data.success && data.user) {
-          setUserData(data.user)
-          setFormData({
-            firstName: data.user.firstName || '',
-            lastName: data.user.lastName || '',
-            email: data.user.email || '',
-            phoneNumber: formatPhone(data.user.phoneNumber || ''),
-            dob: data.user.dob || '',
-            ssn: data.user.ssn || '',
-            jointHolder: data.user.jointHolder ? {
-              firstName: data.user.jointHolder.firstName || '',
-              lastName: data.user.jointHolder.lastName || '',
-              email: data.user.jointHolder.email || '',
-              phone: formatPhone(data.user.jointHolder.phone || ''),
-              dob: data.user.jointHolder.dob || '',
-              ssn: data.user.jointHolder.ssn || '',
-              address: {
-                street1: data.user.jointHolder.address?.street1 || '',
-                street2: data.user.jointHolder.address?.street2 || '',
-                city: data.user.jointHolder.address?.city || '',
-                state: data.user.jointHolder.address?.state || '',
-                zip: data.user.jointHolder.address?.zip || '',
-                country: data.user.jointHolder.address?.country || 'United States'
-              }
-            } : {
-              firstName: '',
-              lastName: '',
-              email: '',
-              phone: '',
-              dob: '',
-              ssn: '',
-              address: {
-                street1: '',
-                street2: '',
-                city: '',
-                state: '',
-                zip: '',
-                country: 'United States'
-              }
-            },
-            jointHoldingType: data.user.jointHoldingType || '',
-            address: {
-              street1: data.user.address?.street1 || '',
-              street2: data.user.address?.street2 || '',
-              city: data.user.address?.city || '',
-              state: data.user.address?.state || '',
-              zip: data.user.address?.zip || '',
-              country: data.user.address?.country || 'United States'
-            },
-            entity: {
-              name: data.user.entity?.name || '',
-              registrationDate: data.user.entity?.registrationDate || '',
-              taxId: data.user.entity?.taxId || '',
-              address: {
-                street1: data.user.entity?.address?.street1 || '',
-                street2: data.user.entity?.address?.street2 || '',
-                city: data.user.entity?.address?.city || '',
-                state: data.user.entity?.address?.state || '',
-                zip: data.user.entity?.address?.zip || '',
-                country: data.user.entity?.address?.country || 'United States'
-              }
-            },
-            trustedContact: {
-              firstName: data.user.trustedContact?.firstName || '',
-              lastName: data.user.trustedContact?.lastName || '',
-              email: data.user.trustedContact?.email || '',
-              phone: formatPhone(data.user.trustedContact?.phone || ''),
-              relationship: data.user.trustedContact?.relationship || ''
-            },
-            authorizedRepresentative: {
-              dob: data.user.authorizedRepresentative?.dob || '',
-              ssn: data.user.authorizedRepresentative?.ssn || '',
-              address: {
-                street1: data.user.authorizedRepresentative?.address?.street1 || '',
-                street2: data.user.authorizedRepresentative?.address?.street2 || '',
-                city: data.user.authorizedRepresentative?.address?.city || '',
-                state: data.user.authorizedRepresentative?.address?.state || '',
-                zip: data.user.authorizedRepresentative?.address?.zip || '',
-                country: data.user.authorizedRepresentative?.address?.country || 'United States'
-              }
-            }
-          })
-        }
-      } catch (e) {
-        console.error('Failed to load user data', e)
-      }
-    }
     loadUser()
   }, [])
+
+  // Handle tab from URL params
+  useEffect(() => {
+    const tab = searchParams?.get('tab')
+    if (tab && ['investor-info', 'trusted-contact', 'addresses', 'banking', 'security'].includes(tab)) {
+      setActiveTab(tab)
+    }
+  }, [searchParams])
+
+  const loadUser = async () => {
+    const userId = localStorage.getItem('currentUserId')
+    if (!userId) return
+
+    try {
+      const res = await fetch(`/api/users/${userId}?includeSSN=true`)
+      const data = await res.json()
+      if (data.success && data.user) {
+        setUserData(data.user)
+        setFormData({
+          firstName: data.user.firstName || '',
+          lastName: data.user.lastName || '',
+          email: data.user.email || '',
+          phoneNumber: formatPhone(data.user.phoneNumber || ''),
+          dob: data.user.dob || '',
+          ssn: data.user.ssn || '',
+          jointHolder: data.user.jointHolder ? {
+            firstName: data.user.jointHolder.firstName || '',
+            lastName: data.user.jointHolder.lastName || '',
+            email: data.user.jointHolder.email || '',
+            phone: formatPhone(data.user.jointHolder.phone || ''),
+            dob: data.user.jointHolder.dob || '',
+            ssn: data.user.jointHolder.ssn || '',
+            address: {
+              street1: data.user.jointHolder.address?.street1 || '',
+              street2: data.user.jointHolder.address?.street2 || '',
+              city: data.user.jointHolder.address?.city || '',
+              state: data.user.jointHolder.address?.state || '',
+              zip: data.user.jointHolder.address?.zip || '',
+              country: data.user.jointHolder.address?.country || 'United States'
+            }
+          } : {
+            firstName: '',
+            lastName: '',
+            email: '',
+            phone: '',
+            dob: '',
+            ssn: '',
+            address: {
+              street1: '',
+              street2: '',
+              city: '',
+              state: '',
+              zip: '',
+              country: 'United States'
+            }
+          },
+          jointHoldingType: data.user.jointHoldingType || '',
+          entity: {
+            name: data.user.entity?.name || '',
+            registrationDate: data.user.entity?.registrationDate || '',
+            taxId: data.user.entity?.taxId || '',
+            address: {
+              street1: data.user.entity?.address?.street1 || '',
+              street2: data.user.entity?.address?.street2 || '',
+              city: data.user.entity?.address?.city || '',
+              state: data.user.entity?.address?.state || '',
+              zip: data.user.entity?.address?.zip || '',
+              country: data.user.entity?.address?.country || 'United States'
+            }
+          },
+          trustedContact: {
+            firstName: data.user.trustedContact?.firstName || '',
+            lastName: data.user.trustedContact?.lastName || '',
+            email: data.user.trustedContact?.email || '',
+            phone: formatPhone(data.user.trustedContact?.phone || ''),
+            relationship: data.user.trustedContact?.relationship || ''
+          },
+          authorizedRepresentative: {
+            dob: data.user.authorizedRepresentative?.dob || '',
+            ssn: data.user.authorizedRepresentative?.ssn || '',
+            address: {
+              street1: data.user.authorizedRepresentative?.address?.street1 || '',
+              street2: data.user.authorizedRepresentative?.address?.street2 || '',
+              city: data.user.authorizedRepresentative?.address?.city || '',
+              state: data.user.authorizedRepresentative?.address?.state || '',
+              zip: data.user.authorizedRepresentative?.address?.zip || '',
+              country: data.user.authorizedRepresentative?.address?.country || 'United States'
+            }
+          }
+        })
+      }
+    } catch (e) {
+      console.error('Failed to load user data', e)
+    }
+  }
+
+  const handleTabChange = (tab) => {
+    setActiveTab(tab)
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('tab', tab)
+    router.replace(`/dashboard?section=profile&${params.toString()}`, { scroll: false })
+  }
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -199,18 +226,6 @@ export default function ProfileView() {
     setSaveSuccess(false)
   }
 
-  const handleAddressChange = (e) => {
-    const { name, value } = e.target
-    let formattedValue = value
-    if (name === 'city') {
-      formattedValue = formatCity(value)
-    } else if (name === 'street1' || name === 'street2') {
-      formattedValue = formatStreet(value)
-    }
-    setFormData(prev => ({ ...prev, address: { ...prev.address, [name]: formattedValue } }))
-    if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }))
-    setSaveSuccess(false)
-  }
 
   const handleEntityChange = (e) => {
     const { name, value } = e.target
@@ -364,13 +379,6 @@ export default function ProfileView() {
       if (normalized.length !== 10) newErrors.phoneNumber = 'Enter a valid US 10-digit phone'
     }
     if (formData.dob && !isAdultDob(formData.dob)) newErrors.dob = `Enter a valid date (YYYY-MM-DD). Min ${MIN_DOB}. Must be 18+.`
-    if (formData.address) {
-      if (!formData.address.street1.trim()) newErrors.street1 = 'Required'
-      if (!formData.address.city.trim()) newErrors.city = 'Required'
-      else if (/[0-9]/.test(formData.address.city)) newErrors.city = 'No numbers allowed'
-      if (!formData.address.state) newErrors.state = 'Required'
-      if (!formData.address.zip.trim()) newErrors.zip = 'Required'
-    }
 
     const hasPendingOrActiveEntity = Array.isArray(userData?.investments) && 
       userData.investments.some(inv => inv.accountType === 'entity' && (inv.status === 'pending' || inv.status === 'active'))
@@ -457,16 +465,7 @@ export default function ProfileView() {
           phoneNumber: normalizePhoneForDB(formData.phoneNumber),
           dob: formData.dob,
           ssn: formData.ssn,
-          // We keep email read-only in UI but send it anyway for consistency
           email: formData.email,
-          address: {
-            street1: formData.address.street1,
-            street2: formData.address.street2,
-            city: formData.address.city,
-            state: formData.address.state,
-            zip: formData.address.zip,
-            country: formData.address.country
-          },
           ...(Array.isArray(userData?.investments) && userData.investments.some(inv => inv.accountType === 'joint') || !!userData?.jointHolder ? {
             jointHoldingType: formData.jointHoldingType,
             jointHolder: {
@@ -536,48 +535,169 @@ export default function ProfileView() {
     }
   }
 
-  const handleRequestDeletion = async () => {
-    setIsRequestingDeletion(true)
+  const handleBankAccountAdded = async (bankAccount) => {
     try {
       const userId = localStorage.getItem('currentUserId')
-      const updateData = {
-        deletionRequestedAt: new Date().toISOString(),
-        accountStatus: 'deletion_requested'
-      }
-
-      if (deletionReason.trim()) {
-        updateData.deletionReason = deletionReason.trim()
-      }
-
       const res = await fetch(`/api/users/${userId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updateData)
+        body: JSON.stringify({
+          _action: 'addBankAccount',
+          bankAccount
+        })
       })
-
       const data = await res.json()
       if (data.success) {
-        setUserData(data.user)
-        setShowDeleteModal(false)
-        setDeletionReason('')
-        alert('Account deletion request submitted successfully. Our team will review your request.')
+        await loadUser()
       } else {
-        alert(data.error || 'Failed to submit deletion request')
+        alert(data.error || 'Failed to add bank account')
       }
     } catch (e) {
-      console.error('Failed to request deletion', e)
+      console.error('Failed to add bank account', e)
       alert('An error occurred. Please try again.')
-    } finally {
-      setIsRequestingDeletion(false)
     }
   }
 
-  if (!userData || !formData) {
+  const handleSetDefaultBank = async (bankId) => {
+    try {
+      const userId = localStorage.getItem('currentUserId')
+      const res = await fetch(`/api/users/${userId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          _action: 'setDefaultBank',
+          bankAccountId: bankId
+        })
+      })
+      const data = await res.json()
+      if (data.success) {
+        await loadUser()
+      } else {
+        alert(data.error || 'Failed to set default bank')
+      }
+    } catch (e) {
+      console.error('Failed to set default bank', e)
+      alert('An error occurred. Please try again.')
+    }
+  }
+
+  const handleRemoveBank = async (bankId, bankName) => {
+    if (!confirm(`Are you sure you want to remove ${bankName}?`)) return
+    
+    setIsRemovingBank(bankId)
+    try {
+      const userId = localStorage.getItem('currentUserId')
+      const res = await fetch(`/api/users/${userId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          _action: 'removeBankAccount',
+          bankAccountId: bankId
+        })
+      })
+      const data = await res.json()
+      if (data.success) {
+        await loadUser()
+      } else {
+        alert(data.error || 'Failed to remove bank account')
+      }
+    } catch (e) {
+      console.error('Failed to remove bank account', e)
+      alert('An error occurred. Please try again.')
+    } finally {
+      setIsRemovingBank(null)
+    }
+  }
+
+  const handleAddressAdded = async (address) => {
+    try {
+      const userId = localStorage.getItem('currentUserId')
+      const res = await fetch(`/api/users/${userId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          _action: 'addAddress',
+          address
+        })
+      })
+      const data = await res.json()
+      if (data.success) {
+        await loadUser()
+        setShowAddressModal(false)
+        setAddressForm({
+          street1: '',
+          street2: '',
+          city: '',
+          state: '',
+          zip: '',
+          country: 'United States',
+          label: 'Home'
+        })
+      } else {
+        alert(data.error || 'Failed to add address')
+      }
+    } catch (e) {
+      console.error('Failed to add address', e)
+      alert('An error occurred. Please try again.')
+    }
+  }
+
+  const handleSetDefaultAddress = async (addressId) => {
+    try {
+      const userId = localStorage.getItem('currentUserId')
+      const res = await fetch(`/api/users/${userId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          _action: 'setDefaultAddress',
+          addressId
+        })
+      })
+      const data = await res.json()
+      if (data.success) {
+        await loadUser()
+      } else {
+        alert(data.error || 'Failed to set primary address')
+      }
+    } catch (e) {
+      console.error('Failed to set primary address', e)
+      alert('An error occurred. Please try again.')
+    }
+  }
+
+  const handleRemoveAddress = async (addressId, addressLabel) => {
+    if (!confirm(`Are you sure you want to remove ${addressLabel}?`)) return
+    
+    setIsRemovingAddress(addressId)
+    try {
+      const userId = localStorage.getItem('currentUserId')
+      const res = await fetch(`/api/users/${userId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          _action: 'removeAddress',
+          addressId
+        })
+      })
+      const data = await res.json()
+      if (data.success) {
+        await loadUser()
+      } else {
+        alert(data.error || 'Failed to remove address')
+      }
+    } catch (e) {
+      console.error('Failed to remove address', e)
+      alert('An error occurred. Please try again.')
+    } finally {
+      setIsRemovingAddress(null)
+    }
+  }
+
+  if (!userData || !formData || !mounted) {
     return <div className={styles.loading}>Loading profile...</div>
   }
 
   // Only show account type sections if the account is locked to that type
-  // (i.e., has pending/active investments of that type or accountType is set)
   const hasPendingOrActiveJoint = Array.isArray(userData?.investments) && 
     userData.investments.some(inv => inv.accountType === 'joint' && (inv.status === 'pending' || inv.status === 'active'))
   const showJointSection = userData?.accountType === 'joint' || hasPendingOrActiveJoint
@@ -586,27 +706,17 @@ export default function ProfileView() {
     userData.investments.some(inv => inv.accountType === 'entity' && (inv.status === 'pending' || inv.status === 'active'))
   const showEntitySection = userData?.accountType === 'entity' || hasPendingOrActiveEntity
 
-  // Banking derived values (read-only display)
-  const availableBanks = Array.isArray(userData?.bankAccounts) ? userData.bankAccounts : []
-  const defaultBankId = userData?.banking?.defaultBankAccountId || null
-  const defaultBank = (defaultBankId ? availableBanks.find(b => b.id === defaultBankId) : null) || availableBanks[0] || null
-  const fundingMethodLabel = userData?.banking?.fundingMethod === 'bank-transfer'
-    ? 'Bank Transfer'
-    : userData?.banking?.fundingMethod === 'wire-transfer'
-      ? 'Wire Transfer'
-      : 'Not set'
-  const payoutMethodLabel = userData?.banking?.payoutMethod === 'bank-account'
-    ? 'Bank Account'
-    : userData?.banking?.payoutMethod === 'check'
-      ? 'Check'
-      : userData?.banking?.payoutMethod === 'compounding'
-        ? 'Compounding'
-        : 'Not set'
+  // Check if user has any investment (pending, active, or withdrawn) - if so, lock personal info
+  const hasInvestments = Array.isArray(userData?.investments) && 
+    userData.investments.some(inv => ['pending', 'active', 'withdrawn'].includes(inv.status))
 
-  // Prevent hydration mismatch
-  if (!mounted || !userData) {
-    return <div className={styles.profileContainer}>Loading profile...</div>
-  }
+  const tabs = [
+    { id: 'investor-info', label: 'Investor Info' },
+    { id: 'trusted-contact', label: 'Trusted Contact' },
+    { id: 'addresses', label: 'Addresses' },
+    { id: 'banking', label: 'Banking Information' },
+    { id: 'security', label: 'Security' }
+  ]
 
   return (
     <div className={styles.profileContainer}>
@@ -615,45 +725,245 @@ export default function ProfileView() {
         <p className={styles.subtitle}>Manage your account details and preferences</p>
       </div>
 
-      <div className={styles.content}>
+      {/* Tab Navigation */}
+      <div className={styles.tabNavigation}>
+        {tabs.map(tab => (
+          <button
+            key={tab.id}
+            className={`${styles.tabButton} ${activeTab === tab.id ? styles.tabButtonActive : ''}`}
+            onClick={() => handleTabChange(tab.id)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab Content */}
+      <div className={styles.tabContent}>
+        {activeTab === 'investor-info' && (
+          <InvestorInfoTab
+            formData={formData}
+            userData={userData}
+            errors={errors}
+            showJointSection={showJointSection}
+            showEntitySection={showEntitySection}
+            showSSN={showSSN}
+            showJointSSN={showJointSSN}
+            showRepSSN={showRepSSN}
+            setShowSSN={setShowSSN}
+            setShowJointSSN={setShowJointSSN}
+            setShowRepSSN={setShowRepSSN}
+            maskSSN={maskSSN}
+            handleChange={handleChange}
+            handleJointHolderChange={handleJointHolderChange}
+            handleJointAddressChange={handleJointAddressChange}
+            handleEntityChange={handleEntityChange}
+            handleEntityAddressChange={handleEntityAddressChange}
+            handleAuthorizedRepChange={handleAuthorizedRepChange}
+            handleAuthorizedRepAddressChange={handleAuthorizedRepAddressChange}
+            handleSave={handleSave}
+            isSaving={isSaving}
+            saveSuccess={saveSuccess}
+            MIN_DOB={MIN_DOB}
+            maxDob={maxDob}
+            maxToday={maxToday}
+            hasInvestments={hasInvestments}
+          />
+        )}
+
+        {activeTab === 'trusted-contact' && (
+          <TrustedContactTab
+            formData={formData}
+            errors={errors}
+            handleTrustedContactChange={handleTrustedContactChange}
+            handleSave={handleSave}
+            isSaving={isSaving}
+            saveSuccess={saveSuccess}
+          />
+        )}
+
+        {activeTab === 'addresses' && (
+          <AddressesTab
+            userData={userData}
+            showAddressModal={showAddressModal}
+            setShowAddressModal={setShowAddressModal}
+            handleAddressAdded={handleAddressAdded}
+            handleSetDefaultAddress={handleSetDefaultAddress}
+            handleRemoveAddress={handleRemoveAddress}
+            isRemovingAddress={isRemovingAddress}
+            addressForm={addressForm}
+            setAddressForm={setAddressForm}
+            formatCity={formatCity}
+            formatStreet={formatStreet}
+          />
+        )}
+
+        {activeTab === 'banking' && (
+          <BankingTab
+            userData={userData}
+            showBankModal={showBankModal}
+            setShowBankModal={setShowBankModal}
+            handleBankAccountAdded={handleBankAccountAdded}
+            handleSetDefaultBank={handleSetDefaultBank}
+            handleRemoveBank={handleRemoveBank}
+            isRemovingBank={isRemovingBank}
+          />
+        )}
+
+        {activeTab === 'security' && (
+          <SecurityTab
+            userData={userData}
+            passwordForm={passwordForm}
+            errors={errors}
+            handlePasswordChange={handlePasswordChange}
+            handleChangePassword={handleChangePassword}
+            isChangingPassword={isChangingPassword}
+            passwordChangeSuccess={passwordChangeSuccess}
+          />
+        )}
+      </div>
+
+      <BankConnectionModal
+        isOpen={showBankModal}
+        onClose={() => setShowBankModal(false)}
+        onAccountSelected={handleBankAccountAdded}
+      />
+    </div>
+  )
+}
+
+// Individual Tab Components
+function InvestorInfoTab({ formData, userData, errors, showJointSection, showEntitySection, showSSN, showJointSSN, showRepSSN, setShowSSN, setShowJointSSN, setShowRepSSN, maskSSN, handleChange, handleJointHolderChange, handleJointAddressChange, handleEntityChange, handleEntityAddressChange, handleAuthorizedRepChange, handleAuthorizedRepAddressChange, handleSave, isSaving, saveSuccess, MIN_DOB, maxDob, maxToday, hasInvestments }) {
+  return (
+    <div className={styles.content}>
+      <section className={styles.section}>
+        <h2 className={styles.sectionTitle}>Primary Holder</h2>
+        {hasInvestments && (
+          <p style={{ fontSize: '14px', color: '#d97706', marginBottom: '16px', fontWeight: '500' }}>
+            ⚠️ Your name, date of birth, and SSN are locked because you have active investments.
+          </p>
+        )}
+
+        <div className={styles.subCard}>
+          <h3 className={styles.subSectionTitle}>Personal Information</h3>
+          <div className={styles.compactGrid}>
+            <div className={styles.field}>
+              <label className={styles.label}>First Name</label>
+              <input className={`${styles.input} ${errors.firstName ? styles.inputError : ''}`} name="firstName" value={formData.firstName} onChange={handleChange} disabled={hasInvestments} />
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>Last Name</label>
+              <input className={`${styles.input} ${errors.lastName ? styles.inputError : ''}`} name="lastName" value={formData.lastName} onChange={handleChange} disabled={hasInvestments} />
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>Date of Birth</label>
+              <input className={`${styles.input} ${errors.dob ? styles.inputError : ''}`} type="date" name="dob" value={formData.dob} onChange={handleChange} min={MIN_DOB} max={maxDob} disabled={hasInvestments} />
+              {errors.dob && <span className={styles.errorText}>{errors.dob}</span>}
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>Social Security Number</label>
+              <div className={styles.inputWrapper}>
+                <input 
+                  className={`${styles.input} ${styles.inputWithToggle}`}
+                  type="text"
+                  name="ssn" 
+                  value={showSSN ? formData.ssn : maskSSN(formData.ssn)} 
+                  onChange={handleChange} 
+                  placeholder="123-45-6789"
+                  readOnly={!showSSN || hasInvestments}
+                  disabled={hasInvestments}
+                />
+                <button
+                  type="button"
+                  className={styles.toggleButton}
+                  onClick={() => setShowSSN(!showSSN)}
+                  aria-label={showSSN ? 'Hide SSN' : 'Show SSN'}
+                  disabled={hasInvestments}
+                >
+                  {showSSN ? 'Hide' : 'Show'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className={styles.subCard}>
+          <h3 className={styles.subSectionTitle}>Contact Information</h3>
+          <div className={styles.compactGrid}>
+            <div className={styles.field}>
+              <label className={styles.label}>Email</label>
+              <input className={`${styles.input} ${errors.email ? styles.inputError : ''}`} name="email" value={formData.email} disabled />
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>Phone</label>
+              <input className={`${styles.input} ${errors.phoneNumber ? styles.inputError : ''}`} type="tel" name="phoneNumber" value={formData.phoneNumber} onChange={handleChange} placeholder="(555) 555-5555" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {showJointSection && (
         <section className={styles.section}>
-          <h2 className={styles.sectionTitle}>Primary Holder</h2>
+          <h2 className={styles.sectionTitle}>Joint Holder</h2>
 
           <div className={styles.subCard}>
-            <h3 className={styles.subSectionTitle}>Personal Information</h3>
+            <h3 className={styles.subSectionTitle}>Joint Details</h3>
             <div className={styles.compactGrid}>
+              <div className={`${styles.field} ${styles.fullRow}`}>
+                <label className={styles.label}>Joint Holder Relationship</label>
+                <select
+                  className={`${styles.input} ${errors.jointHoldingType ? styles.inputError : ''}`}
+                  name="jointHoldingType"
+                  value={formData.jointHoldingType || ''}
+                  onChange={handleChange}
+                >
+                  <option value="">Select relationship to primary holder</option>
+                  <option value="spouse">Spouse</option>
+                  <option value="sibling">Sibling</option>
+                  <option value="domestic_partner">Domestic Partner</option>
+                  <option value="business_partner">Business Partner</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
               <div className={styles.field}>
                 <label className={styles.label}>First Name</label>
-                <input className={`${styles.input} ${errors.firstName ? styles.inputError : ''}`} name="firstName" value={formData.firstName} onChange={handleChange} />
+                <input className={`${styles.input} ${errors.jointFirstName ? styles.inputError : ''}`} name="firstName" value={formData.jointHolder?.firstName || ''} onChange={handleJointHolderChange} />
               </div>
               <div className={styles.field}>
                 <label className={styles.label}>Last Name</label>
-                <input className={`${styles.input} ${errors.lastName ? styles.inputError : ''}`} name="lastName" value={formData.lastName} onChange={handleChange} />
+                <input className={`${styles.input} ${errors.jointLastName ? styles.inputError : ''}`} name="lastName" value={formData.jointHolder?.lastName || ''} onChange={handleJointHolderChange} />
+              </div>
+              <div className={styles.field}>
+                <label className={styles.label}>Email</label>
+                <input className={`${styles.input} ${errors.jointEmail ? styles.inputError : ''}`} name="email" value={formData.jointHolder?.email || ''} onChange={handleJointHolderChange} />
+              </div>
+              <div className={styles.field}>
+                <label className={styles.label}>Phone</label>
+                <input className={`${styles.input} ${errors.jointPhone ? styles.inputError : ''}`} type="tel" name="phone" value={formData.jointHolder?.phone || ''} onChange={handleJointHolderChange} placeholder="(555) 555-5555" />
               </div>
               <div className={styles.field}>
                 <label className={styles.label}>Date of Birth</label>
-                <input className={`${styles.input} ${errors.dob ? styles.inputError : ''}`} type="date" name="dob" value={formData.dob} onChange={handleChange} min={MIN_DOB} max={maxDob} />
-                {errors.dob && <span className={styles.errorText}>{errors.dob}</span>}
+                <input className={`${styles.input} ${errors.jointDob ? styles.inputError : ''}`} type="date" name="dob" value={formData.jointHolder?.dob || ''} onChange={handleJointHolderChange} min={MIN_DOB} max={maxDob} />
+                {errors.jointDob && <span className={styles.errorText}>{errors.jointDob}</span>}
               </div>
               <div className={styles.field}>
-                <label className={styles.label}>Social Security Number</label>
+                <label className={styles.label}>SSN</label>
                 <div className={styles.inputWrapper}>
                   <input 
-                    className={`${styles.input} ${styles.inputWithToggle}`}
+                    className={`${styles.input} ${styles.inputWithToggle} ${errors.jointSsn ? styles.inputError : ''}`}
                     type="text"
                     name="ssn" 
-                    value={showSSN ? formData.ssn : maskSSN(formData.ssn)} 
-                    onChange={handleChange} 
-                    placeholder="123-45-6789"
-                    readOnly={!showSSN}
+                    value={showJointSSN ? (formData.jointHolder?.ssn || '') : maskSSN(formData.jointHolder?.ssn || '')} 
+                    onChange={handleJointHolderChange}
+                    readOnly={!showJointSSN}
                   />
                   <button
                     type="button"
                     className={styles.toggleButton}
-                    onClick={() => setShowSSN(!showSSN)}
-                    aria-label={showSSN ? 'Hide SSN' : 'Show SSN'}
+                    onClick={() => setShowJointSSN(!showJointSSN)}
+                    aria-label={showJointSSN ? 'Hide SSN' : 'Show SSN'}
                   >
-                    {showSSN ? 'Hide' : 'Show'}
+                    {showJointSSN ? 'Hide' : 'Show'}
                   </button>
                 </div>
               </div>
@@ -661,440 +971,330 @@ export default function ProfileView() {
           </div>
 
           <div className={styles.subCard}>
-            <h3 className={styles.subSectionTitle}>Contact Information</h3>
+            <h3 className={styles.subSectionTitle}>Legal Address</h3>
             <div className={styles.compactGrid}>
-              <div className={styles.field}>
-                <label className={styles.label}>Email</label>
-                <input className={`${styles.input} ${errors.email ? styles.inputError : ''}`} name="email" value={formData.email} disabled />
-              </div>
-              <div className={styles.field}>
-                <label className={styles.label}>Phone</label>
-                <input className={`${styles.input} ${errors.phoneNumber ? styles.inputError : ''}`} type="tel" name="phoneNumber" value={formData.phoneNumber} onChange={handleChange} placeholder="(555) 555-5555" />
-              </div>
-            </div>
-          </div>
-
-          {formData.address && (
-            <div className={styles.subCard}>
-              <h3 className={styles.subSectionTitle}>Legal Address</h3>
-              <div className={styles.compactGrid}>
-                <div className={styles.field}>
-                  <label className={styles.label}>Street 1</label>
-                  <input className={`${styles.input} ${errors.street1 ? styles.inputError : ''}`} name="street1" value={formData.address.street1} onChange={handleAddressChange} />
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>Street 2</label>
-                  <input className={styles.input} name="street2" value={formData.address.street2} onChange={handleAddressChange} />
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>City</label>
-                  <input className={`${styles.input} ${errors.city ? styles.inputError : ''}`} name="city" value={formData.address.city} onChange={handleAddressChange} />
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>State</label>
-                  <input className={`${styles.input} ${errors.state ? styles.inputError : ''}`} name="state" value={formData.address.state} onChange={handleAddressChange} />
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>ZIP Code</label>
-                  <input className={`${styles.input} ${errors.zip ? styles.inputError : ''}`} name="zip" value={formData.address.zip} onChange={handleAddressChange} />
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>Country</label>
-                  <input className={styles.input} name="country" value={formData.address.country} disabled />
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className={styles.actions}>
-            <button
-              className={styles.saveButton}
-              onClick={handleSave}
-              disabled={isSaving}
-            >
-              {isSaving ? 'Saving...' : 'Save Changes'}
-            </button>
-            {saveSuccess && <span className={styles.success}>Saved!</span>}
-          </div>
-        </section>
-
-        <section className={styles.section}>
-          <h2 className={styles.sectionTitle}>Trusted Contact</h2>
-          <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '16px' }}>
-            Provide a trusted contact who we can reach in case we cannot contact you or in emergency situations.
-          </p>
-
-          <div className={styles.subCard}>
-            <h3 className={styles.subSectionTitle}>Contact Information</h3>
-            <div className={styles.compactGrid}>
-              <div className={styles.field}>
-                <label className={styles.label}>First Name</label>
-                <input
-                  className={`${styles.input} ${errors.trustedFirstName ? styles.inputError : ''}`}
-                  name="firstName"
-                  value={formData.trustedContact?.firstName || ''}
-                  onChange={handleTrustedContactChange}
-                  placeholder="Optional"
-                />
-              </div>
-              <div className={styles.field}>
-                <label className={styles.label}>Last Name</label>
-                <input
-                  className={`${styles.input} ${errors.trustedLastName ? styles.inputError : ''}`}
-                  name="lastName"
-                  value={formData.trustedContact?.lastName || ''}
-                  onChange={handleTrustedContactChange}
-                  placeholder="Optional"
-                />
-              </div>
-              <div className={styles.field}>
-                <label className={styles.label}>Relationship</label>
-                <select
-                  className={styles.input}
-                  name="relationship"
-                  value={formData.trustedContact?.relationship || ''}
-                  onChange={handleTrustedContactChange}
-                >
-                  <option value="">Select relationship</option>
-                  <option value="spouse">Spouse</option>
-                  <option value="parent">Parent</option>
-                  <option value="sibling">Sibling</option>
-                  <option value="child">Child</option>
-                  <option value="friend">Friend</option>
-                  <option value="attorney">Attorney</option>
-                  <option value="financial_advisor">Financial Advisor</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-              <div className={styles.field}>
-                <label className={styles.label}>Email</label>
-                <input
-                  className={`${styles.input} ${errors.trustedEmail ? styles.inputError : ''}`}
-                  type="email"
-                  name="email"
-                  value={formData.trustedContact?.email || ''}
-                  onChange={handleTrustedContactChange}
-                  placeholder="Optional"
-                />
-                {errors.trustedEmail && <span className={styles.errorText}>{errors.trustedEmail}</span>}
-              </div>
-              <div className={styles.field}>
-                <label className={styles.label}>Phone</label>
-                <input
-                  className={`${styles.input} ${errors.trustedPhone ? styles.inputError : ''}`}
-                  type="tel"
-                  name="phone"
-                  value={formData.trustedContact?.phone || ''}
-                  onChange={handleTrustedContactChange}
-                  placeholder="(555) 555-5555 - Optional"
-                />
-                {errors.trustedPhone && <span className={styles.errorText}>{errors.trustedPhone}</span>}
-              </div>
+              <div className={styles.field}><label className={styles.label}>Street 1</label><input className={`${styles.input} ${errors.jointStreet1 ? styles.inputError : ''}`} name="street1" value={formData.jointHolder?.address?.street1 || ''} onChange={handleJointAddressChange} /></div>
+              <div className={styles.field}><label className={styles.label}>Street 2</label><input className={styles.input} name="street2" value={formData.jointHolder?.address?.street2 || ''} onChange={handleJointAddressChange} /></div>
+              <div className={styles.field}><label className={styles.label}>City</label><input className={`${styles.input} ${errors.jointCity ? styles.inputError : ''}`} name="city" value={formData.jointHolder?.address?.city || ''} onChange={handleJointAddressChange} /></div>
+              <div className={styles.field}><label className={styles.label}>State</label><input className={`${styles.input} ${errors.jointState ? styles.inputError : ''}`} name="state" value={formData.jointHolder?.address?.state || ''} onChange={handleJointAddressChange} /></div>
+              <div className={styles.field}><label className={styles.label}>ZIP Code</label><input className={`${styles.input} ${errors.jointZip ? styles.inputError : ''}`} name="zip" value={formData.jointHolder?.address?.zip || ''} onChange={handleJointAddressChange} /></div>
+              <div className={styles.field}><label className={styles.label}>Country</label><input className={styles.input} name="country" value={formData.jointHolder?.address?.country || 'United States'} disabled /></div>
             </div>
           </div>
         </section>
+      )}
 
-        {showJointSection && (
+      {showEntitySection && (
+        <>
           <section className={styles.section}>
-            <h2 className={styles.sectionTitle}>Joint Holder</h2>
-
-            <div className={styles.subCard}>
-              <h3 className={styles.subSectionTitle}>Joint Details</h3>
-              <div className={styles.compactGrid}>
-                <div className={`${styles.field} ${styles.fullRow}`}>
-                  <label className={styles.label}>Joint Holder Relationship</label>
-                  <select
-                    className={`${styles.input} ${errors.jointHoldingType ? styles.inputError : ''}`}
-                    name="jointHoldingType"
-                    value={formData.jointHoldingType || ''}
-                    onChange={handleChange}
-                  >
-                    <option value="">Select relationship to primary holder</option>
-                    <option value="spouse">Spouse</option>
-                    <option value="sibling">Sibling</option>
-                    <option value="domestic_partner">Domestic Partner</option>
-                    <option value="business_partner">Business Partner</option>
-                    <option value="other">Other</option>
-                  </select>
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>First Name</label>
-                  <input className={`${styles.input} ${errors.jointFirstName ? styles.inputError : ''}`} name="firstName" value={formData.jointHolder?.firstName || ''} onChange={handleJointHolderChange} />
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>Last Name</label>
-                  <input className={`${styles.input} ${errors.jointLastName ? styles.inputError : ''}`} name="lastName" value={formData.jointHolder?.lastName || ''} onChange={handleJointHolderChange} />
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>Email</label>
-                  <input className={`${styles.input} ${errors.jointEmail ? styles.inputError : ''}`} name="email" value={formData.jointHolder?.email || ''} onChange={handleJointHolderChange} />
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>Phone</label>
-                  <input className={`${styles.input} ${errors.jointPhone ? styles.inputError : ''}`} type="tel" name="phone" value={formData.jointHolder?.phone || ''} onChange={handleJointHolderChange} placeholder="(555) 555-5555" />
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>Date of Birth</label>
-                  <input className={`${styles.input} ${errors.jointDob ? styles.inputError : ''}`} type="date" name="dob" value={formData.jointHolder?.dob || ''} onChange={handleJointHolderChange} min={MIN_DOB} max={maxDob} />
-                  {errors.jointDob && <span className={styles.errorText}>{errors.jointDob}</span>}
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>SSN</label>
-                  <div className={styles.inputWrapper}>
-                    <input 
-                      className={`${styles.input} ${styles.inputWithToggle} ${errors.jointSsn ? styles.inputError : ''}`}
-                      type="text"
-                      name="ssn" 
-                      value={showJointSSN ? (formData.jointHolder?.ssn || '') : maskSSN(formData.jointHolder?.ssn || '')} 
-                      onChange={handleJointHolderChange}
-                      readOnly={!showJointSSN}
-                    />
-                    <button
-                      type="button"
-                      className={styles.toggleButton}
-                      onClick={() => setShowJointSSN(!showJointSSN)}
-                      aria-label={showJointSSN ? 'Hide SSN' : 'Show SSN'}
-                    >
-                      {showJointSSN ? 'Hide' : 'Show'}
-                    </button>
-                  </div>
-                </div>
+            <h2 className={styles.sectionTitle}>Entity Information</h2>
+            <div className={styles.compactGrid}>
+              <div className={styles.field}>
+                <label className={styles.label}>Entity Name</label>
+                <input
+                  className={`${styles.input} ${errors.entityName ? styles.inputError : ''}`}
+                  type="text"
+                  name="name"
+                  value={formData.entity?.name || ''}
+                  onChange={handleEntityChange}
+                />
+                {errors.entityName && <span className={styles.errorText}>{errors.entityName}</span>}
+              </div>
+              <div className={styles.field}>
+                <label className={styles.label}>Registration Date</label>
+                <input
+                  className={`${styles.input} ${errors.entityRegistrationDate ? styles.inputError : ''}`}
+                  type="date"
+                  name="registrationDate"
+                  value={formData.entity?.registrationDate || ''}
+                  onChange={handleEntityChange}
+                  min={MIN_DOB}
+                  max={maxToday}
+                />
+                {errors.entityRegistrationDate && <span className={styles.errorText}>{errors.entityRegistrationDate}</span>}
+              </div>
+              <div className={styles.field}>
+                <label className={styles.label}>EIN / Tax ID</label>
+                <input
+                  className={`${styles.input} ${errors.entityTaxId ? styles.inputError : ''}`}
+                  type="text"
+                  name="taxId"
+                  value={formData.entity?.taxId || ''}
+                  onChange={handleEntityChange}
+                />
+                {errors.entityTaxId && <span className={styles.errorText}>{errors.entityTaxId}</span>}
               </div>
             </div>
-
-            <div className={styles.subCard}>
-              <h3 className={styles.subSectionTitle}>Legal Address</h3>
-              <div className={styles.compactGrid}>
-                <div className={styles.field}><label className={styles.label}>Street 1</label><input className={`${styles.input} ${errors.jointStreet1 ? styles.inputError : ''}`} name="street1" value={formData.jointHolder?.address?.street1 || ''} onChange={handleJointAddressChange} /></div>
-                <div className={styles.field}><label className={styles.label}>Street 2</label><input className={styles.input} name="street2" value={formData.jointHolder?.address?.street2 || ''} onChange={handleJointAddressChange} /></div>
-                <div className={styles.field}><label className={styles.label}>City</label><input className={`${styles.input} ${errors.jointCity ? styles.inputError : ''}`} name="city" value={formData.jointHolder?.address?.city || ''} onChange={handleJointAddressChange} /></div>
-                <div className={styles.field}><label className={styles.label}>State</label><input className={`${styles.input} ${errors.jointState ? styles.inputError : ''}`} name="state" value={formData.jointHolder?.address?.state || ''} onChange={handleJointAddressChange} /></div>
-                <div className={styles.field}><label className={styles.label}>ZIP Code</label><input className={`${styles.input} ${errors.jointZip ? styles.inputError : ''}`} name="zip" value={formData.jointHolder?.address?.zip || ''} onChange={handleJointAddressChange} /></div>
-                <div className={styles.field}><label className={styles.label}>Country</label><input className={styles.input} name="country" value={formData.jointHolder?.address?.country || 'United States'} disabled /></div>
+            <div className={styles.compactGrid}>
+              <div className={styles.field}>
+                <label className={styles.label}>Street Address 1</label>
+                <input
+                  className={`${styles.input} ${errors.entityStreet1 ? styles.inputError : ''}`}
+                  type="text"
+                  name="street1"
+                  value={formData.entity?.address?.street1 || ''}
+                  onChange={handleEntityAddressChange}
+                />
+                {errors.entityStreet1 && <span className={styles.errorText}>{errors.entityStreet1}</span>}
+              </div>
+              <div className={styles.field}>
+                <label className={styles.label}>Street Address 2</label>
+                <input
+                  className={styles.input}
+                  type="text"
+                  name="street2"
+                  value={formData.entity?.address?.street2 || ''}
+                  onChange={handleEntityAddressChange}
+                />
+              </div>
+              <div className={styles.field}>
+                <label className={styles.label}>City</label>
+                <input
+                  className={`${styles.input} ${errors.entityCity ? styles.inputError : ''}`}
+                  type="text"
+                  name="city"
+                  value={formData.entity?.address?.city || ''}
+                  onChange={handleEntityAddressChange}
+                />
+                {errors.entityCity && <span className={styles.errorText}>{errors.entityCity}</span>}
+              </div>
+              <div className={styles.field}>
+                <label className={styles.label}>State</label>
+                <input
+                  className={`${styles.input} ${errors.entityState ? styles.inputError : ''}`}
+                  type="text"
+                  name="state"
+                  value={formData.entity?.address?.state || ''}
+                  onChange={handleEntityAddressChange}
+                />
+                {errors.entityState && <span className={styles.errorText}>{errors.entityState}</span>}
+              </div>
+              <div className={styles.field}>
+                <label className={styles.label}>ZIP Code</label>
+                <input
+                  className={`${styles.input} ${errors.entityZip ? styles.inputError : ''}`}
+                  type="text"
+                  name="zip"
+                  value={formData.entity?.address?.zip || ''}
+                  onChange={handleEntityAddressChange}
+                />
+                {errors.entityZip && <span className={styles.errorText}>{errors.entityZip}</span>}
+              </div>
+              <div className={styles.field}>
+                <label className={styles.label}>Country</label>
+                <input
+                  className={styles.input}
+                  type="text"
+                  name="country"
+                  value={formData.entity?.address?.country || 'United States'}
+                  onChange={handleEntityAddressChange}
+                  disabled
+                />
               </div>
             </div>
           </section>
-        )}
 
-        {showEntitySection && (
-          <>
-            <section className={styles.section}>
-              <h2 className={styles.sectionTitle}>Entity Information</h2>
-              <div className={styles.compactGrid}>
-                <div className={styles.field}>
-                  <label className={styles.label}>Entity Name</label>
-                  <input
-                    className={`${styles.input} ${errors.entityName ? styles.inputError : ''}`}
-                    type="text"
-                    name="name"
-                    value={formData.entity?.name || ''}
-                    onChange={handleEntityChange}
-                  />
-                  {errors.entityName && <span className={styles.errorText}>{errors.entityName}</span>}
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>Registration Date</label>
-                  <input
-                    className={`${styles.input} ${errors.entityRegistrationDate ? styles.inputError : ''}`}
-                    type="date"
-                    name="registrationDate"
-                    value={formData.entity?.registrationDate || ''}
-                    onChange={handleEntityChange}
-                    min={MIN_DOB}
-                    max={maxToday}
-                  />
-                  {errors.entityRegistrationDate && <span className={styles.errorText}>{errors.entityRegistrationDate}</span>}
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>EIN / Tax ID</label>
-                  <input
-                    className={`${styles.input} ${errors.entityTaxId ? styles.inputError : ''}`}
-                    type="text"
-                    name="taxId"
-                    value={formData.entity?.taxId || ''}
-                    onChange={handleEntityChange}
-                  />
-                  {errors.entityTaxId && <span className={styles.errorText}>{errors.entityTaxId}</span>}
-                </div>
+          <section className={styles.section}>
+            <h2 className={styles.sectionTitle}>Authorized Representative</h2>
+            <div className={styles.compactGrid}>
+              <div className={styles.field}>
+                <label className={styles.label}>Date of Birth</label>
+                <input
+                  className={`${styles.input} ${errors.repDob ? styles.inputError : ''}`}
+                  type="date"
+                  name="dob"
+                  value={formData.authorizedRepresentative?.dob || ''}
+                  onChange={handleAuthorizedRepChange}
+                  min={MIN_DOB}
+                  max={maxDob}
+                />
+                {errors.repDob && <span className={styles.errorText}>{errors.repDob}</span>}
               </div>
-              <div className={styles.compactGrid}>
-                <div className={styles.field}>
-                  <label className={styles.label}>Street Address 1</label>
+              <div className={styles.field}>
+                <label className={styles.label}>SSN</label>
+                <div className={styles.inputWrapper}>
                   <input
-                    className={`${styles.input} ${errors.entityStreet1 ? styles.inputError : ''}`}
+                    className={`${styles.input} ${styles.inputWithToggle} ${errors.repSsn ? styles.inputError : ''}`}
                     type="text"
-                    name="street1"
-                    value={formData.entity?.address?.street1 || ''}
-                    onChange={handleEntityAddressChange}
-                  />
-                  {errors.entityStreet1 && <span className={styles.errorText}>{errors.entityStreet1}</span>}
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>Street Address 2</label>
-                  <input
-                    className={styles.input}
-                    type="text"
-                    name="street2"
-                    value={formData.entity?.address?.street2 || ''}
-                    onChange={handleEntityAddressChange}
-                  />
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>City</label>
-                  <input
-                    className={`${styles.input} ${errors.entityCity ? styles.inputError : ''}`}
-                    type="text"
-                    name="city"
-                    value={formData.entity?.address?.city || ''}
-                    onChange={handleEntityAddressChange}
-                  />
-                  {errors.entityCity && <span className={styles.errorText}>{errors.entityCity}</span>}
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>State</label>
-                  <input
-                    className={`${styles.input} ${errors.entityState ? styles.inputError : ''}`}
-                    type="text"
-                    name="state"
-                    value={formData.entity?.address?.state || ''}
-                    onChange={handleEntityAddressChange}
-                  />
-                  {errors.entityState && <span className={styles.errorText}>{errors.entityState}</span>}
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>ZIP Code</label>
-                  <input
-                    className={`${styles.input} ${errors.entityZip ? styles.inputError : ''}`}
-                    type="text"
-                    name="zip"
-                    value={formData.entity?.address?.zip || ''}
-                    onChange={handleEntityAddressChange}
-                  />
-                  {errors.entityZip && <span className={styles.errorText}>{errors.entityZip}</span>}
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>Country</label>
-                  <input
-                    className={styles.input}
-                    type="text"
-                    name="country"
-                    value={formData.entity?.address?.country || 'United States'}
-                    onChange={handleEntityAddressChange}
-                    disabled
-                  />
-                </div>
-              </div>
-            </section>
-
-            <section className={styles.section}>
-              <h2 className={styles.sectionTitle}>Authorized Representative</h2>
-              <div className={styles.compactGrid}>
-                <div className={styles.field}>
-                  <label className={styles.label}>Date of Birth</label>
-                  <input
-                    className={`${styles.input} ${errors.repDob ? styles.inputError : ''}`}
-                    type="date"
-                    name="dob"
-                    value={formData.authorizedRepresentative?.dob || ''}
+                    name="ssn"
+                    value={showRepSSN ? (formData.authorizedRepresentative?.ssn || '') : maskSSN(formData.authorizedRepresentative?.ssn || '')}
                     onChange={handleAuthorizedRepChange}
-                    min={MIN_DOB}
-                    max={maxDob}
+                    readOnly={!showRepSSN}
                   />
-                  {errors.repDob && <span className={styles.errorText}>{errors.repDob}</span>}
+                  <button
+                    type="button"
+                    className={styles.toggleButton}
+                    onClick={() => setShowRepSSN(!showRepSSN)}
+                    aria-label={showRepSSN ? 'Hide SSN' : 'Show SSN'}
+                  >
+                    {showRepSSN ? 'Hide' : 'Show'}
+                  </button>
                 </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>SSN</label>
-                  <div className={styles.inputWrapper}>
-                    <input
-                      className={`${styles.input} ${styles.inputWithToggle} ${errors.repSsn ? styles.inputError : ''}`}
-                      type="text"
-                      name="ssn"
-                      value={showRepSSN ? (formData.authorizedRepresentative?.ssn || '') : maskSSN(formData.authorizedRepresentative?.ssn || '')}
-                      onChange={handleAuthorizedRepChange}
-                      readOnly={!showRepSSN}
-                    />
-                    <button
-                      type="button"
-                      className={styles.toggleButton}
-                      onClick={() => setShowRepSSN(!showRepSSN)}
-                      aria-label={showRepSSN ? 'Hide SSN' : 'Show SSN'}
-                    >
-                      {showRepSSN ? 'Hide' : 'Show'}
-                    </button>
-                  </div>
-                  {errors.repSsn && <span className={styles.errorText}>{errors.repSsn}</span>}
-                </div>
+                {errors.repSsn && <span className={styles.errorText}>{errors.repSsn}</span>}
               </div>
-              <div className={styles.compactGrid}>
-                <div className={styles.field}>
-                  <label className={styles.label}>Street Address 1</label>
-                  <input
-                    className={`${styles.input} ${errors.repStreet1 ? styles.inputError : ''}`}
-                    type="text"
-                    name="street1"
-                    value={formData.authorizedRepresentative?.address?.street1 || ''}
-                    onChange={handleAuthorizedRepAddressChange}
-                  />
-                  {errors.repStreet1 && <span className={styles.errorText}>{errors.repStreet1}</span>}
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>Street Address 2</label>
-                  <input
-                    className={styles.input}
-                    type="text"
-                    name="street2"
-                    value={formData.authorizedRepresentative?.address?.street2 || ''}
-                    onChange={handleAuthorizedRepAddressChange}
-                  />
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>City</label>
-                  <input
-                    className={`${styles.input} ${errors.repCity ? styles.inputError : ''}`}
-                    type="text"
-                    name="city"
-                    value={formData.authorizedRepresentative?.address?.city || ''}
-                    onChange={handleAuthorizedRepAddressChange}
-                  />
-                  {errors.repCity && <span className={styles.errorText}>{errors.repCity}</span>}
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>State</label>
-                  <input
-                    className={`${styles.input} ${errors.repState ? styles.inputError : ''}`}
-                    type="text"
-                    name="state"
-                    value={formData.authorizedRepresentative?.address?.state || ''}
-                    onChange={handleAuthorizedRepAddressChange}
-                  />
-                  {errors.repState && <span className={styles.errorText}>{errors.repState}</span>}
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>ZIP Code</label>
-                  <input
-                    className={`${styles.input} ${errors.repZip ? styles.inputError : ''}`}
-                    type="text"
-                    name="zip"
-                    value={formData.authorizedRepresentative?.address?.zip || ''}
-                    onChange={handleAuthorizedRepAddressChange}
-                  />
-                  {errors.repZip && <span className={styles.errorText}>{errors.repZip}</span>}
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>Country</label>
-                  <input
-                    className={styles.input}
-                    type="text"
-                    name="country"
-                    value={formData.authorizedRepresentative?.address?.country || 'United States'}
-                    onChange={handleAuthorizedRepAddressChange}
-                    disabled
-                  />
-                </div>
+            </div>
+            <div className={styles.compactGrid}>
+              <div className={styles.field}>
+                <label className={styles.label}>Street Address 1</label>
+                <input
+                  className={`${styles.input} ${errors.repStreet1 ? styles.inputError : ''}`}
+                  type="text"
+                  name="street1"
+                  value={formData.authorizedRepresentative?.address?.street1 || ''}
+                  onChange={handleAuthorizedRepAddressChange}
+                />
+                {errors.repStreet1 && <span className={styles.errorText}>{errors.repStreet1}</span>}
               </div>
-            </section>
-          </>
-        )}
+              <div className={styles.field}>
+                <label className={styles.label}>Street Address 2</label>
+                <input
+                  className={styles.input}
+                  type="text"
+                  name="street2"
+                  value={formData.authorizedRepresentative?.address?.street2 || ''}
+                  onChange={handleAuthorizedRepAddressChange}
+                />
+              </div>
+              <div className={styles.field}>
+                <label className={styles.label}>City</label>
+                <input
+                  className={`${styles.input} ${errors.repCity ? styles.inputError : ''}`}
+                  type="text"
+                  name="city"
+                  value={formData.authorizedRepresentative?.address?.city || ''}
+                  onChange={handleAuthorizedRepAddressChange}
+                />
+                {errors.repCity && <span className={styles.errorText}>{errors.repCity}</span>}
+              </div>
+              <div className={styles.field}>
+                <label className={styles.label}>State</label>
+                <input
+                  className={`${styles.input} ${errors.repState ? styles.inputError : ''}`}
+                  type="text"
+                  name="state"
+                  value={formData.authorizedRepresentative?.address?.state || ''}
+                  onChange={handleAuthorizedRepAddressChange}
+                />
+                {errors.repState && <span className={styles.errorText}>{errors.repState}</span>}
+              </div>
+              <div className={styles.field}>
+                <label className={styles.label}>ZIP Code</label>
+                <input
+                  className={`${styles.input} ${errors.repZip ? styles.inputError : ''}`}
+                  type="text"
+                  name="zip"
+                  value={formData.authorizedRepresentative?.address?.zip || ''}
+                  onChange={handleAuthorizedRepAddressChange}
+                />
+                {errors.repZip && <span className={styles.errorText}>{errors.repZip}</span>}
+              </div>
+              <div className={styles.field}>
+                <label className={styles.label}>Country</label>
+                <input
+                  className={styles.input}
+                  type="text"
+                  name="country"
+                  value={formData.authorizedRepresentative?.address?.country || 'United States'}
+                  onChange={handleAuthorizedRepAddressChange}
+                  disabled
+                />
+              </div>
+            </div>
+          </section>
+        </>
+      )}
+
+      <div className={styles.actions}>
+        <button
+          className={styles.saveButton}
+          onClick={handleSave}
+          disabled={isSaving}
+        >
+          {isSaving ? 'Saving...' : 'Save Changes'}
+        </button>
+        {saveSuccess && <span className={styles.success}>Saved!</span>}
+      </div>
+    </div>
+  )
+}
+
+function TrustedContactTab({ formData, errors, handleTrustedContactChange, handleSave, isSaving, saveSuccess }) {
+  return (
+    <div className={styles.content}>
+      <section className={styles.section}>
+        <h2 className={styles.sectionTitle}>Trusted Contact</h2>
+        <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '16px' }}>
+          Provide a trusted contact who we can reach in case we cannot contact you or in emergency situations.
+        </p>
+
+        <div className={styles.subCard}>
+          <h3 className={styles.subSectionTitle}>Contact Information</h3>
+          <div className={styles.compactGrid}>
+            <div className={styles.field}>
+              <label className={styles.label}>First Name</label>
+              <input
+                className={`${styles.input} ${errors.trustedFirstName ? styles.inputError : ''}`}
+                name="firstName"
+                value={formData.trustedContact?.firstName || ''}
+                onChange={handleTrustedContactChange}
+                placeholder="Optional"
+              />
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>Last Name</label>
+              <input
+                className={`${styles.input} ${errors.trustedLastName ? styles.inputError : ''}`}
+                name="lastName"
+                value={formData.trustedContact?.lastName || ''}
+                onChange={handleTrustedContactChange}
+                placeholder="Optional"
+              />
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>Relationship</label>
+              <select
+                className={styles.input}
+                name="relationship"
+                value={formData.trustedContact?.relationship || ''}
+                onChange={handleTrustedContactChange}
+              >
+                <option value="">Select relationship</option>
+                <option value="spouse">Spouse</option>
+                <option value="parent">Parent</option>
+                <option value="sibling">Sibling</option>
+                <option value="child">Child</option>
+                <option value="friend">Friend</option>
+                <option value="attorney">Attorney</option>
+                <option value="financial_advisor">Financial Advisor</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>Email</label>
+              <input
+                className={`${styles.input} ${errors.trustedEmail ? styles.inputError : ''}`}
+                type="email"
+                name="email"
+                value={formData.trustedContact?.email || ''}
+                onChange={handleTrustedContactChange}
+                placeholder="Optional"
+              />
+              {errors.trustedEmail && <span className={styles.errorText}>{errors.trustedEmail}</span>}
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>Phone</label>
+              <input
+                className={`${styles.input} ${errors.trustedPhone ? styles.inputError : ''}`}
+                type="tel"
+                name="phone"
+                value={formData.trustedContact?.phone || ''}
+                onChange={handleTrustedContactChange}
+                placeholder="(555) 555-5555 - Optional"
+              />
+              {errors.trustedPhone && <span className={styles.errorText}>{errors.trustedPhone}</span>}
+            </div>
+          </div>
+        </div>
 
         <div className={styles.actions}>
           <button
@@ -1106,109 +1306,401 @@ export default function ProfileView() {
           </button>
           {saveSuccess && <span className={styles.success}>Saved!</span>}
         </div>
+      </section>
+    </div>
+  )
+}
 
-        <section className={styles.section}>
-          <h2 className={styles.sectionTitle}>Banking Information</h2>
+function BankingTab({ userData, showBankModal, setShowBankModal, handleBankAccountAdded, handleSetDefaultBank, handleRemoveBank, isRemovingBank }) {
+  const availableBanks = Array.isArray(userData?.bankAccounts) ? userData.bankAccounts : []
+  const defaultBankId = userData?.banking?.defaultBankAccountId || null
 
-          <div className={styles.subCard}>
-            <h3 className={styles.subSectionTitle}>Funding Account</h3>
-            <div className={styles.compactGrid}>
-              <div className={styles.field}>
-                <label className={styles.label}>Funding Method</label>
-                <div className={`${styles.value} ${styles.valueDisabled}`}>{fundingMethodLabel}</div>
-              </div>
-              <div className={styles.field}>
-                <label className={styles.label}>Bank</label>
-                <div className={`${styles.value} ${styles.valueDisabled}`}>{defaultBank ? (defaultBank.nickname || 'Default Bank') : 'Not connected'}</div>
-              </div>
-              <div className={styles.field}>
-                <label className={styles.label}>Type</label>
-                <div className={`${styles.value} ${styles.valueDisabled}`}>{defaultBank ? (defaultBank.type?.toUpperCase?.() || 'ACH') : '-'}</div>
-              </div>
-              <div className={styles.field}>
-                <label className={styles.label}>Status</label>
-                <div className={`${styles.value} ${styles.valueDisabled}`}>{defaultBank ? 'Connected' : 'Not connected'}</div>
-              </div>
-              <div className={styles.field}>
-                <label className={styles.label}>Last Used</label>
-                <div className={`${styles.value} ${styles.valueDisabled}`}>{defaultBank?.lastUsedAt ? new Date(defaultBank.lastUsedAt).toLocaleDateString() : '-'}</div>
-              </div>
+  return (
+    <div className={styles.content}>
+      <section className={styles.section}>
+        <h2 className={styles.sectionTitle}>Banking Information</h2>
+        <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '16px' }}>
+          Manage your connected bank accounts. You can add multiple accounts and select which one to use for funding and payouts.
+        </p>
+
+        {availableBanks.length === 0 ? (
+          <div className={styles.emptyState}>
+            <p>No bank accounts connected yet.</p>
+            <button
+              className={styles.addBankButton}
+              onClick={() => setShowBankModal(true)}
+            >
+              Add Bank Account
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className={styles.bankCardsGrid}>
+              {availableBanks.map(bank => (
+                <BankAccountCard
+                  key={bank.id}
+                  bank={bank}
+                  isDefault={bank.id === defaultBankId}
+                  onSetDefault={handleSetDefaultBank}
+                  onRemove={handleRemoveBank}
+                  isRemoving={isRemovingBank === bank.id}
+                />
+              ))}
+            </div>
+            <div className={styles.actions}>
+              <button
+                className={styles.addBankButton}
+                onClick={() => setShowBankModal(true)}
+              >
+                Add Bank Account
+              </button>
+            </div>
+          </>
+        )}
+      </section>
+    </div>
+  )
+}
+
+function BankAccountCard({ bank, isDefault, onSetDefault, onRemove, isRemoving }) {
+  const bankColor = bank.bank_color || bank.bankColor || '#117ACA'
+  const bankLogo = bank.bank_logo || bank.bankLogo || '🏦'
+  const bankName = bank.bank_name || bank.bankName || 'Bank'
+  const accountType = (bank.account_type || bank.accountType || 'checking').charAt(0).toUpperCase() + (bank.account_type || bank.accountType || 'checking').slice(1)
+  const last4 = bank.last4 || '****'
+  const nickname = bank.nickname || `${bankName} ${accountType} (...${last4})`
+  const lastUsed = bank.last_used_at || bank.lastUsedAt
+
+  return (
+    <div className={styles.bankCard} style={{ borderTopColor: bankColor }}>
+      {isDefault && (
+        <div className={styles.defaultBadge}>Default</div>
+      )}
+      <div className={styles.bankCardHeader}>
+        <div className={styles.bankCardLogo} style={{ backgroundColor: `${bankColor}20` }}>
+          {bankLogo}
+        </div>
+        <div className={styles.bankCardInfo}>
+          <div className={styles.bankCardName}>{bankName}</div>
+          <div className={styles.bankCardDetails}>{accountType} •••• {last4}</div>
+        </div>
+      </div>
+      {lastUsed && (
+        <div className={styles.bankCardMeta}>
+          Last used: {new Date(lastUsed).toLocaleDateString()}
+        </div>
+      )}
+      <div className={styles.bankCardActions}>
+        {!isDefault && (
+          <button
+            className={styles.bankCardButton}
+            onClick={() => onSetDefault(bank.id)}
+          >
+            Set as Default
+          </button>
+        )}
+        <button
+          className={`${styles.bankCardButton} ${styles.bankCardButtonDanger}`}
+          onClick={() => onRemove(bank.id, nickname)}
+          disabled={isRemoving || isDefault}
+        >
+          {isRemoving ? 'Removing...' : 'Remove'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function SecurityTab({ userData, passwordForm, errors, handlePasswordChange, handleChangePassword, isChangingPassword, passwordChangeSuccess }) {
+  return (
+    <div className={styles.content}>
+      <section className={styles.section}>
+        <h2 className={styles.sectionTitle}>Security</h2>
+        <div className={styles.subCard}>
+          <h3 className={styles.subSectionTitle}>Change Password</h3>
+          <div className={styles.oneColumnGrid}>
+            <div className={styles.field}>
+              <label className={styles.label}>Current Password</label>
+              <input className={`${styles.input} ${errors.currentPassword ? styles.inputError : ''}`} type="password" name="currentPassword" value={passwordForm.currentPassword} onChange={handlePasswordChange} />
             </div>
           </div>
+          <div className={`${styles.compactGrid} ${styles.blockTopGap}`}>
+            <div className={styles.field}>
+              <label className={styles.label}>New Password</label>
+              <input className={`${styles.input} ${errors.newPassword ? styles.inputError : ''}`} type="password" name="newPassword" value={passwordForm.newPassword} onChange={handlePasswordChange} placeholder="At least 8 chars, mixed case, number, symbol" />
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>Confirm New Password</label>
+              <input className={`${styles.input} ${errors.confirmPassword ? styles.inputError : ''}`} type="password" name="confirmPassword" value={passwordForm.confirmPassword} onChange={handlePasswordChange} />
+            </div>
+          </div>
+          <div className={`${styles.actions} ${styles.actionsInset}`}>
+            <button className={styles.saveButton} onClick={handleChangePassword} disabled={isChangingPassword}>
+              {isChangingPassword ? 'Updating...' : 'Update Password'}
+            </button>
+            {passwordChangeSuccess && <span className={styles.success}>Password updated</span>}
+          </div>
+        </div>
+      </section>
 
-          <div className={styles.subCard}>
-            <h3 className={styles.subSectionTitle}>Payout Account</h3>
-            <div className={styles.compactGrid}>
-              <div className={styles.field}>
-                <label className={styles.label}>Payout Method</label>
-                <div className={`${styles.value} ${styles.valueDisabled}`}>{payoutMethodLabel}</div>
-              </div>
-              <div className={styles.field}>
-                <label className={styles.label}>Payout Bank</label>
-                <div className={`${styles.value} ${styles.valueDisabled}`}>
-                  {userData?.banking?.payoutMethod === 'bank-account' ? (defaultBank ? (defaultBank.nickname || 'Default Bank') : 'Not connected') : 'N/A'}
+      <section className={styles.section}>
+        <h2 className={styles.sectionTitle}>Account Information</h2>
+        <div className={styles.fieldGrid}>
+          <div className={styles.field}>
+            <label className={styles.label}>Account Type</label>
+            <div className={`${styles.value} ${styles.valueDisabled}`}>
+              {userData.accountType ? userData.accountType.charAt(0).toUpperCase() + userData.accountType.slice(1) : 'Not set'}
+            </div>
+          </div>
+          <div className={styles.field}>
+            <label className={styles.label}>Account Created</label>
+            <div className={`${styles.value} ${styles.valueDisabled}`}>
+              {userData.createdAt ? new Date(userData.createdAt).toLocaleDateString() : 'Not available'}
+            </div>
+          </div>
+          <div className={styles.field}>
+            <label className={styles.label}>Total Investments</label>
+            <div className={`${styles.value} ${styles.valueDisabled}`}>{userData.investments?.length || 0}</div>
+          </div>
+          <div className={styles.field}>
+            <label className={styles.label}>Account Status</label>
+            <div className={`${styles.value} ${styles.statusActive} ${styles.valueDisabled}`}>Active</div>
+          </div>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function AddressesTab({ userData, showAddressModal, setShowAddressModal, handleAddressAdded, handleSetDefaultAddress, handleRemoveAddress, isRemovingAddress, addressForm, setAddressForm, formatCity, formatStreet }) {
+  const availableAddresses = Array.isArray(userData?.addresses) ? userData.addresses : []
+  const primaryAddress = availableAddresses.find(addr => addr.isPrimary)
+
+  const [addressErrors, setAddressErrors] = useState({})
+
+  const handleAddressFormChange = (e) => {
+    const { name, value } = e.target
+    let formattedValue = value
+    if (name === 'city') {
+      formattedValue = formatCity(value)
+    } else if (name === 'street1' || name === 'street2') {
+      formattedValue = formatStreet(value)
+    }
+    setAddressForm(prev => ({ ...prev, [name]: formattedValue }))
+    if (addressErrors[name]) {
+      setAddressErrors(prev => ({ ...prev, [name]: '' }))
+    }
+  }
+
+  const validateAddressForm = () => {
+    const errors = {}
+    if (!addressForm.street1.trim()) errors.street1 = 'Required'
+    if (!addressForm.city.trim()) errors.city = 'Required'
+    else if (/[0-9]/.test(addressForm.city)) errors.city = 'No numbers allowed'
+    if (!addressForm.state.trim()) errors.state = 'Required'
+    if (!addressForm.zip.trim()) errors.zip = 'Required'
+    else if (addressForm.zip.length !== 5) errors.zip = 'Must be 5 digits'
+    setAddressErrors(errors)
+    return Object.keys(errors).length === 0
+  }
+
+  const handleSubmitAddress = () => {
+    if (!validateAddressForm()) return
+    handleAddressAdded(addressForm)
+  }
+
+  return (
+    <div className={styles.content}>
+      <section className={styles.section}>
+        <h2 className={styles.sectionTitle}>Saved Addresses</h2>
+        <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '16px' }}>
+          Manage your saved addresses. You can have multiple addresses for different purposes (home, business, etc.).
+        </p>
+
+        {availableAddresses.length === 0 ? (
+          <div className={styles.emptyState}>
+            <p>No addresses saved yet.</p>
+            <button
+              className={styles.addBankButton}
+              onClick={() => setShowAddressModal(true)}
+            >
+              Add Address
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className={styles.bankCardsGrid}>
+              {availableAddresses.map(address => (
+                <AddressCard
+                  key={address.id}
+                  address={address}
+                  isPrimary={address.isPrimary}
+                  onSetPrimary={handleSetDefaultAddress}
+                  onRemove={handleRemoveAddress}
+                  isRemoving={isRemovingAddress === address.id}
+                />
+              ))}
+            </div>
+            <div className={styles.actions}>
+              <button
+                className={styles.addBankButton}
+                onClick={() => setShowAddressModal(true)}
+              >
+                Add New Address
+              </button>
+            </div>
+          </>
+        )}
+      </section>
+
+      {/* Address Modal */}
+      {showAddressModal && (
+        <div className={styles.overlay} onClick={() => setShowAddressModal(false)}>
+          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h3 className={styles.modalTitle}>Add New Address</h3>
+              <button className={styles.closeButton} onClick={() => setShowAddressModal(false)}>✕</button>
+            </div>
+            <div className={styles.modalContent}>
+              <div className={styles.compactGrid}>
+                <div className={styles.field}>
+                  <label className={styles.label}>Label</label>
+                  <select
+                    className={styles.input}
+                    name="label"
+                    value={addressForm.label}
+                    onChange={handleAddressFormChange}
+                  >
+                    <option value="Home">Home</option>
+                    <option value="Work">Work</option>
+                    <option value="Mailing">Mailing</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>Street Address 1</label>
+                  <input
+                    className={`${styles.input} ${addressErrors.street1 ? styles.inputError : ''}`}
+                    name="street1"
+                    value={addressForm.street1}
+                    onChange={handleAddressFormChange}
+                    placeholder="123 Main St"
+                  />
+                  {addressErrors.street1 && <span className={styles.errorText}>{addressErrors.street1}</span>}
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>Street Address 2</label>
+                  <input
+                    className={styles.input}
+                    name="street2"
+                    value={addressForm.street2}
+                    onChange={handleAddressFormChange}
+                    placeholder="Apt, Suite, etc. (Optional)"
+                  />
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>City</label>
+                  <input
+                    className={`${styles.input} ${addressErrors.city ? styles.inputError : ''}`}
+                    name="city"
+                    value={addressForm.city}
+                    onChange={handleAddressFormChange}
+                    placeholder="New York"
+                  />
+                  {addressErrors.city && <span className={styles.errorText}>{addressErrors.city}</span>}
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>State</label>
+                  <input
+                    className={`${styles.input} ${addressErrors.state ? styles.inputError : ''}`}
+                    name="state"
+                    value={addressForm.state}
+                    onChange={handleAddressFormChange}
+                    placeholder="NY"
+                  />
+                  {addressErrors.state && <span className={styles.errorText}>{addressErrors.state}</span>}
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>ZIP Code</label>
+                  <input
+                    className={`${styles.input} ${addressErrors.zip ? styles.inputError : ''}`}
+                    name="zip"
+                    value={addressForm.zip}
+                    onChange={handleAddressFormChange}
+                    placeholder="10001"
+                    maxLength={5}
+                  />
+                  {addressErrors.zip && <span className={styles.errorText}>{addressErrors.zip}</span>}
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.label}>Country</label>
+                  <input
+                    className={styles.input}
+                    name="country"
+                    value={addressForm.country}
+                    disabled
+                  />
                 </div>
               </div>
             </div>
-          </div>
-        </section>
-
-        <section className={styles.section}>
-          <h2 className={styles.sectionTitle}>Security</h2>
-          <div className={styles.subCard}>
-            <h3 className={styles.subSectionTitle}>Change Password</h3>
-            <div className={styles.oneColumnGrid}>
-              <div className={styles.field}>
-                <label className={styles.label}>Current Password</label>
-                <input className={`${styles.input} ${errors.currentPassword ? styles.inputError : ''}`} type="password" name="currentPassword" value={passwordForm.currentPassword} onChange={handlePasswordChange} />
-              </div>
-            </div>
-            <div className={`${styles.compactGrid} ${styles.blockTopGap}`}>
-              <div className={styles.field}>
-                <label className={styles.label}>New Password</label>
-                <input className={`${styles.input} ${errors.newPassword ? styles.inputError : ''}`} type="password" name="newPassword" value={passwordForm.newPassword} onChange={handlePasswordChange} placeholder="At least 8 chars, mixed case, number, symbol" />
-              </div>
-              <div className={styles.field}>
-                <label className={styles.label}>Confirm New Password</label>
-                <input className={`${styles.input} ${errors.confirmPassword ? styles.inputError : ''}`} type="password" name="confirmPassword" value={passwordForm.confirmPassword} onChange={handlePasswordChange} />
-              </div>
-            </div>
-            <div className={`${styles.actions} ${styles.actionsInset}`}>
-              <button className={styles.saveButton} onClick={handleChangePassword} disabled={isChangingPassword}>
-                {isChangingPassword ? 'Updating...' : 'Update Password'}
+            <div className={styles.modalFooter}>
+              <button className={styles.cancelButton} onClick={() => setShowAddressModal(false)}>
+                Cancel
               </button>
-              {passwordChangeSuccess && <span className={styles.success}>Password updated</span>}
+              <button className={styles.saveButton} onClick={handleSubmitAddress}>
+                Add Address
+              </button>
             </div>
           </div>
-        </section>
+        </div>
+      )}
+    </div>
+  )
+}
 
-        <section className={styles.section}>
-          <h2 className={styles.sectionTitle}>Account Information</h2>
-          <div className={styles.fieldGrid}>
-            <div className={styles.field}>
-              <label className={styles.label}>Account Type</label>
-              <div className={`${styles.value} ${styles.valueDisabled}`}>
-                {userData.accountType ? userData.accountType.charAt(0).toUpperCase() + userData.accountType.slice(1) : 'Not set'}
-              </div>
-            </div>
-            <div className={styles.field}>
-              <label className={styles.label}>Account Created</label>
-              <div className={`${styles.value} ${styles.valueDisabled}`}>
-                {userData.createdAt ? new Date(userData.createdAt).toLocaleDateString() : 'Not available'}
-              </div>
-            </div>
-            <div className={styles.field}>
-              <label className={styles.label}>Total Investments</label>
-              <div className={`${styles.value} ${styles.valueDisabled}`}>{userData.investments?.length || 0}</div>
-            </div>
-            <div className={styles.field}>
-              <label className={styles.label}>Account Status</label>
-              <div className={`${styles.value} ${styles.statusActive} ${styles.valueDisabled}`}>Active</div>
-            </div>
+function AddressCard({ address, isPrimary, onSetPrimary, onRemove, isRemoving }) {
+  const fullAddress = [
+    address.street1,
+    address.street2,
+    `${address.city}, ${address.state} ${address.zip}`,
+    address.country
+  ].filter(Boolean).join('\n')
+
+  return (
+    <div className={styles.bankCard}>
+      {isPrimary && (
+        <div className={styles.defaultBadge}>Primary</div>
+      )}
+      <div className={styles.bankCardHeader}>
+        <div className={styles.bankCardLogo} style={{ backgroundColor: '#3b82f620' }}>
+          📍
+        </div>
+        <div className={styles.bankCardInfo}>
+          <div className={styles.bankCardName}>{address.label || 'Address'}</div>
+          <div className={styles.bankCardDetails} style={{ whiteSpace: 'pre-line', lineHeight: '1.5' }}>
+            {address.street1}
+            {address.street2 && <><br />{address.street2}</>}
+            <br />{address.city}, {address.state} {address.zip}
           </div>
-        </section>
+        </div>
       </div>
-
+      <div className={styles.bankCardActions}>
+        {!isPrimary && (
+          <button
+            className={styles.bankCardButton}
+            onClick={() => onSetPrimary(address.id)}
+          >
+            Set as Primary
+          </button>
+        )}
+        <button
+          className={`${styles.bankCardButton} ${styles.bankCardButtonDanger}`}
+          onClick={() => onRemove(address.id, address.label)}
+          disabled={isRemoving || isPrimary}
+        >
+          {isRemoving ? 'Removing...' : 'Remove'}
+        </button>
+      </div>
     </div>
   )
 }

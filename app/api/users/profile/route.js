@@ -67,7 +67,6 @@ export async function GET(request) {
       lastName: user.last_name,
       phoneNumber: user.phone_number,
       dob: user.dob,
-      address: user.address,
       accountType: user.account_type,
       isAdmin: user.is_admin,
       isVerified: user.is_verified,

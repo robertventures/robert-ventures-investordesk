@@ -7,6 +7,64 @@ import { signToken, signRefreshToken } from '../../../../lib/auth.js'
 import { setAuthCookies } from '../../../../lib/authMiddleware.js'
 
 /**
+ * Helper function to format user data for API response
+ */
+function formatUserForResponse(user) {
+  return {
+    id: user.id,
+    email: user.email,
+    firstName: user.first_name,
+    lastName: user.last_name,
+    phoneNumber: user.phone_number,
+    dob: user.dob,
+    accountType: user.account_type,
+    isAdmin: user.is_admin,
+    isVerified: user.is_verified,
+    verifiedAt: user.verified_at,
+    createdAt: user.created_at,
+    updatedAt: user.updated_at,
+    banking: user.banking,
+    entity: user.entity,
+    investments: (user.investments || []).map(inv => ({
+      ...inv,
+      paymentFrequency: inv.payment_frequency,
+      lockupPeriod: inv.lockup_period,
+      accountType: inv.account_type,
+      paymentMethod: inv.payment_method,
+      personalInfo: inv.personal_info,
+      requiresManualApproval: inv.requires_manual_approval,
+      manualApprovalReason: inv.manual_approval_reason,
+      submittedAt: inv.submitted_at,
+      confirmedAt: inv.confirmed_at,
+      confirmedByAdminId: inv.confirmed_by_admin_id,
+      confirmationSource: inv.confirmation_source,
+      rejectedAt: inv.rejected_at,
+      rejectedByAdminId: inv.rejected_by_admin_id,
+      rejectionSource: inv.rejection_source,
+      lockupEndDate: inv.lockup_end_date,
+      withdrawnAt: inv.withdrawn_at,
+      createdAt: inv.created_at,
+      updatedAt: inv.updated_at,
+      totalEarnings: inv.total_earnings,
+      finalValue: inv.final_value,
+      withdrawalNoticeStartAt: inv.withdrawal_notice_start_at,
+      autoApproved: inv.auto_approved
+    })),
+    withdrawals: user.withdrawals || [],
+    bankAccounts: user.bank_accounts || [],
+    activity: (user.activity || []).map(act => ({
+      ...act,
+      investmentId: act.investment_id
+    })),
+    jointHolder: user.joint_holder || null,
+    jointHoldingType: user.joint_holding_type || null,
+    entityName: user.entity_name || null,
+    authorizedRepresentative: user.authorized_representative || null,
+    trustedContact: user.trusted_contact || null
+  }
+}
+
+/**
  * GET /api/users/[id]
  * Get user by ID
  */
@@ -27,6 +85,15 @@ export async function GET(request, { params }) {
       )
     }
 
+    // Fetch addresses from the addresses table
+    const supabase = createServiceClient()
+    const { data: addresses } = await supabase
+      .from('addresses')
+      .select('*')
+      .eq('user_id', id)
+      .order('is_primary', { ascending: false })
+      .order('created_at', { ascending: false })
+
     // Convert snake_case to camelCase for frontend
     const safeUser = {
       id: user.id,
@@ -35,7 +102,6 @@ export async function GET(request, { params }) {
       lastName: user.last_name,
       phoneNumber: user.phone_number,
       dob: user.dob,
-      address: user.address,
       accountType: user.account_type,
       isAdmin: user.is_admin,
       isVerified: user.is_verified,
@@ -69,6 +135,19 @@ export async function GET(request, { params }) {
       })),
       withdrawals: user.withdrawals || [],
       bankAccounts: user.bank_accounts || [],
+      addresses: (addresses || []).map(addr => ({
+        id: addr.id,
+        street1: addr.street1,
+        street2: addr.street2,
+        city: addr.city,
+        state: addr.state,
+        zip: addr.zip,
+        country: addr.country,
+        label: addr.label,
+        isPrimary: addr.is_primary,
+        createdAt: addr.created_at,
+        updatedAt: addr.updated_at
+      })),
       activity: (user.activity || []).map(act => ({
         ...act,
         investmentId: act.investment_id
@@ -368,6 +447,482 @@ export async function PUT(request, { params }) {
       setAuthCookies(response, accessToken, refreshToken)
 
       return response
+    }
+
+    if (_action === 'addBankAccount') {
+      // Add a new bank account
+      const { bankAccount } = body
+      if (!bankAccount) {
+        return NextResponse.json(
+          { success: false, error: 'Bank account data is required' },
+          { status: 400 }
+        )
+      }
+
+      try {
+        const supabase = createServiceClient()
+        
+        // Check if this is the first bank account
+        const { count: bankCount, error: countError } = await supabase
+          .from('bank_accounts')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', id)
+
+        console.log('Bank account count for user:', bankCount)
+        
+        // Insert bank account
+        const { data: newBank, error: insertError } = await supabase
+          .from('bank_accounts')
+          .insert({
+            id: bankAccount.id,
+            user_id: id,
+            bank_id: bankAccount.bankId,
+            bank_name: bankAccount.bankName,
+            bank_logo: bankAccount.bankLogo || null,
+            bank_color: bankAccount.bankColor || null,
+            account_type: bankAccount.accountType,
+            account_name: bankAccount.accountName,
+            last4: bankAccount.last4,
+            nickname: bankAccount.nickname,
+            type: bankAccount.type || 'ach',
+            created_at: bankAccount.createdAt || new Date().toISOString(),
+            last_used_at: bankAccount.lastUsedAt || new Date().toISOString()
+          })
+          .select()
+          .single()
+
+        if (insertError) {
+          console.error('Error inserting bank account:', insertError)
+          return NextResponse.json(
+            { success: false, error: `Failed to add bank account: ${insertError.message}` },
+            { status: 500 }
+          )
+        }
+
+        // If this is the first bank account, set as default
+        if (bankCount === 0) {
+          console.log('Setting first bank as default')
+          const user = await getUser(id)
+          const currentBanking = user?.banking || {}
+          
+          await updateUser(id, {
+            banking: {
+              ...currentBanking,
+              defaultBankAccountId: bankAccount.id,
+              fundingMethod: currentBanking.fundingMethod || 'bank-transfer',
+              payoutMethod: currentBanking.payoutMethod || 'bank-account'
+            }
+          })
+        }
+
+        // Fetch updated user data
+        const updatedUser = await getUser(id, true)
+        const safeUser = formatUserForResponse(updatedUser)
+
+        return NextResponse.json({
+          success: true,
+          user: safeUser,
+          bankAccount: newBank
+        })
+      } catch (error) {
+        console.error('Error adding bank account:', error)
+        return NextResponse.json(
+          { success: false, error: `Internal error: ${error.message}` },
+          { status: 500 }
+        )
+      }
+    }
+
+    if (_action === 'removeBankAccount') {
+      // Remove a bank account
+      const { bankAccountId } = body
+      if (!bankAccountId) {
+        return NextResponse.json(
+          { success: false, error: 'Bank account ID is required' },
+          { status: 400 }
+        )
+      }
+
+      try {
+        // Get user to check if this is the default bank
+        const user = await getUser(id)
+        if (!user) {
+          return NextResponse.json(
+            { success: false, error: 'User not found' },
+            { status: 404 }
+          )
+        }
+
+        const defaultBankId = user.banking?.defaultBankAccountId || user.banking?.default_bank_account_id
+        if (defaultBankId === bankAccountId) {
+          return NextResponse.json(
+            { success: false, error: 'Cannot remove default bank account. Please set another account as default first.' },
+            { status: 400 }
+          )
+        }
+
+        const supabase = createServiceClient()
+        
+        // Delete bank account
+        const { error: deleteError } = await supabase
+          .from('bank_accounts')
+          .delete()
+          .eq('id', bankAccountId)
+          .eq('user_id', id)
+
+        if (deleteError) {
+          console.error('Error deleting bank account:', deleteError)
+          return NextResponse.json(
+            { success: false, error: 'Failed to remove bank account' },
+            { status: 500 }
+          )
+        }
+
+        // Fetch updated user data
+        const updatedUser = await getUser(id, true)
+        const safeUser = formatUserForResponse(updatedUser)
+
+        return NextResponse.json({
+          success: true,
+          user: safeUser
+        })
+      } catch (error) {
+        console.error('Error removing bank account:', error)
+        return NextResponse.json(
+          { success: false, error: 'Failed to remove bank account' },
+          { status: 500 }
+        )
+      }
+    }
+
+    if (_action === 'setDefaultBank') {
+      // Set default bank account
+      const { bankAccountId } = body
+      if (!bankAccountId) {
+        return NextResponse.json(
+          { success: false, error: 'Bank account ID is required' },
+          { status: 400 }
+        )
+      }
+
+      try {
+        const supabase = createServiceClient()
+        
+        // Verify bank account exists and belongs to user
+        const { data: bankAccount, error: fetchError } = await supabase
+          .from('bank_accounts')
+          .select('id')
+          .eq('id', bankAccountId)
+          .eq('user_id', id)
+          .maybeSingle()
+
+        if (fetchError || !bankAccount) {
+          return NextResponse.json(
+            { success: false, error: 'Bank account not found' },
+            { status: 404 }
+          )
+        }
+
+        // Update user's default bank
+        const user = await getUser(id)
+        const currentBanking = user?.banking || {}
+        
+        const result = await updateUser(id, {
+          banking: {
+            ...currentBanking,
+            defaultBankAccountId: bankAccountId
+          }
+        })
+
+        if (!result.success) {
+          return NextResponse.json(
+            { success: false, error: result.error },
+            { status: 500 }
+          )
+        }
+
+        // Update last_used_at for the bank account
+        await supabase
+          .from('bank_accounts')
+          .update({ last_used_at: new Date().toISOString() })
+          .eq('id', bankAccountId)
+
+        // Fetch updated user data
+        const updatedUser = await getUser(id, true)
+        const safeUser = formatUserForResponse(updatedUser)
+
+        return NextResponse.json({
+          success: true,
+          user: safeUser
+        })
+      } catch (error) {
+        console.error('Error setting default bank:', error)
+        return NextResponse.json(
+          { success: false, error: 'Failed to set default bank' },
+          { status: 500 }
+        )
+      }
+    }
+
+    if (_action === 'addAddress') {
+      // Add a new address
+      const { address } = body
+      if (!address) {
+        return NextResponse.json(
+          { success: false, error: 'Address data is required' },
+          { status: 400 }
+        )
+      }
+
+      try {
+        const supabase = createServiceClient()
+        
+        // Check if this is the first address
+        const { count: addressCount, error: countError } = await supabase
+          .from('addresses')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', id)
+
+        console.log('Address count for user:', addressCount)
+        
+        // Insert address
+        const { data: newAddress, error: insertError } = await supabase
+          .from('addresses')
+          .insert({
+            id: address.id || `addr-${Date.now()}`,
+            user_id: id,
+            street1: address.street1,
+            street2: address.street2 || null,
+            city: address.city,
+            state: address.state,
+            zip: address.zip,
+            country: address.country || 'United States',
+            label: address.label || 'Home',
+            is_primary: addressCount === 0,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .select()
+          .single()
+
+        if (insertError) {
+          console.error('Error inserting address:', insertError)
+          return NextResponse.json(
+            { success: false, error: `Failed to add address: ${insertError.message}` },
+            { status: 500 }
+          )
+        }
+
+        // Fetch updated user data
+        const updatedUser = await getUser(id, true)
+        const safeUser = formatUserForResponse(updatedUser)
+
+        return NextResponse.json({
+          success: true,
+          user: safeUser,
+          address: newAddress
+        })
+      } catch (error) {
+        console.error('Error adding address:', error)
+        return NextResponse.json(
+          { success: false, error: `Internal error: ${error.message}` },
+          { status: 500 }
+        )
+      }
+    }
+
+    if (_action === 'removeAddress') {
+      // Remove an address
+      const { addressId } = body
+      if (!addressId) {
+        return NextResponse.json(
+          { success: false, error: 'Address ID is required' },
+          { status: 400 }
+        )
+      }
+
+      try {
+        const supabase = createServiceClient()
+        
+        // Check if this is the primary address
+        const { data: addressToRemove, error: fetchError } = await supabase
+          .from('addresses')
+          .select('is_primary')
+          .eq('id', addressId)
+          .eq('user_id', id)
+          .maybeSingle()
+
+        if (fetchError || !addressToRemove) {
+          return NextResponse.json(
+            { success: false, error: 'Address not found' },
+            { status: 404 }
+          )
+        }
+
+        if (addressToRemove.is_primary) {
+          return NextResponse.json(
+            { success: false, error: 'Cannot remove primary address. Please set another address as primary first.' },
+            { status: 400 }
+          )
+        }
+
+        // Delete address
+        const { error: deleteError } = await supabase
+          .from('addresses')
+          .delete()
+          .eq('id', addressId)
+          .eq('user_id', id)
+
+        if (deleteError) {
+          console.error('Error deleting address:', deleteError)
+          return NextResponse.json(
+            { success: false, error: 'Failed to remove address' },
+            { status: 500 }
+          )
+        }
+
+        // Fetch updated user data
+        const updatedUser = await getUser(id, true)
+        const safeUser = formatUserForResponse(updatedUser)
+
+        return NextResponse.json({
+          success: true,
+          user: safeUser
+        })
+      } catch (error) {
+        console.error('Error removing address:', error)
+        return NextResponse.json(
+          { success: false, error: 'Failed to remove address' },
+          { status: 500 }
+        )
+      }
+    }
+
+    if (_action === 'setDefaultAddress') {
+      // Set primary address
+      const { addressId } = body
+      if (!addressId) {
+        return NextResponse.json(
+          { success: false, error: 'Address ID is required' },
+          { status: 400 }
+        )
+      }
+
+      try {
+        const supabase = createServiceClient()
+        
+        // Verify address exists and belongs to user
+        const { data: address, error: fetchError } = await supabase
+          .from('addresses')
+          .select('id')
+          .eq('id', addressId)
+          .eq('user_id', id)
+          .maybeSingle()
+
+        if (fetchError || !address) {
+          return NextResponse.json(
+            { success: false, error: 'Address not found' },
+            { status: 404 }
+          )
+        }
+
+        // Set all addresses to non-primary
+        await supabase
+          .from('addresses')
+          .update({ is_primary: false })
+          .eq('user_id', id)
+
+        // Set selected address as primary
+        const { error: updateError } = await supabase
+          .from('addresses')
+          .update({ is_primary: true, updated_at: new Date().toISOString() })
+          .eq('id', addressId)
+
+        if (updateError) {
+          console.error('Error setting primary address:', updateError)
+          return NextResponse.json(
+            { success: false, error: 'Failed to set primary address' },
+            { status: 500 }
+          )
+        }
+
+        // Fetch updated user data
+        const updatedUser = await getUser(id, true)
+        const safeUser = formatUserForResponse(updatedUser)
+
+        return NextResponse.json({
+          success: true,
+          user: safeUser
+        })
+      } catch (error) {
+        console.error('Error setting primary address:', error)
+        return NextResponse.json(
+          { success: false, error: 'Failed to set primary address' },
+          { status: 500 }
+        )
+      }
+    }
+
+    if (_action === 'changePassword') {
+      // Change password
+      const { currentPassword, newPassword } = body
+      if (!currentPassword || !newPassword) {
+        return NextResponse.json(
+          { success: false, error: 'Both current and new password are required' },
+          { status: 400 }
+        )
+      }
+
+      try {
+        const supabase = createServiceClient()
+        
+        // Get user auth_id
+        const user = await getUser(id)
+        if (!user || !user.auth_id) {
+          return NextResponse.json(
+            { success: false, error: 'User not found' },
+            { status: 404 }
+          )
+        }
+
+        // Try to sign in with current password to verify it
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: user.email,
+          password: currentPassword
+        })
+
+        if (signInError) {
+          return NextResponse.json(
+            { success: false, error: 'Current password is incorrect' },
+            { status: 400 }
+          )
+        }
+
+        // Update password
+        const { error: updateError } = await supabase.auth.admin.updateUserById(
+          user.auth_id,
+          { password: newPassword }
+        )
+
+        if (updateError) {
+          console.error('Error updating password:', updateError)
+          return NextResponse.json(
+            { success: false, error: 'Failed to update password' },
+            { status: 500 }
+          )
+        }
+
+        return NextResponse.json({
+          success: true,
+          message: 'Password updated successfully'
+        })
+      } catch (error) {
+        console.error('Error changing password:', error)
+        return NextResponse.json(
+          { success: false, error: 'Failed to change password' },
+          { status: 500 }
+        )
+      }
     }
 
     // Validate that we have at least one field to update

@@ -1,5 +1,6 @@
 "use client"
 import Header from '../components/Header'
+import BankConnectionModal from '../components/BankConnectionModal'
 import styles from './page.module.css'
 import { useEffect, useState } from 'react'
 
@@ -34,6 +35,13 @@ function ClientContent() {
   const [selectedBankId, setSelectedBankId] = useState('')
   const [agreeToTerms, setAgreeToTerms] = useState(false)
   const [showDetails, setShowDetails] = useState(false)
+  const [showBankModal, setShowBankModal] = useState(false)
+  const [connectedBank, setConnectedBank] = useState(null)
+  const [isSavingBank, setIsSavingBank] = useState(false)
+  const [selectedFundingBankId, setSelectedFundingBankId] = useState('')
+  const [selectedPayoutBankId, setSelectedPayoutBankId] = useState('')
+  const [showAllBanksModal, setShowAllBanksModal] = useState(false)
+  const [bankSelectionMode, setBankSelectionMode] = useState('') // 'funding' or 'payout'
 
   useEffect(() => {
     setMounted(true)
@@ -69,7 +77,11 @@ function ClientContent() {
             const t = b.lastUsedAt ? new Date(b.lastUsedAt).getTime() : 0
             return t > (latest.t || 0) ? { id: b.id, t } : latest
           }, { id: '', t: 0 })
-          if (lastUsed.id) setSelectedBankId(lastUsed.id)
+          if (lastUsed.id) {
+            setSelectedBankId(lastUsed.id)
+            setSelectedFundingBankId(lastUsed.id)
+            setSelectedPayoutBankId(lastUsed.id)
+          }
         }
       } else {
         try {
@@ -97,7 +109,11 @@ function ClientContent() {
     if (user?.banking) {
       setFundingMethod(user.banking.fundingMethod || '')
       setPayoutMethod(user.banking.payoutMethod || 'bank-account')
-      if (user.banking.defaultBankAccountId) setSelectedBankId(user.banking.defaultBankAccountId)
+      if (user.banking.defaultBankAccountId) {
+        setSelectedBankId(user.banking.defaultBankAccountId)
+        setSelectedFundingBankId(user.banking.defaultBankAccountId)
+        setSelectedPayoutBankId(user.banking.defaultBankAccountId)
+      }
     }
   }, [user?.banking])
 
@@ -309,23 +325,64 @@ function ClientContent() {
                   <span>Bank Transfer</span>
                 </label>
                 {fundingMethod === 'bank-transfer' && (
-                  <div>
+                  <div className={styles.bankConnectionSection}>
                     {availableBanks.length > 0 ? (
-                      <div style={{ marginTop: 8 }}>
-                        <label style={{ fontWeight: 600, marginRight: 8 }}>Select Bank:</label>
-                        <select
-                          className={styles.secondaryButton}
-                          value={selectedBankId || ''}
-                          onChange={(e) => setSelectedBankId(e.target.value)}
-                        >
-                          {availableBanks.map(b => (
-                            <option key={b.id} value={b.id}>{b.nickname || 'Bank Account'}</option>
+                      <>
+                        <div className={styles.savedBanksGrid}>
+                          {availableBanks.slice(0, 2).map((bank) => (
+                            <div
+                              key={bank.id}
+                              className={`${styles.savedBankCard} ${selectedFundingBankId === bank.id ? styles.selectedBankCard : ''}`}
+                              onClick={() => setSelectedFundingBankId(bank.id)}
+                            >
+                              <div className={styles.savedBankLeft}>
+                                <span className={styles.savedBankLogo} style={{ backgroundColor: bank.bankColor ? bank.bankColor + '20' : '#e5e7eb' }}>
+                                  {bank.bankLogo || '🏦'}
+                                </span>
+                                <div className={styles.savedBankDetails}>
+                                  <div className={styles.savedBankName}>{bank.nickname || bank.bankName || 'Bank Account'}</div>
+                                  <div className={styles.savedBankAccount}>
+                                    {bank.accountType ? bank.accountType.charAt(0).toUpperCase() + bank.accountType.slice(1) : 'Account'} •••• {bank.last4 || '****'}
+                                  </div>
+                                </div>
+                              </div>
+                              {selectedFundingBankId === bank.id && (
+                                <span className={styles.selectedCheck}>✓</span>
+                              )}
+                            </div>
                           ))}
-                          <option value="">Use Default Bank</option>
-                        </select>
-                      </div>
+                        </div>
+                        <div className={styles.bankActionButtons}>
+                          {availableBanks.length > 2 && (
+                            <button
+                              type="button"
+                              className={styles.viewAllBanksButton}
+                              onClick={() => {
+                                setBankSelectionMode('funding')
+                                setShowAllBanksModal(true)
+                              }}
+                            >
+                              View All Banks ({availableBanks.length})
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className={styles.addNewBankButton}
+                            onClick={() => setShowBankModal(true)}
+                          >
+                            + Add New Bank
+                          </button>
+                        </div>
+                      </>
                     ) : (
-                      <div className={styles.bankBox} style={{ marginTop: 8 }}>Default Bank will be used</div>
+                      <button
+                        type="button"
+                        className={styles.connectBankButton}
+                        onClick={() => setShowBankModal(true)}
+                      >
+                        <span className={styles.connectIcon}>🏦</span>
+                        <span>Connect Bank Account</span>
+                      </button>
                     )}
                   </div>
                 )}
@@ -415,8 +472,65 @@ function ClientContent() {
               </label>
             </div>
             {payoutMethod === 'bank-account' && (
-              <div className={styles.bankBox}>
-                <button type="button" className={styles.secondaryButton}>Connect Payout Bank Account</button>
+              <div className={styles.bankConnectionSection}>
+                {availableBanks.length > 0 ? (
+                  <>
+                    <div className={styles.savedBanksGrid}>
+                      {availableBanks.slice(0, 2).map((bank) => (
+                        <div
+                          key={bank.id}
+                          className={`${styles.savedBankCard} ${selectedPayoutBankId === bank.id ? styles.selectedBankCard : ''}`}
+                          onClick={() => setSelectedPayoutBankId(bank.id)}
+                        >
+                          <div className={styles.savedBankLeft}>
+                            <span className={styles.savedBankLogo} style={{ backgroundColor: bank.bankColor ? bank.bankColor + '20' : '#e5e7eb' }}>
+                              {bank.bankLogo || '🏦'}
+                            </span>
+                            <div className={styles.savedBankDetails}>
+                              <div className={styles.savedBankName}>{bank.nickname || bank.bankName || 'Bank Account'}</div>
+                              <div className={styles.savedBankAccount}>
+                                {bank.accountType ? bank.accountType.charAt(0).toUpperCase() + bank.accountType.slice(1) : 'Account'} •••• {bank.last4 || '****'}
+                              </div>
+                            </div>
+                          </div>
+                          {selectedPayoutBankId === bank.id && (
+                            <span className={styles.selectedCheck}>✓</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    <div className={styles.bankActionButtons}>
+                      {availableBanks.length > 2 && (
+                        <button
+                          type="button"
+                          className={styles.viewAllBanksButton}
+                          onClick={() => {
+                            setBankSelectionMode('payout')
+                            setShowAllBanksModal(true)
+                          }}
+                        >
+                          View All Banks ({availableBanks.length})
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className={styles.addNewBankButton}
+                        onClick={() => setShowBankModal(true)}
+                      >
+                        + Add New Bank
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    className={styles.connectBankButton}
+                    onClick={() => setShowBankModal(true)}
+                  >
+                    <span className={styles.connectIcon}>🏦</span>
+                    <span>Connect Bank Account</span>
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -452,8 +566,14 @@ function ClientContent() {
             if (!fundingMethod) {
               errors.push('Choose a funding method.')
             }
+            if (fundingMethod === 'bank-transfer' && !selectedFundingBankId) {
+              errors.push('Please select a bank account for funding.')
+            }
             if (investment?.paymentFrequency === 'monthly' && payoutMethod !== 'bank-account') {
               errors.push('Select a payout method for monthly earnings.')
+            }
+            if (investment?.paymentFrequency === 'monthly' && payoutMethod === 'bank-account' && !selectedPayoutBankId) {
+              errors.push('Please select a bank account for payouts.')
             }
             if (!agreeToTerms) {
               errors.push('Please review and agree to the investment agreement terms.')
@@ -476,20 +596,21 @@ function ClientContent() {
               const appTime = timeData.success ? timeData.appTime : new Date().toISOString()
               console.log('Using app time for timestamps:', appTime)
 
-              // Determine bank account to use when bank-transfer is selected
-              let bankToUse = null
-              if (fundingMethod === 'bank-transfer') {
-                const existing = availableBanks.find(b => b.id === selectedBankId)
+              // Determine bank account to use for funding and payout
+              let fundingBankToUse = null
+              let payoutBankToUse = null
+              
+              if (fundingMethod === 'bank-transfer' && selectedFundingBankId) {
+                const existing = availableBanks.find(b => b.id === selectedFundingBankId)
                 if (existing) {
-                  bankToUse = { ...existing, lastUsedAt: appTime }
-                } else {
-                  bankToUse = {
-                    id: `bank-${Date.now()}`,
-                    nickname: 'Default Bank',
-                    type: 'ach',
-                    createdAt: appTime,
-                    lastUsedAt: appTime
-                  }
+                  fundingBankToUse = { ...existing, lastUsedAt: appTime }
+                }
+              }
+              
+              if (investment.paymentFrequency === 'monthly' && payoutMethod === 'bank-account' && selectedPayoutBankId) {
+                const existing = availableBanks.find(b => b.id === selectedPayoutBankId)
+                if (existing) {
+                  payoutBankToUse = { ...existing, lastUsedAt: appTime }
                 }
               }
               
@@ -527,7 +648,8 @@ function ClientContent() {
                     banking: {
                       fundingMethod,
                       earningsMethod,
-                      bank: bankToUse ? { id: bankToUse.id, nickname: bankToUse.nickname, type: bankToUse.type } : null
+                      fundingBank: fundingBankToUse ? { id: fundingBankToUse.id, nickname: fundingBankToUse.nickname, type: fundingBankToUse.type } : null,
+                      payoutBank: payoutBankToUse ? { id: payoutBankToUse.id, nickname: payoutBankToUse.nickname, type: payoutBankToUse.type } : null
                     },
                     documents: {
                       agreementVersion: 'v1',
@@ -604,12 +726,14 @@ function ClientContent() {
               }
               console.log('Investment updated successfully, proceeding to banking update...')
               
-              // Store banking details and bank accounts on user account
-              const nextBankAccounts = (() => {
-                if (!bankToUse) return availableBanks
-                const others = availableBanks.filter(b => b.id !== bankToUse.id)
-                return [bankToUse, ...others]
-              })()
+              // Store banking details and update lastUsedAt for selected banks
+              const nextBankAccounts = availableBanks.map(bank => {
+                if ((fundingBankToUse && bank.id === fundingBankToUse.id) || 
+                    (payoutBankToUse && bank.id === payoutBankToUse.id)) {
+                  return { ...bank, lastUsedAt: appTime }
+                }
+                return bank
+              })
 
               const bankingUpdateRes = await fetch(`/api/users/${userId}`, {
                 method: 'PUT',
@@ -619,9 +743,9 @@ function ClientContent() {
                     fundingMethod, 
                     earningsMethod, 
                     payoutMethod,
-                    ...(bankToUse ? { defaultBankAccountId: bankToUse.id } : {})
+                    ...(fundingBankToUse ? { defaultBankAccountId: fundingBankToUse.id } : {})
                   },
-                  ...(bankToUse ? { bankAccounts: nextBankAccounts } : {})
+                  bankAccounts: nextBankAccounts
                 })
               })
 
@@ -665,6 +789,158 @@ function ClientContent() {
           </div>
         )}
       </div>
+
+      {/* Bank Connection Modal */}
+      <BankConnectionModal
+        isOpen={showBankModal}
+        onClose={() => !isSavingBank && setShowBankModal(false)}
+        onAccountSelected={async (account) => {
+          setSelectedBankId(account.id)
+          setSelectedFundingBankId(account.id)
+          setSelectedPayoutBankId(account.id)
+          // Add to available banks list
+          const newBanksList = [account, ...availableBanks.filter(b => b.id !== account.id)]
+          setAvailableBanks(newBanksList)
+          
+          // Save bank account to database
+          setIsSavingBank(true)
+          try {
+            const userId = localStorage.getItem('currentUserId')
+            console.log('Saving bank account to database...')
+            const res = await fetch(`/api/users/${userId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                _action: 'addBankAccount',
+                bankAccount: account
+              })
+            })
+            const data = await res.json()
+            console.log('Bank account save response:', data)
+            
+            if (data.success) {
+              console.log('✅ Bank account saved successfully to database')
+              // Update user data with saved bank accounts
+              if (data.user) {
+                setUser(data.user)
+                setAvailableBanks(data.user.bankAccounts || [])
+              }
+            } else {
+              console.error('❌ Failed to save bank account:', data.error)
+              // Show the actual error message
+              alert(`Failed to save bank account: ${data.error}\n\nThe account is available for this session but may not persist.`)
+            }
+          } catch (e) {
+            console.error('❌ Error saving bank account:', e)
+            alert(`Error saving bank account: ${e.message}\n\nThe account is available for this session but may not persist.`)
+          } finally {
+            setIsSavingBank(false)
+          }
+        }}
+      />
+      
+      {/* View All Banks Modal */}
+      {showAllBanksModal && (
+        <div className={styles.modalOverlay} onClick={() => setShowAllBanksModal(false)}>
+          <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h3 className={styles.modalTitle}>Select Bank Account</h3>
+              <button
+                type="button"
+                className={styles.modalCloseButton}
+                onClick={() => setShowAllBanksModal(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <div className={styles.modalBody}>
+              <div className={styles.allBanksList}>
+                {availableBanks.map((bank) => {
+                  const isSelected = bankSelectionMode === 'funding' 
+                    ? selectedFundingBankId === bank.id 
+                    : selectedPayoutBankId === bank.id
+                  return (
+                    <div
+                      key={bank.id}
+                      className={`${styles.modalBankCard} ${isSelected ? styles.modalBankCardSelected : ''}`}
+                      onClick={() => {
+                        if (bankSelectionMode === 'funding') {
+                          setSelectedFundingBankId(bank.id)
+                        } else {
+                          setSelectedPayoutBankId(bank.id)
+                        }
+                        setShowAllBanksModal(false)
+                      }}
+                    >
+                      <div className={styles.modalBankLeft}>
+                        <span className={styles.modalBankLogo} style={{ backgroundColor: bank.bankColor ? bank.bankColor + '20' : '#e5e7eb' }}>
+                          {bank.bankLogo || '🏦'}
+                        </span>
+                        <div className={styles.modalBankDetails}>
+                          <div className={styles.modalBankName}>{bank.nickname || bank.bankName || 'Bank Account'}</div>
+                          <div className={styles.modalBankAccount}>
+                            {bank.accountType ? bank.accountType.charAt(0).toUpperCase() + bank.accountType.slice(1) : 'Account'} •••• {bank.last4 || '****'}
+                          </div>
+                        </div>
+                      </div>
+                      {isSelected && (
+                        <span className={styles.modalSelectedCheck}>✓</span>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Saving Bank Account Overlay */}
+      {isSavingBank && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000
+        }}>
+          <div style={{
+            background: '#ffffff',
+            padding: '32px 48px',
+            borderRadius: '12px',
+            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+            textAlign: 'center',
+            maxWidth: '400px'
+          }}>
+            <div style={{
+              width: '48px',
+              height: '48px',
+              border: '4px solid #e5e7eb',
+              borderTop: '4px solid #1a1a1a',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite',
+              margin: '0 auto 20px'
+            }}></div>
+            <h3 style={{ margin: '0 0 8px 0', fontSize: '18px', fontWeight: '600', color: '#1a1a1a' }}>
+              Saving Bank Account
+            </h3>
+            <p style={{ margin: 0, fontSize: '14px', color: '#6b7280' }}>
+              Please wait while we securely save your bank account information...
+            </p>
+          </div>
+        </div>
+      )}
+      
+      <style jsx>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   )
 }

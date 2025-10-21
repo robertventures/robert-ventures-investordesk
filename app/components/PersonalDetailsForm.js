@@ -107,7 +107,7 @@ export default function PersonalDetailsForm() {
         if (result.success) {
           // Keep user session for next step
           // Navigate to investment page
-          router.push('/investment')
+          router.push('/investment?context=onboarding')
         } else {
           alert(`Error: ${result.error}`)
         }

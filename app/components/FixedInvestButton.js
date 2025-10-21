@@ -29,7 +29,7 @@ export default function FixedInvestButton() {
       // Force a fresh draft on new investment flow
       localStorage.removeItem('currentInvestmentId')
     } catch {}
-    router.push('/investment')
+    router.push('/investment?context=new')
   }
 
   // Prevent hydration mismatch - don't render until mounted

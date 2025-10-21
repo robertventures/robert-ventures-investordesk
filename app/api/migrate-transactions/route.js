@@ -434,7 +434,10 @@ export async function POST(request) {
               return 'approved'
           }
         })()
-        const investmentDate = inv.submittedAt || inv.createdAt || inv.confirmedAt || inv.updatedAt || now.toISOString()
+        // Use confirmed date for the investment transaction (when it was approved)
+        // Fallback chain: confirmedAt → submittedAt → createdAt → now
+        const investmentDate = inv.confirmedAt || inv.submittedAt || inv.createdAt || inv.updatedAt || now.toISOString()
+        console.log(`💰 Investment ${inv.id} transaction date: ${investmentDate} (confirmedAt: ${inv.confirmedAt}, submittedAt: ${inv.submittedAt})`)
         ensureTransaction({
           id: investmentTxId,
           type: 'investment',
@@ -449,10 +452,13 @@ export async function POST(request) {
         })
 
         // Distributions for monthly payout investments
+        // RULE: Accrual starts the DAY AFTER confirmation (not on confirmation date)
+        // Example: If confirmed on Nov 20, accrual starts Nov 21
         console.log(`📊 Checking investment ${inv.id}: status=${inv.status}, payFreq=${payFreq}, confirmedAt=${inv.confirmedAt}`)
         if ((inv.status === 'active' || inv.status === 'withdrawal_notice') && payFreq === 'monthly' && inv.confirmedAt) {
           console.log(`✅ Generating distributions for monthly investment ${inv.id}`)
           const confirmedDate = new Date(inv.confirmedAt)
+          // IMPORTANT: Add 1 day to start accrual from the next day
           const accrualStartDate = addDaysUtc(toUtcStartOfDay(confirmedDate), 1)
           const annualRate = inv.lockupPeriod === '1-year' ? 0.08 : 0.10
           const monthlyRate = annualRate / 12
@@ -565,12 +571,15 @@ export async function POST(request) {
         }
 
         // Distributions and Contributions for compounding investments
+        // RULE: Accrual starts the DAY AFTER confirmation (not on confirmation date)
+        // Example: If confirmed on Nov 20, accrual starts Nov 21
         // Compounding investments generate TWO transactions per month:
         // 1. Distribution (earnings generated)
         // 2. Contribution (distribution reinvested back into the investment)
         if ((inv.status === 'active' || inv.status === 'withdrawal_notice') && payFreq === 'compounding' && inv.confirmedAt) {
           console.log(`✅ Generating compounding transactions for investment ${inv.id}`)
           const confirmedDate = new Date(inv.confirmedAt)
+          // IMPORTANT: Add 1 day to start accrual from the next day
           const accrualStartDate = addDaysUtc(toUtcStartOfDay(confirmedDate), 1)
           const annualRate = inv.lockupPeriod === '1-year' ? 0.08 : 0.10
           const monthlyRate = annualRate / 12
