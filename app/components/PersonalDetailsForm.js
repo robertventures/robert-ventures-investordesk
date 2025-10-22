@@ -76,6 +76,8 @@ export default function PersonalDetailsForm() {
     
     if (validateForm()) {
       try {
+        if (typeof window === 'undefined') return
+        
         // Get user ID from localStorage (set in previous step)
         const userId = localStorage.getItem('currentUserId')
         const email = new URLSearchParams(window.location.search).get('email') || 

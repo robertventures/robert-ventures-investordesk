@@ -104,6 +104,17 @@ export async function POST(request) {
 
         authUserId = authResult.user.id
 
+        // Check if investor has any monthly payout investments (needs bank info)
+        const hasMonthlyPayments = investorData.investments && 
+          Array.isArray(investorData.investments) &&
+          investorData.investments.some(inv => inv.paymentFrequency === 'monthly')
+        
+        // Determine if onboarding is needed:
+        // - No SSN provided → needs onboarding
+        // - Has monthly payment investments → needs onboarding (for bank info)
+        // - Otherwise → no onboarding needed (compounding investments don't need bank info)
+        const needsOnboarding = !investorData.ssn || hasMonthlyPayments
+
         // 2. Create database user record
         const userRecord = {
           id: userId,
@@ -113,11 +124,12 @@ export async function POST(request) {
           last_name: investorData.lastName || '',
           phone_number: investorData.phoneNumber || '',
           dob: investorData.dob || '',
-          ssn: '', // Will be filled during onboarding
+          ssn: investorData.ssn || '', // SSN from import form (will be encrypted by database)
           is_verified: true, // Auto-verify imported accounts (admin-created)
           verified_at: timestamp, // Set verification timestamp
           is_admin: false,
           account_type: investorData.accountType || 'individual',
+          needs_onboarding: needsOnboarding,
           created_at: timestamp,
           updated_at: timestamp
         }

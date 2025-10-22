@@ -2,6 +2,7 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import styles from './ActivityTab.module.css'
+import { formatCurrency } from '../../../lib/formatters.js'
 
 /**
  * Activity tab showing all platform-wide activity events
@@ -125,10 +126,6 @@ export default function ActivityTab({ users }) {
       default:
         return { icon: '•', title: eventType || 'Unknown Event', color: '#6b7280' }
     }
-  }
-
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount || 0)
   }
 
   return (

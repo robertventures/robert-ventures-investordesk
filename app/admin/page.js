@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { fetchWithCsrf } from '../../lib/csrfClient'
 import AdminHeader from '../components/AdminHeader'
 import { useAdminData } from './hooks/useAdminData'
 import { useAdminMetrics } from './hooks/useAdminMetrics'
@@ -287,7 +288,7 @@ export default function AdminPage() {
   // Withdrawal operations
   const actOnWithdrawal = async (action, userId, withdrawalId) => {
     try {
-      const res = await fetch('/api/admin/withdrawals', {
+      const res = await fetchWithCsrf('/api/admin/withdrawals', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, userId, withdrawalId })
@@ -309,7 +310,7 @@ export default function AdminPage() {
   // Payout operations
   const handlePayoutAction = async (action, userId, transactionId, failureReason = null) => {
     try {
-      const res = await fetch('/api/admin/pending-payouts', {
+      const res = await fetchWithCsrf('/api/admin/pending-payouts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, userId, transactionId, failureReason })
@@ -354,7 +355,7 @@ export default function AdminPage() {
     }
     
     try {
-      const res = await fetch('/api/admin/time-machine', {
+      const res = await fetchWithCsrf('/api/admin/time-machine', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -396,7 +397,7 @@ export default function AdminPage() {
 
   const resetAppTime = async () => {
     try {
-      const res = await fetch(`/api/admin/time-machine?adminUserId=${currentUser.id}`, {
+      const res = await fetchWithCsrf(`/api/admin/time-machine?adminUserId=${currentUser.id}`, {
         method: 'DELETE'
       })
       
@@ -440,7 +441,7 @@ export default function AdminPage() {
     }
     
     try {
-      const res = await fetch('/api/admin/time-machine', {
+      const res = await fetchWithCsrf('/api/admin/time-machine', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -474,7 +475,7 @@ export default function AdminPage() {
     if (!confirm('Delete ALL accounts? This will remove every non-admin user.')) return
     setIsDeletingAccounts(true)
     try {
-      const res = await fetch('/api/admin/accounts', {
+      const res = await fetchWithCsrf('/api/admin/accounts', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ adminUserId: currentUser.id })
@@ -508,7 +509,7 @@ export default function AdminPage() {
     if (!confirm('Seed test accounts? This will create the full local dataset.')) return
     setIsSeedingAccounts(true)
     try {
-      const res = await fetch('/api/admin/seed', {
+      const res = await fetchWithCsrf('/api/admin/seed', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ adminUserId: currentUser.id })
@@ -866,7 +867,7 @@ export default function AdminPage() {
                             console.log(`[Frontend] Deleting user ${user.id} (${user.email})...`)
                             
                             try {
-                              const res = await fetch(`/api/users/${user.id}`, { 
+                              const res = await fetchWithCsrf(`/api/users/${user.id}`, { 
                                 method: 'DELETE',
                                 credentials: 'include',
                                 headers: {

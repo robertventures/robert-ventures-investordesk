@@ -1,6 +1,8 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
+import { initCsrfToken } from '../../lib/csrfClient'
+import logger from '@/lib/logger'
 
 export default function AuthWrapper({ children }) {
   const router = useRouter()
@@ -15,6 +17,11 @@ export default function AuthWrapper({ children }) {
   const isPublicRoute = publicRoutes.includes(pathname) || pathname.startsWith('/reset-password')
 
   useEffect(() => {
+    // Initialize CSRF token on app load
+    initCsrfToken()
+    
+    if (typeof window === 'undefined') return
+    
     const checkAuth = async () => {
       try {
         // Verify authentication via API
@@ -52,7 +59,7 @@ export default function AuthWrapper({ children }) {
           return
         }
       } catch (error) {
-        console.error('Auth check error:', error)
+        logger.error('Auth check error:', error)
         setIsAuthenticated(false)
         setIsLoading(false)
         

@@ -45,6 +45,8 @@ function ClientContent() {
 
   useEffect(() => {
     setMounted(true)
+    if (typeof window === 'undefined') return
+    
     const load = async () => {
       const userId = localStorage.getItem('currentUserId')
       const investmentId = localStorage.getItem('currentInvestmentId')
@@ -805,6 +807,8 @@ function ClientContent() {
           // Save bank account to database
           setIsSavingBank(true)
           try {
+            if (typeof window === 'undefined') return
+            
             const userId = localStorage.getItem('currentUserId')
             console.log('Saving bank account to database...')
             const res = await fetch(`/api/users/${userId}`, {

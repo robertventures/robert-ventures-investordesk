@@ -2,10 +2,8 @@
 import { useEffect, useState, useMemo, memo } from 'react'
 import { useRouter } from 'next/navigation'
 import styles from './TransactionsList.module.css'
-
-function formatCurrency(amount) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount || 0)
-}
+import { formatCurrency } from '../../lib/formatters.js'
+import { formatDateForDisplay } from '../../lib/dateUtils.js'
 
 function eventMeta(ev) {
   switch (ev.type) {
@@ -52,10 +50,12 @@ const TransactionsList = memo(function TransactionsList({ limit = null, showView
   const [loading, setLoading] = useState(true)
   const [expandedId, setExpandedId] = useState(null)
   const [currentPage, setCurrentPage] = useState(1)
-  const itemsPerPage = 20
+  const itemsPerPage = 5
 
   useEffect(() => {
     setMounted(true)
+    if (typeof window === 'undefined') return
+    
     const load = async () => {
       const userId = localStorage.getItem('currentUserId')
       if (!userId) { setLoading(false); return }
@@ -127,7 +127,7 @@ const TransactionsList = memo(function TransactionsList({ limit = null, showView
         )}
         {visibleEvents.map(ev => {
           const meta = eventMeta(ev)
-          const date = ev.date ? new Date(ev.date).toLocaleDateString('en-US', { timeZone: 'UTC' }) : '-'
+          const date = ev.date ? formatDateForDisplay(ev.date) : '-'
           const isDistribution = ev.type === 'distribution' || ev.type === 'monthly_distribution'
           const isWithdrawal = ev.type === 'withdrawal_requested' || ev.type === 'redemption'
           const amountClass = isWithdrawal ? styles.negative : styles.positive
@@ -165,8 +165,8 @@ const TransactionsList = memo(function TransactionsList({ limit = null, showView
                     {typeof ev.monthIndex !== 'undefined' ? <div className={styles.detailRow}><span className={styles.detailKey}>Month Index</span><span className={styles.detailVal}>{ev.monthIndex}</span></div> : null}
                     {ev.status ? <div className={styles.detailRow}><span className={styles.detailKey}>Status</span><span className={styles.detailVal}>{ev.status}</span></div> : null}
                     {ev.payoutBankNickname ? <div className={styles.detailRow}><span className={styles.detailKey}>Bank</span><span className={styles.detailVal}>{ev.payoutBankNickname}</span></div> : null}
-                    {ev.noticeEndAt ? <div className={styles.detailRow}><span className={styles.detailKey}>Notice Ends</span><span className={styles.detailVal}>{new Date(ev.noticeEndAt).toLocaleDateString('en-US', { timeZone: 'UTC' })}</span></div> : null}
-                    {ev.payoutDueBy ? <div className={styles.detailRow}><span className={styles.detailKey}>Payout Due By</span><span className={styles.detailVal}>{new Date(ev.payoutDueBy).toLocaleDateString('en-US', { timeZone: 'UTC' })}</span></div> : null}
+                    {ev.noticeEndAt ? <div className={styles.detailRow}><span className={styles.detailKey}>Notice Ends</span><span className={styles.detailVal}>{formatDateForDisplay(ev.noticeEndAt)}</span></div> : null}
+                    {ev.payoutDueBy ? <div className={styles.detailRow}><span className={styles.detailKey}>Payout Due By</span><span className={styles.detailVal}>{formatDateForDisplay(ev.payoutDueBy)}</span></div> : null}
                   </div>
                 )}
               </div>

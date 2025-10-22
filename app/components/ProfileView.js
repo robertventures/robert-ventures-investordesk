@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
+import logger from '@/lib/logger'
 import styles from './ProfileView.module.css'
 import BankConnectionModal from './BankConnectionModal'
 
@@ -119,6 +120,8 @@ export default function ProfileView() {
   }, [searchParams])
 
   const loadUser = async () => {
+    if (typeof window === 'undefined') return
+    
     const userId = localStorage.getItem('currentUserId')
     if (!userId) return
 
@@ -200,9 +203,9 @@ export default function ProfileView() {
           }
         })
       }
-    } catch (e) {
-      console.error('Failed to load user data', e)
-    }
+      } catch (e) {
+        logger.error('Failed to load user data', e)
+      }
   }
 
   const handleTabChange = (tab) => {
@@ -304,6 +307,8 @@ export default function ProfileView() {
     setIsChangingPassword(true)
     setPasswordChangeSuccess(false)
     try {
+      if (typeof window === 'undefined') return
+      
       const userId = localStorage.getItem('currentUserId')
       const res = await fetch(`/api/users/${userId}`, {
         method: 'PUT',
@@ -322,7 +327,7 @@ export default function ProfileView() {
       setPasswordChangeSuccess(true)
       setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' })
     } catch (e) {
-      console.error('Failed to change password', e)
+      logger.error('Failed to change password', e)
       alert('An error occurred. Please try again.')
     } finally {
       setIsChangingPassword(false)
@@ -455,6 +460,8 @@ export default function ProfileView() {
     setIsSaving(true)
     setSaveSuccess(false)
     try {
+      if (typeof window === 'undefined') return
+      
       const userId = localStorage.getItem('currentUserId')
       const res = await fetch(`/api/users/${userId}`, {
         method: 'PUT',
@@ -529,7 +536,7 @@ export default function ProfileView() {
         setSaveSuccess(true)
       }
     } catch (e) {
-      console.error('Failed to save profile', e)
+      logger.error('Failed to save profile', e)
     } finally {
       setIsSaving(false)
     }
@@ -537,6 +544,8 @@ export default function ProfileView() {
 
   const handleBankAccountAdded = async (bankAccount) => {
     try {
+      if (typeof window === 'undefined') return
+      
       const userId = localStorage.getItem('currentUserId')
       const res = await fetch(`/api/users/${userId}`, {
         method: 'PUT',
@@ -553,13 +562,15 @@ export default function ProfileView() {
         alert(data.error || 'Failed to add bank account')
       }
     } catch (e) {
-      console.error('Failed to add bank account', e)
+      logger.error('Failed to add bank account', e)
       alert('An error occurred. Please try again.')
     }
   }
 
   const handleSetDefaultBank = async (bankId) => {
     try {
+      if (typeof window === 'undefined') return
+      
       const userId = localStorage.getItem('currentUserId')
       const res = await fetch(`/api/users/${userId}`, {
         method: 'PUT',
@@ -576,7 +587,7 @@ export default function ProfileView() {
         alert(data.error || 'Failed to set default bank')
       }
     } catch (e) {
-      console.error('Failed to set default bank', e)
+      logger.error('Failed to set default bank', e)
       alert('An error occurred. Please try again.')
     }
   }
@@ -586,6 +597,8 @@ export default function ProfileView() {
     
     setIsRemovingBank(bankId)
     try {
+      if (typeof window === 'undefined') return
+      
       const userId = localStorage.getItem('currentUserId')
       const res = await fetch(`/api/users/${userId}`, {
         method: 'PUT',
@@ -602,7 +615,7 @@ export default function ProfileView() {
         alert(data.error || 'Failed to remove bank account')
       }
     } catch (e) {
-      console.error('Failed to remove bank account', e)
+      logger.error('Failed to remove bank account', e)
       alert('An error occurred. Please try again.')
     } finally {
       setIsRemovingBank(null)
@@ -611,6 +624,8 @@ export default function ProfileView() {
 
   const handleAddressAdded = async (address) => {
     try {
+      if (typeof window === 'undefined') return
+      
       const userId = localStorage.getItem('currentUserId')
       const res = await fetch(`/api/users/${userId}`, {
         method: 'PUT',
@@ -637,13 +652,15 @@ export default function ProfileView() {
         alert(data.error || 'Failed to add address')
       }
     } catch (e) {
-      console.error('Failed to add address', e)
+      logger.error('Failed to add address', e)
       alert('An error occurred. Please try again.')
     }
   }
 
   const handleSetDefaultAddress = async (addressId) => {
     try {
+      if (typeof window === 'undefined') return
+      
       const userId = localStorage.getItem('currentUserId')
       const res = await fetch(`/api/users/${userId}`, {
         method: 'PUT',
@@ -660,7 +677,7 @@ export default function ProfileView() {
         alert(data.error || 'Failed to set primary address')
       }
     } catch (e) {
-      console.error('Failed to set primary address', e)
+      logger.error('Failed to set primary address', e)
       alert('An error occurred. Please try again.')
     }
   }
@@ -670,6 +687,8 @@ export default function ProfileView() {
     
     setIsRemovingAddress(addressId)
     try {
+      if (typeof window === 'undefined') return
+      
       const userId = localStorage.getItem('currentUserId')
       const res = await fetch(`/api/users/${userId}`, {
         method: 'PUT',
@@ -686,7 +705,7 @@ export default function ProfileView() {
         alert(data.error || 'Failed to remove address')
       }
     } catch (e) {
-      console.error('Failed to remove address', e)
+      logger.error('Failed to remove address', e)
       alert('An error occurred. Please try again.')
     } finally {
       setIsRemovingAddress(null)

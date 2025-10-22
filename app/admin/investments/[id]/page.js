@@ -1,27 +1,11 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { fetchWithCsrf } from '../../../../lib/csrfClient'
 import AdminHeader from '../../../components/AdminHeader'
-import { calculateInvestmentValue } from '../../../../lib/investmentCalculations.js'
+import { calculateInvestmentValue, formatCurrency, formatDate } from '../../../../lib/investmentCalculations.js'
+import { formatDateForDisplay, formatDateTime } from '../../../../lib/dateUtils.js'
 import styles from './page.module.css'
-
-// Format date for display without timezone conversion
-const formatDateForDisplay = (dateString) => {
-  if (!dateString) return '-'
-  const datePart = dateString.split('T')[0]
-  const [year, month, day] = datePart.split('-')
-  return `${month}/${day}/${year}`
-}
-
-// Format datetime for display without timezone conversion
-const formatDateTimeForDisplay = (dateString) => {
-  if (!dateString) return '-'
-  const date = new Date(dateString)
-  const datePart = dateString.split('T')[0]
-  const [year, month, day] = datePart.split('-')
-  const time = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
-  return `${month}/${day}/${year} ${time}`
-}
 
 export default function AdminInvestmentDetailsPage({ params }) {
   const router = useRouter()
@@ -46,6 +30,8 @@ export default function AdminInvestmentDetailsPage({ params }) {
   })
 
   useEffect(() => {
+    if (typeof window === 'undefined') return
+    
     const init = async () => {
       try {
         const meId = localStorage.getItem('currentUserId')
@@ -270,7 +256,7 @@ export default function AdminInvestmentDetailsPage({ params }) {
 
     setIsTerminating(true)
     try {
-      const res = await fetch('/api/admin/withdrawals/terminate', {
+      const res = await fetchWithCsrf('/api/admin/withdrawals/terminate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -540,19 +526,19 @@ export default function AdminInvestmentDetailsPage({ params }) {
                 <div>
                   <label>Created At</label>
                   <div className={styles.readOnly}>
-                    {formatDateTimeForDisplay(investment.createdAt)}
+                    {formatDateTime(investment.createdAt)}
                   </div>
                 </div>
                 <div>
                   <label>Submitted At</label>
                   <div className={styles.readOnly}>
-                    {formatDateTimeForDisplay(investment.submittedAt)}
+                    {formatDateTime(investment.submittedAt)}
                   </div>
                 </div>
                 <div>
                   <label>Confirmed At</label>
                   <div className={styles.readOnly}>
-                    {formatDateTimeForDisplay(investment.confirmedAt)}
+                    {formatDateTime(investment.confirmedAt)}
                   </div>
                 </div>
                 <div>

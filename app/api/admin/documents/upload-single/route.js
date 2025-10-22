@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
 import { getUsers, updateUser } from '../../../../../lib/supabaseDatabase.js'
-import { uploadDocument, isPDF } from '../../../../../lib/supabaseStorage.js'
+import { uploadDocument } from '../../../../../lib/supabaseStorage.js'
 import { sendDocumentNotification } from '../../../../../lib/emailService.js'
 import { generateTransactionId } from '../../../../../lib/idGenerator.js'
 import { requireAdmin, authErrorResponse } from '../../../../../lib/authMiddleware.js'
+import { validateFile } from '../../../../../lib/fileValidation.js'
 
 /**
  * POST /api/admin/documents/upload-single
@@ -29,6 +30,27 @@ export async function POST(request) {
       )
     }
 
+    // Read file data
+    const arrayBuffer = await file.arrayBuffer()
+
+    // Comprehensive file validation (size, extension, MIME type, content)
+    const validation = validateFile({
+      file: { name: file.name, size: file.size },
+      data: arrayBuffer,
+      expectedMimeType: 'application/pdf'
+    })
+
+    if (!validation.valid) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'File validation failed',
+          details: validation.errors 
+        },
+        { status: 400 }
+      )
+    }
+
     // Auto-set year to current year for organizational purposes
     const year = new Date().getFullYear().toString()
 
@@ -45,26 +67,17 @@ export async function POST(request) {
 
     // No duplicate checking - allow multiple documents per user
     
-    // Read and validate PDF
-    const arrayBuffer = await file.arrayBuffer()
-    
-    if (!isPDF(arrayBuffer)) {
-      return NextResponse.json(
-        { success: false, error: 'File must be a PDF' },
-        { status: 400 }
-      )
-    }
-
-    // Upload to Supabase Storage
+    // Upload to Supabase Storage using sanitized filename
     const uploadResult = await uploadDocument(
       user.id,
-      file.name,
+      validation.sanitizedFilename,
       arrayBuffer,
       'application/pdf',
       {
         documentType: 'document',
-        uploadedBy: adminUser.id,
-        year: year
+        uploadedBy: admin.id,
+        year: year,
+        originalFilename: file.name
       }
     )
 
@@ -80,10 +93,11 @@ export async function POST(request) {
     const newDocument = {
       id: documentId,
       type: 'document',
-      fileName: file.name,
+      fileName: validation.sanitizedFilename,
+      originalFileName: file.name,
       year,
       uploadedAt: new Date().toISOString(),
-      uploadedBy: adminUser.id,
+      uploadedBy: admin.id,
       storagePath: uploadResult.path
     }
 

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { fetchWithCsrf } from '../../../lib/csrfClient'
+import logger from '@/lib/logger'
 
 // Cache configuration
 const CACHE_DURATION = 30000 // 30 seconds
@@ -28,6 +30,8 @@ export function useAdminData() {
   // Helper to get cached data if still valid
   const getCachedData = (key) => {
     try {
+      if (typeof window === 'undefined') return null
+      
       const cached = localStorage.getItem(key)
       if (!cached) return null
       
@@ -42,7 +46,7 @@ export function useAdminData() {
       localStorage.removeItem(key)
       return null
     } catch (e) {
-      console.error('Cache read error:', e)
+      logger.error('Cache read error:', e)
       return null
     }
   }
@@ -50,26 +54,32 @@ export function useAdminData() {
   // Helper to set cached data
   const setCachedData = (key, data) => {
     try {
+      if (typeof window === 'undefined') return
+      
       localStorage.setItem(key, JSON.stringify({
         data,
         timestamp: Date.now()
       }))
     } catch (e) {
-      console.error('Cache write error:', e)
+      logger.error('Cache write error:', e)
     }
   }
 
   // Helper to clear specific cache
   const clearCache = (key) => {
     try {
+      if (typeof window === 'undefined') return
+      
       localStorage.removeItem(key)
     } catch (e) {
-      console.error('Cache clear error:', e)
+      logger.error('Cache clear error:', e)
     }
   }
 
   // Load initial data
   useEffect(() => {
+    if (typeof window === 'undefined') return
+    
     const init = async () => {
       try {
         const userId = localStorage.getItem('currentUserId')
@@ -100,7 +110,7 @@ export function useAdminData() {
           loadTimeMachine()
         ])
       } catch (e) {
-        console.error('Failed to load admin data', e)
+        logger.error('Failed to load admin data', e)
       } finally {
         setIsLoading(false)
       }
@@ -114,7 +124,7 @@ export function useAdminData() {
       if (!forceRefresh) {
         const cached = getCachedData(CACHE_KEY_USERS)
         if (cached) {
-          console.log('📦 Using cached user data')
+          logger.log('📦 Using cached user data')
           setUsers(cached)
           return
         }
@@ -131,10 +141,10 @@ export function useAdminData() {
       if (data.success) {
         setUsers(data.users || [])
         setCachedData(CACHE_KEY_USERS, data.users || [])
-        console.log('✓ User data loaded and cached')
+        logger.log('✓ User data loaded and cached')
       }
     } catch (e) {
-      console.error('Failed to load users', e)
+      logger.error('Failed to load users', e)
     }
   }
 
@@ -144,7 +154,7 @@ export function useAdminData() {
       if (!forceRefresh) {
         const cached = getCachedData(CACHE_KEY_WITHDRAWALS)
         if (cached) {
-          console.log('📦 Using cached withdrawals data')
+          logger.log('📦 Using cached withdrawals data')
           setWithdrawals(cached)
           return
         }
@@ -162,7 +172,7 @@ export function useAdminData() {
         setCachedData(CACHE_KEY_WITHDRAWALS, data.withdrawals || [])
       }
     } catch (e) {
-      console.error('Failed to load withdrawals', e)
+      logger.error('Failed to load withdrawals', e)
     } finally {
       setIsLoadingWithdrawals(false)
     }
@@ -174,7 +184,7 @@ export function useAdminData() {
       if (!forceRefresh) {
         const cached = getCachedData(CACHE_KEY_PAYOUTS)
         if (cached) {
-          console.log('📦 Using cached payouts data')
+          logger.log('📦 Using cached payouts data')
           setPendingPayouts(cached)
           return
         }
@@ -192,7 +202,7 @@ export function useAdminData() {
         setCachedData(CACHE_KEY_PAYOUTS, data.pendingPayouts || [])
       }
     } catch (e) {
-      console.error('Failed to load pending payouts', e)
+      logger.error('Failed to load pending payouts', e)
     } finally {
       setIsLoadingPayouts(false)
     }
@@ -211,14 +221,14 @@ export function useAdminData() {
         })
       }
     } catch (e) {
-      console.error('Failed to load time machine data', e)
+      logger.error('Failed to load time machine data', e)
     }
   }
 
   // Manual transaction migration for when needed (Time Machine changes, admin action)
   const migrateTransactions = async () => {
     try {
-      const res = await fetch('/api/migrate-transactions', { method: 'POST' })
+      const res = await fetchWithCsrf('/api/migrate-transactions', { method: 'POST' })
       const data = await res.json()
       if (data.success) {
         // Clear cache and reload users after migration
@@ -227,7 +237,7 @@ export function useAdminData() {
       }
       return data
     } catch (e) {
-      console.error('Failed to migrate transactions', e)
+      logger.error('Failed to migrate transactions', e)
       return { success: false, error: e.message }
     }
   }

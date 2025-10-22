@@ -2212,6 +2212,109 @@ def get_current_app_time():
 
 ---
 
+## Formatting Utilities
+
+**📁 Location:** 
+- `lib/dateUtils.js` - Date manipulation and formatting
+- `lib/formatters.js` - Currency, percentage, and number formatting
+- `lib/investmentCalculations.js` - Investment-specific formatting (uses dateUtils)
+
+### Date Formatting
+
+**ALWAYS use centralized date utilities from `lib/dateUtils.js`:**
+
+```javascript
+import { 
+  formatDateForDisplay,    // MM/DD/YYYY format
+  formatDateLocale,         // "November 20, 2024" 
+  formatDateTime,           // "11/20/2024, 3:45 PM"
+  isoToDateOnly,           // Extract YYYY-MM-DD from ISO
+  dateOnlyToISO            // Convert YYYY-MM-DD to ISO without timezone shift
+} from '@/lib/dateUtils.js'
+```
+
+**Examples:**
+
+```javascript
+// Input: "2024-11-20T00:00:00.000Z"
+formatDateForDisplay(date)  // "11/20/2024"
+formatDateLocale(date)      // "November 20, 2024"
+formatDateTime(date)        // "11/20/2024, 12:00 AM"
+```
+
+**⚠️ DON'T:**
+- Write inline date formatting logic: ❌ `new Date(date).toLocaleDateString()`
+- Create custom `formatDate` functions in components
+- Use `split('T')[0]` directly in display logic
+
+### Currency Formatting
+
+**ALWAYS use centralized currency utilities from `lib/formatters.js`:**
+
+```javascript
+import { formatCurrency, formatPercentage, formatNumber } from '@/lib/formatters.js'
+
+// Examples:
+formatCurrency(50000)         // "$50,000.00"
+formatCurrency(50000, true)   // "$50,000" (hide cents)
+formatPercentage(0.12)        // "12.00%"
+formatNumber(1000000)         // "1,000,000"
+```
+
+**⚠️ DON'T:**
+- Write inline formatters: ❌ `new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount)`
+- Create duplicate `formatCurrency` functions
+- Use different formatting standards across components
+
+### Why Centralization Matters
+
+**Before (11+ files with duplicate logic):**
+```javascript
+// Component A
+const formatCurrency = (amount) => {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount)
+}
+
+// Component B (slightly different!)
+const formatCurrency = (amount) => {
+  return new Intl.NumberFormat('en-US', { 
+    style: 'currency', 
+    currency: 'USD',
+    minimumFractionDigits: 2 
+  }).format(amount || 0)
+}
+```
+
+**After (Single source of truth):**
+```javascript
+// All components
+import { formatCurrency } from '@/lib/formatters.js'
+```
+
+**Benefits:**
+- ✅ Bug fixes applied once, everywhere
+- ✅ Consistent formatting across the entire app
+- ✅ Smaller bundle size (no duplicate code)
+- ✅ Easier to maintain and modify
+- ✅ Clear API for developers
+
+### Best Practices
+
+1. **Import, Don't Reinvent:**
+   - Check `lib/dateUtils.js` and `lib/formatters.js` before writing formatting code
+   - Use existing functions or add to the utility files
+
+2. **Separation of Concerns:**
+   - `lib/dateUtils.js` - Date manipulation without timezone issues
+   - `lib/formatters.js` - Display formatting (currency, numbers)
+   - `lib/investmentCalculations.js` - Business logic calculations
+
+3. **Don't Duplicate:**
+   - If you see inline formatting, refactor it to use utilities
+   - One function, many uses - not many functions, duplicate code
+
+---
+
 ## Testing Requirements
 
 ### JWT Authentication Testing

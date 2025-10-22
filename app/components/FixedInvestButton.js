@@ -10,6 +10,8 @@ export default function FixedInvestButton() {
 
   useEffect(() => {
     setMounted(true)
+    if (typeof window === 'undefined') return
+    
     const init = async () => {
       const userId = localStorage.getItem('currentUserId')
       if (!userId) return

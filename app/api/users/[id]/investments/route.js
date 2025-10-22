@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getUser, addInvestment, updateInvestment, deleteInvestment } from '../../../../../lib/supabaseDatabase.js'
 import { createServiceClient } from '../../../../../lib/supabaseClient.js'
 import { getCurrentAppTime } from '../../../../../lib/appTime.js'
-import { generateGlobalInvestmentId, generateTransactionId } from '../../../../../lib/idGenerator.js'
+import { generateSequentialInvestmentId, generateTransactionId } from '../../../../../lib/idGenerator.js'
 
 /**
  * POST /api/users/[id]/investments
@@ -91,8 +91,8 @@ export async function POST(request, { params }) {
       investmentData.accountType = user.account_type
     }
 
-    // TODO: Generate proper investment ID (requires querying all investments globally)
-    const investmentId = `INV-${Date.now()}`
+    // Generate sequential investment ID from database
+    const investmentId = await generateSequentialInvestmentId()
 
     // Create investment
     const result = await addInvestment(userId, {

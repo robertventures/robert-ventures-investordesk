@@ -28,6 +28,8 @@ export default function TabbedInvestmentType({ onCompleted, showContinueButton =
     if (typeof onChange === 'function') onChange(key)
     if (!autoSaveOnSelect) return
     try {
+      if (typeof window === 'undefined') return
+      
       const userId = localStorage.getItem('currentUserId')
       const investmentId = localStorage.getItem('currentInvestmentId')
       if (!userId || !investmentId) return

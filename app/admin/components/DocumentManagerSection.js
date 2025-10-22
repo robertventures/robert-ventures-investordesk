@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { fetchWithCsrf } from '../../../lib/csrfClient'
 import styles from './DocumentManagerSection.module.css'
 
 /**
@@ -79,7 +80,7 @@ export default function DocumentManagerSection({ currentUser, onUploadComplete }
       formData.append('file', bulkFile)
       formData.append('adminEmail', currentUser.email)
 
-      const res = await fetch('/api/admin/documents/bulk-upload', {
+      const res = await fetchWithCsrf('/api/admin/documents/bulk-upload', {
         method: 'POST',
         body: formData
       })
@@ -119,7 +120,7 @@ export default function DocumentManagerSection({ currentUser, onUploadComplete }
       formData.append('userId', singleUserId)
       formData.append('adminEmail', currentUser.email)
 
-      const res = await fetch('/api/admin/documents/upload-single', {
+      const res = await fetchWithCsrf('/api/admin/documents/upload-single', {
         method: 'POST',
         body: formData
       })
@@ -180,7 +181,7 @@ export default function DocumentManagerSection({ currentUser, onUploadComplete }
     }
 
     try {
-      const res = await fetch('/api/admin/documents/delete', {
+      const res = await fetchWithCsrf('/api/admin/documents/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -205,7 +206,7 @@ export default function DocumentManagerSection({ currentUser, onUploadComplete }
 
   const handleAssignPending = async (filename, userId, pdfDataBase64) => {
     try {
-      const res = await fetch('/api/admin/documents/assign-pending', {
+      const res = await fetchWithCsrf('/api/admin/documents/assign-pending', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

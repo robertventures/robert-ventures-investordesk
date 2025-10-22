@@ -1,8 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+import { fetchWithCsrf } from '../../../lib/csrfClient'
 import styles from './ImportInvestorsTab.module.css'
-import { isoToDateOnly } from '../../../lib/dateUtils.js'
+import { isoToDateOnly, formatDateForDisplay } from '../../../lib/dateUtils.js'
 
 const IMPORT_STAGES = {
   ADD: 'add',
@@ -44,19 +45,15 @@ const formatZip = (value = '') => value.replace(/\D/g, '').slice(0, 5)
 // Names: Allow only letters, spaces, hyphens, apostrophes, and periods
 const formatName = (value = '') => value.replace(/[^a-zA-Z\s'\-\.]/g, '')
 
-// Format date for display without timezone conversion
-// Input: "2024-11-20" or "2024-11-20T00:00:00.000Z"
-// Output: "11/20/2024"
-const formatDateForDisplay = (dateString) => {
-  if (!dateString) return ''
-  
-  // Extract just the date part (YYYY-MM-DD)
-  const datePart = dateString.split('T')[0]
-  const [year, month, day] = datePart.split('-')
-  
-  // Return in MM/DD/YYYY format
-  return `${month}/${day}/${year}`
+// SSN formatting (XXX-XX-XXXX)
+const formatSsn = (value = '') => {
+  const digits = value.replace(/\D/g, '').slice(0, 9)
+  if (digits.length <= 3) return digits
+  if (digits.length <= 5) return `${digits.slice(0, 3)}-${digits.slice(3)}`
+  return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`
 }
+
+const isCompleteSsn = (value = '') => value.replace(/\D/g, '').length === 9
 
 export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
   const [stage, setStage] = useState(IMPORT_STAGES.ADD)
@@ -73,6 +70,7 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
     lastName: '',
     phoneNumber: '',
     dob: '',
+    ssn: '',
     accountCreatedDate: '', // Date when account was originally created on Wealthblock
     accountType: 'individual',
     address: {
@@ -204,7 +202,7 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
       })
 
       // Call import API
-      const response = await fetch('/api/admin/import-investors', {
+      const response = await fetchWithCsrf('/api/admin/import-investors', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -241,36 +239,6 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
     await performImport(editableData)
   }
 
-  // Send welcome emails
-  const handleSendWelcomeEmails = async () => {
-    if (!importResults?.importedUserIds?.length) return
-
-    setIsProcessing(true)
-    try {
-      const response = await fetch('/api/auth/send-welcome', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          adminUserId: currentUser.id,
-          userIds: importResults.importedUserIds
-        })
-      })
-
-      const result = await response.json()
-
-      if (result.success) {
-        alert(`Emails sent: ${result.totalSent} successful, ${result.totalFailed} failed`)
-      } else {
-        alert(`Failed to send emails: ${result.error}`)
-      }
-    } catch (error) {
-      console.error('Error sending emails:', error)
-      alert(`Error sending emails: ${error.message}`)
-    } finally {
-      setIsProcessing(false)
-    }
-  }
-
   // Handle manual form field changes
   const handleManualFormChange = (field, value) => {
     // Apply formatting based on field type
@@ -278,6 +246,8 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
     
     if (field === 'phoneNumber' || field.endsWith('.phoneNumber')) {
       formattedValue = formatPhone(value)
+    } else if (field === 'ssn' || field.endsWith('.ssn')) {
+      formattedValue = formatSsn(value)
     } else if (field === 'firstName' || field === 'lastName' || 
                field.endsWith('.firstName') || field.endsWith('.lastName')) {
       formattedValue = formatName(value)
@@ -459,6 +429,7 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
       lastName: '',
       phoneNumber: '',
       dob: '',
+      ssn: '',
       accountCreatedDate: '',
       accountType: 'individual',
       address: {
@@ -642,6 +613,19 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
                     value={manualForm.dob}
                     onChange={(e) => handleManualFormChange('dob', e.target.value)}
                   />
+                </div>
+                <div className={styles.formGroup}>
+                  <label>SSN</label>
+                  <input
+                    type="text"
+                    value={manualForm.ssn}
+                    onChange={(e) => handleManualFormChange('ssn', e.target.value)}
+                    placeholder="123-45-6789"
+                    maxLength="11"
+                  />
+                  {manualForm.ssn && !isCompleteSsn(manualForm.ssn) && (
+                    <span className={styles.fieldHint}>Enter 9 digits</span>
+                  )}
                 </div>
                 <div className={styles.formGroup}>
                   <label>Account Created Date</label>
@@ -1439,16 +1423,13 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
           )}
 
           <div className={styles.actions}>
-            <button
-              onClick={handleSendWelcomeEmails}
-              className={styles.primaryButton}
-              disabled={isProcessing || !importResults.importedUserIds?.length}
-            >
-              {isProcessing ? 'Sending...' : '📧 Send Welcome Emails'}
-            </button>
-            <button onClick={handleReset} className={styles.secondaryButton}>
+            <button onClick={handleReset} className={styles.primaryButton}>
               Import Another Investor
             </button>
+          </div>
+          
+          <div className={styles.note} style={{ marginTop: '16px', padding: '12px', background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '6px' }}>
+            <strong>📝 Next Steps:</strong> Review each imported user's information and investments from the Accounts tab, then send setup invitations individually from their user detail page.
           </div>
         </div>
       )}

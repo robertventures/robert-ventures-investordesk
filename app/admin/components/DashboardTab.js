@@ -3,6 +3,7 @@ import { useRouter } from 'next/navigation'
 import MetricCard from './MetricCard'
 import ActionCard from './ActionCard'
 import SectionCard from './SectionCard'
+import { fetchWithCsrf } from '../../../lib/csrfClient'
 import styles from './DashboardTab.module.css'
 
 /**
@@ -66,7 +67,7 @@ const DashboardTab = memo(function DashboardTab({
         const payout = pendingPayouts.find(p => p.id === payoutId)
         if (payout) {
           try {
-            const res = await fetch('/api/admin/pending-payouts', {
+            const res = await fetchWithCsrf('/api/admin/pending-payouts', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ 
@@ -131,7 +132,7 @@ const DashboardTab = memo(function DashboardTab({
         const payout = pendingPayouts.find(p => p.id === payoutId)
         if (payout) {
           try {
-            const res = await fetch('/api/admin/pending-payouts', {
+            const res = await fetchWithCsrf('/api/admin/pending-payouts', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ 

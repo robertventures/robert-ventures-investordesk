@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import { fetchWithCsrf } from '../../lib/csrfClient'
+import logger from '@/lib/logger'
 import Header from '../components/Header'
 import styles from './page.module.css'
 
@@ -15,6 +17,8 @@ export default function ConfirmationPage() {
   const inputRefs = useRef([])
 
   useEffect(() => {
+    if (typeof window === 'undefined') return
+    
     // Try to get from URL parameters first (more reliable in production)
     const params = new URLSearchParams(window.location.search)
     const urlEmail = params.get('email')
@@ -120,7 +124,7 @@ export default function ConfirmationPage() {
       }
 
       // Call backend to verify code and create the actual user account
-      const res = await fetch('/api/auth/verify-and-create', {
+      const res = await fetchWithCsrf('/api/auth/verify-and-create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include', // Important: needed to receive auth cookies
@@ -140,8 +144,10 @@ export default function ConfirmationPage() {
         if (errorMessage.includes('not found or expired')) {
           errorMessage = 'Registration expired. Please sign up again.'
           // Clear localStorage
-          localStorage.removeItem('signupEmail')
-          localStorage.removeItem('pendingRegistration')
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('signupEmail')
+            localStorage.removeItem('pendingRegistration')
+          }
         }
         
         setError(errorMessage)
@@ -152,16 +158,18 @@ export default function ConfirmationPage() {
 
       // Verification successful! User account created and automatically logged in
       // Update localStorage with user info
-      localStorage.setItem('currentUserId', data.user.id)
-      localStorage.setItem('signupEmail', data.user.email)
-      localStorage.removeItem('pendingRegistration') // Clear pending flag
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('currentUserId', data.user.id)
+        localStorage.setItem('signupEmail', data.user.email)
+        localStorage.removeItem('pendingRegistration') // Clear pending flag
+      }
       
-      console.log('✅ Account created and verified successfully, user auto-logged in, redirecting to investment page')
+      logger.log('✅ Account created and verified successfully, user auto-logged in, redirecting to investment page')
       
       // Redirect to investment page to continue the onboarding flow
       router.push('/investment?context=onboarding')
     } catch (err) {
-      console.error('Verification error:', err)
+      logger.error('Verification error:', err)
       setError('An error occurred. Please try again.')
       setCode(['', '', '', '', '', ''])
       inputRefs.current[0]?.focus()

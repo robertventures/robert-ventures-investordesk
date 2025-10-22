@@ -327,22 +327,21 @@ export async function POST(request) {
         }
 
         // VALIDATION: Check ALL existing contributions for valid distributionTxId links
-        // This catches orphaned contributions that may exist from before validation was added
+        // STRICT MODE: Fail fast on bad data during development/testing
         for (const tx of inv.transactions) {
           if (tx.type === 'contribution') {
             if (!tx.distributionTxId) {
-              throw new Error(`Existing contribution transaction ${tx.id} must have a distributionTxId`)
+              throw new Error(`Contribution transaction ${tx.id} is missing required distributionTxId. Please delete bad data and re-import.`)
             }
             const distribution = inv.transactions.find(existing => existing.id === tx.distributionTxId)
             if (!distribution) {
-              throw new Error(`Existing contribution ${tx.id} references non-existent distribution ${tx.distributionTxId}`)
+              throw new Error(`Contribution ${tx.id} references non-existent distribution ${tx.distributionTxId}. Please delete bad data and re-import.`)
             }
             if (distribution.type !== 'distribution') {
-              throw new Error(`Existing contribution ${tx.id} references transaction ${tx.distributionTxId} which is not a distribution`)
+              throw new Error(`Contribution ${tx.id} references transaction ${tx.distributionTxId} which is not a distribution. Please delete bad data and re-import.`)
             }
-            // Distribution must be created before the contribution
             if (new Date(distribution.date) >= new Date(tx.date)) {
-              throw new Error(`Existing contribution ${tx.id} references distribution ${tx.distributionTxId} that was not created before the contribution`)
+              throw new Error(`Contribution ${tx.id} references distribution ${tx.distributionTxId} that was not created before the contribution. Please delete bad data and re-import.`)
             }
           }
         }
@@ -827,3 +826,4 @@ export async function POST(request) {
     }, { status: 500 })
   }
 }
+

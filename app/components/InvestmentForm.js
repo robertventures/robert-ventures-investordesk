@@ -222,7 +222,9 @@ export default function InvestmentForm({ onCompleted, onReviewSummary, disableAu
   const handleInvest = async (lockupPeriod) => {
     if (!validateForm()) return
     try {
-      const userId = typeof window !== 'undefined' ? localStorage.getItem('currentUserId') : null
+      if (typeof window === 'undefined') return
+      
+      const userId = localStorage.getItem('currentUserId')
       if (!userId) {
         alert('Please sign in to continue')
         router.push('/')
@@ -237,7 +239,7 @@ export default function InvestmentForm({ onCompleted, onReviewSummary, disableAu
       }
 
       // Check if resuming an existing draft investment
-      const existingInvestmentId = typeof window !== 'undefined' ? localStorage.getItem('currentInvestmentId') : null
+      const existingInvestmentId = localStorage.getItem('currentInvestmentId')
       
       if (existingInvestmentId) {
         // Update existing draft investment

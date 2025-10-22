@@ -1,6 +1,8 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { fetchWithCsrf, clearCsrfToken } from '../../lib/csrfClient'
+import logger from '@/lib/logger'
 import styles from './DashboardHeader.module.css'
 
 export default function DashboardHeader({ onViewChange, activeView }) {
@@ -11,6 +13,8 @@ export default function DashboardHeader({ onViewChange, activeView }) {
 
   useEffect(() => {
     setMounted(true)
+    if (typeof window === 'undefined') return
+    
     const userId = localStorage.getItem('currentUserId')
     if (!userId) {
       router.push('/')
@@ -25,7 +29,7 @@ export default function DashboardHeader({ onViewChange, activeView }) {
           setUserData(data.user)
         }
       } catch (e) {
-        console.error('Failed to load user data', e)
+        logger.error('Failed to load user data', e)
       }
     }
     loadUser()
@@ -33,8 +37,9 @@ export default function DashboardHeader({ onViewChange, activeView }) {
 
   const handleMakeInvestment = () => {
     try {
-      // Force a fresh draft on new investment flow
-      localStorage.removeItem('currentInvestmentId')
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('currentInvestmentId')
+      }
     } catch {}
     router.push('/investment?context=new')
   }
@@ -42,24 +47,31 @@ export default function DashboardHeader({ onViewChange, activeView }) {
   const handleLogout = async () => {
     try {
       // Call logout API to clear cookies
-      await fetch('/api/auth/logout', {
+      await fetchWithCsrf('/api/auth/logout', {
         method: 'POST',
         credentials: 'include'
       })
       
+      // Clear cached CSRF token
+      clearCsrfToken()
+      
       // Clear localStorage
-      localStorage.removeItem('currentUserId')
-      localStorage.removeItem('signupEmail')
-      localStorage.removeItem('currentInvestmentId')
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('currentUserId')
+        localStorage.removeItem('signupEmail')
+        localStorage.removeItem('currentInvestmentId')
+      }
       
       // Redirect to sign-in page
       router.push('/sign-in')
     } catch (error) {
-      console.error('Logout error:', error)
+      logger.error('Logout error:', error)
       // Still redirect even if API call fails
-      localStorage.removeItem('currentUserId')
-      localStorage.removeItem('signupEmail')
-      localStorage.removeItem('currentInvestmentId')
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('currentUserId')
+        localStorage.removeItem('signupEmail')
+        localStorage.removeItem('currentInvestmentId')
+      }
       router.push('/sign-in')
     }
   }
@@ -104,6 +116,12 @@ export default function DashboardHeader({ onViewChange, activeView }) {
             Dashboard
           </button>
           <button 
+            onClick={() => onViewChange('investments')} 
+            className={`${styles.navItem} ${activeView === 'investments' ? styles.active : ''}`}
+          >
+            Investments
+          </button>
+          <button 
             onClick={() => onViewChange('profile')} 
             className={`${styles.navItem} ${activeView === 'profile' ? styles.active : ''}`}
           >
@@ -114,12 +132,6 @@ export default function DashboardHeader({ onViewChange, activeView }) {
             className={`${styles.navItem} ${activeView === 'documents' ? styles.active : ''}`}
           >
             Documents
-          </button>
-          <button
-            onClick={() => onViewChange('activity')}
-            className={`${styles.navItem} ${activeView === 'activity' ? styles.active : ''}`}
-          >
-            Activity
           </button>
           <button
             onClick={() => onViewChange('contact')}
@@ -145,13 +157,17 @@ export default function DashboardHeader({ onViewChange, activeView }) {
               <div className={styles.mobileUserEmail}>{userData.email}</div>
             </div>
             <button className={styles.mobileNavItem} onClick={() => handleNavSelect('portfolio')}>Dashboard</button>
+            <button className={styles.mobileNavItem} onClick={() => handleNavSelect('investments')}>Investments</button>
             <button className={styles.mobileNavItem} onClick={() => handleNavSelect('profile')}>Profile</button>
             <button className={styles.mobileNavItem} onClick={() => handleNavSelect('documents')}>Documents</button>
-            <button className={styles.mobileNavItem} onClick={() => handleNavSelect('activity')}>Activity</button>
             <button className={styles.mobileNavItem} onClick={() => handleNavSelect('contact')}>Contact</button>
             <button className={styles.mobileNavItem} onClick={() => { 
               setShowMobileNav(false); 
-              try { localStorage.removeItem('currentInvestmentId') } catch {}
+              try { 
+                if (typeof window !== 'undefined') {
+                  localStorage.removeItem('currentInvestmentId')
+                }
+              } catch {}
               router.push('/investment?context=new') 
             }}>Make an Investment</button>
             <div className={styles.mobileDivider}></div>

@@ -23,6 +23,8 @@ export default function PortfolioSummary() {
   const chartAreaRef = useRef(null)
 
   const loadData = useCallback(async () => {
+    if (typeof window === 'undefined') return
+    
     const userId = localStorage.getItem('currentUserId')
     if (!userId) return
 
@@ -273,15 +275,6 @@ export default function PortfolioSummary() {
     return () => ro.disconnect()
   }, [])
 
-  const handleInvestmentClick = (inv) => {
-    if (inv?.status?.status === 'draft') {
-      try { localStorage.setItem('currentInvestmentId', inv.id) } catch {}
-      router.push('/investment')
-      return
-    }
-    router.push(`/investment-details/${inv.id}`)
-  }
-
   // Prevent hydration mismatch by not rendering until mounted on client
   if (!mounted || !userData) {
     return <div className={styles.loading}>Loading portfolio...</div>
@@ -403,113 +396,10 @@ export default function PortfolioSummary() {
         </div>
       </div>
       
-      {/* Activity embedded on main dashboard (above investments) */}
+      {/* Activity embedded on main dashboard with pagination */}
       <div className={styles.transactionsWrapper}>
         <h2 className={styles.investmentsTitle}>ACTIVITY</h2>
-        <TransactionsList limit={5} />
-      </div>
-
-      {/* Investments Section - Always visible with empty state */}
-      <div className={styles.investmentsSection}>
-        <h2 className={styles.investmentsTitle}>INVESTMENTS</h2>
-        {portfolioData.investments.length === 0 ? (
-          <div className={styles.investmentsList}>
-            <div className={styles.investmentCard} style={{ cursor: 'default' }}>
-              <div className={styles.cardTop}>
-                <div className={styles.cardLeft}>
-                  <div className={styles.amountLabel}>No investments yet</div>
-                  <div className={styles.investmentType}>Start your first investment to begin earning</div>
-                </div>
-              </div>
-              <div className={styles.cardBottom}>
-                <div className={styles.viewDetails} onClick={() => {
-                  try { localStorage.removeItem('currentInvestmentId') } catch {}
-                  router.push('/investment?context=new')
-                }}>Start an Investment →</div>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className={styles.investmentsList}>
-            {portfolioData.investments.map(inv => (
-              <div 
-                key={inv.id} 
-                className={styles.investmentCard}
-                onClick={() => handleInvestmentClick(inv)}
-              >
-                <div className={styles.cardTop}>
-                  <div className={styles.cardLeft}>
-                    <div className={styles.amountLabel}>Investment Amount</div>
-                    <div className={styles.investmentAmount}>{formatCurrency(inv.amount)}</div>
-                    <div className={styles.investmentType}>
-                      {inv.lockupPeriod === '3-year' ? '3Y' : '1Y'} • {inv.paymentFrequency === 'monthly' ? 'Monthly' : 'Compound'}
-                    </div>
-                  </div>
-                  <span className={`${styles.statusBadge} ${inv.status.status === 'withdrawn' ? styles.withdrawn : inv.status.status === 'draft' ? styles.draft : (inv.status.isLocked ? styles.locked : styles.available)}`}>
-                    {inv.status.statusLabel === 'Available for Withdrawal' ? 'Available' : inv.status.statusLabel}
-                  </span>
-                </div>
-                <div className={styles.cardBottom}>
-                  <div className={styles.compactMetric}>
-                    <span className={styles.compactLabel}>Investment</span>
-                    <span className={styles.investmentBadge}>Investment {String(inv.id).slice(-6)}</span>
-                  </div>
-                  <div className={styles.compactMetric}>
-                    <span className={styles.compactLabel}>Confirmation Date</span>
-                    <span className={styles.compactValue}>{inv.confirmedAt ? formatDate(inv.confirmedAt) : (inv.status.status === 'pending' ? 'Pending' : '—')}</span>
-                  </div>
-                  <div className={styles.compactMetric}>
-                    <span className={styles.compactLabel}>Current Bond Value</span>
-                    <span className={styles.compactValue}>{formatCurrency(inv.calculation.currentValue)}</span>
-                  </div>
-                  <div className={styles.compactMetric}>
-                    <span className={styles.compactLabel}>Earnings</span>
-                    <span className={styles.compactValue}>{formatCurrency(inv.calculation.totalEarnings)}</span>
-                  </div>
-                  {/* Actions: Resume/View; show Delete for drafts */}
-                  <div className={styles.cardActions}>
-                    {inv.status.status === 'draft' && (
-                      <button
-                        className={styles.deleteDraft}
-                        onClick={async (e) => {
-                          e.stopPropagation()
-                          if (!confirm('Delete this draft? This cannot be undone.')) return
-                          try {
-                            const userId = localStorage.getItem('currentUserId')
-                            const res = await fetch(`/api/users/${userId}`, {
-                              method: 'PUT',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ _action: 'deleteInvestment', investmentId: inv.id })
-                            })
-                            const data = await res.json()
-                            if (!data.success) {
-                              alert(data.error || 'Failed to delete draft')
-                              return
-                            }
-                            await loadData()
-                          } catch (e) {
-                            console.error('Failed to delete draft', e)
-                            alert('Failed to delete draft')
-                          }
-                        }}
-                      >
-                        Delete Draft
-                      </button>
-                    )}
-                    <div className={styles.viewDetails}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleInvestmentClick(inv)
-                      }}
-                    >
-                      {inv.status.status === 'draft' ? 'Resume Draft →' : 'View Details →'}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        <TransactionsList limit={null} showViewAll={false} expandable={true} />
       </div>
     </div>
   )

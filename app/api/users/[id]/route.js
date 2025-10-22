@@ -5,6 +5,7 @@ import { getCurrentAppTime } from '../../../../lib/appTime.js'
 import { decrypt, isEncrypted } from '../../../../lib/encryption.js'
 import { signToken, signRefreshToken } from '../../../../lib/auth.js'
 import { setAuthCookies } from '../../../../lib/authMiddleware.js'
+import { generateSequentialInvestmentId } from '../../../../lib/idGenerator.js'
 
 /**
  * Helper function to format user data for API response
@@ -94,6 +95,21 @@ export async function GET(request, { params }) {
       .order('is_primary', { ascending: false })
       .order('created_at', { ascending: false })
 
+    // Get primary address or use legacy address field
+    const primaryAddress = addresses && addresses.length > 0 
+      ? addresses.find(addr => addr.is_primary) || addresses[0]
+      : null
+    
+    // Populate the address field from primary address or legacy field
+    const addressData = primaryAddress ? {
+      street1: primaryAddress.street1,
+      street2: primaryAddress.street2,
+      city: primaryAddress.city,
+      state: primaryAddress.state,
+      zip: primaryAddress.zip,
+      country: primaryAddress.country
+    } : (user.address || null)
+
     // Convert snake_case to camelCase for frontend
     const safeUser = {
       id: user.id,
@@ -102,10 +118,13 @@ export async function GET(request, { params }) {
       lastName: user.last_name,
       phoneNumber: user.phone_number,
       dob: user.dob,
+      address: addressData,
       accountType: user.account_type,
       isAdmin: user.is_admin,
       isVerified: user.is_verified,
       verifiedAt: user.verified_at,
+      needsOnboarding: user.needs_onboarding || false,
+      onboardingCompletedAt: user.onboarding_completed_at,
       createdAt: user.created_at,
       updatedAt: user.updated_at,
       investments: (user.investments || []).map(inv => ({
@@ -179,24 +198,41 @@ export async function GET(request, { params }) {
       }
     }
     
-    // Handle main user SSN
+    // Handle main user SSN - always include field if SSN exists
     if (user.ssn) {
       safeUser.ssn = handleSSN(user.ssn)
+    } else {
+      // Indicate no SSN on file
+      safeUser.ssn = null
     }
     
     // Handle joint holder SSN
-    if (safeUser.jointHolder && user.joint_holder?.ssn) {
-      safeUser.jointHolder = {
-        ...safeUser.jointHolder,
-        ssn: handleSSN(user.joint_holder.ssn)
+    if (safeUser.jointHolder) {
+      if (user.joint_holder?.ssn) {
+        safeUser.jointHolder = {
+          ...safeUser.jointHolder,
+          ssn: handleSSN(user.joint_holder.ssn)
+        }
+      } else {
+        safeUser.jointHolder = {
+          ...safeUser.jointHolder,
+          ssn: null
+        }
       }
     }
     
     // Handle authorized representative SSN
-    if (safeUser.authorizedRepresentative && user.authorized_representative?.ssn) {
-      safeUser.authorizedRepresentative = {
-        ...safeUser.authorizedRepresentative,
-        ssn: handleSSN(user.authorized_representative.ssn)
+    if (safeUser.authorizedRepresentative) {
+      if (user.authorized_representative?.ssn) {
+        safeUser.authorizedRepresentative = {
+          ...safeUser.authorizedRepresentative,
+          ssn: handleSSN(user.authorized_representative.ssn)
+        }
+      } else {
+        safeUser.authorizedRepresentative = {
+          ...safeUser.authorizedRepresentative,
+          ssn: null
+        }
       }
     }
 
@@ -259,8 +295,8 @@ export async function PUT(request, { params }) {
         )
       }
 
-      // Generate investment ID
-      const newInvestmentId = `INV-${Date.now()}`
+      // Generate sequential investment ID from database
+      const newInvestmentId = await generateSequentialInvestmentId()
       
       const result = await addInvestment(id, {
         id: newInvestmentId,
@@ -863,8 +899,68 @@ export async function PUT(request, { params }) {
       }
     }
 
+    if (_action === 'setInitialPassword') {
+      // Set initial password for imported users (no current password needed)
+      const { password } = body
+      if (!password) {
+        return NextResponse.json(
+          { success: false, error: 'Password is required' },
+          { status: 400 }
+        )
+      }
+
+      // Validate password strength
+      if (password.length < 8) {
+        return NextResponse.json(
+          { success: false, error: 'Password must be at least 8 characters' },
+          { status: 400 }
+        )
+      }
+
+      try {
+        const supabase = createServiceClient()
+
+        // Get user auth_id
+        const user = await getUser(id)
+        if (!user || !user.auth_id) {
+          return NextResponse.json(
+            { success: false, error: 'User not found' },
+            { status: 404 }
+          )
+        }
+
+        // Update password directly via admin API (no current password verification needed)
+        const { error: updateError } = await supabase.auth.admin.updateUserById(
+          user.auth_id,
+          { password: password }
+        )
+
+        if (updateError) {
+          console.error('Error setting initial password:', updateError)
+          return NextResponse.json(
+            { success: false, error: 'Failed to set password' },
+            { status: 500 }
+          )
+        }
+
+        console.log(`✅ Initial password set for user ${id}`)
+
+        return NextResponse.json({
+          success: true,
+          message: 'Password set successfully'
+        })
+
+      } catch (error) {
+        console.error('Error setting initial password:', error)
+        return NextResponse.json(
+          { success: false, error: 'Internal server error' },
+          { status: 500 }
+        )
+      }
+    }
+
     if (_action === 'changePassword') {
-      // Change password
+      // Change password (requires current password verification)
       const { currentPassword, newPassword } = body
       if (!currentPassword || !newPassword) {
         return NextResponse.json(

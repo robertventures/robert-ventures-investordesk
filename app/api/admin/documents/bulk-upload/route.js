@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
 import { getUsers, updateUser } from '../../../../../lib/supabaseDatabase.js'
-import { uploadDocument, isPDF } from '../../../../../lib/supabaseStorage.js'
+import { uploadDocument } from '../../../../../lib/supabaseStorage.js'
 import { sendDocumentNotification } from '../../../../../lib/emailService.js'
 import { generateTransactionId } from '../../../../../lib/idGenerator.js'
 import { requireAdmin, authErrorResponse } from '../../../../../lib/authMiddleware.js'
+import { validateFile } from '../../../../../lib/fileValidation.js'
 import JSZip from 'jszip'
 
 /**
@@ -30,13 +31,33 @@ export async function POST(request) {
       )
     }
 
+    // Read ZIP file data
+    const arrayBuffer = await zipFile.arrayBuffer()
+
+    // Validate ZIP file (size, extension, MIME type, content)
+    const zipValidation = validateFile({
+      file: { name: zipFile.name, size: zipFile.size },
+      data: arrayBuffer,
+      expectedMimeType: 'application/zip'
+    })
+
+    if (!zipValidation.valid) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'ZIP file validation failed',
+          details: zipValidation.errors 
+        },
+        { status: 400 }
+      )
+    }
+
     // Auto-set year to current year for organizational purposes
     const year = new Date().getFullYear().toString()
 
     const usersData = await getUsers()
 
     // Parse ZIP file
-    const arrayBuffer = await zipFile.arrayBuffer()
     const zip = await JSZip.loadAsync(arrayBuffer)
     
     const results = {
@@ -56,17 +77,26 @@ export async function POST(request) {
         const file = zip.files[filename]
         const pdfData = await file.async('arraybuffer')
         
-        // Validate PDF
-        if (!isPDF(pdfData)) {
+        // Extract base filename
+        const baseName = filename.split('/').pop() // Handle folder structures
+        
+        // Validate PDF (size, extension, MIME type, content)
+        const pdfValidation = validateFile({
+          file: { name: baseName, size: pdfData.byteLength },
+          data: pdfData,
+          expectedMimeType: 'application/pdf'
+        })
+        
+        if (!pdfValidation.valid) {
           results.errors.push({
-            filename,
-            error: 'Invalid PDF file'
+            filename: baseName,
+            error: 'PDF validation failed',
+            details: pdfValidation.errors
           })
           continue
         }
 
         // Extract name from filename (before first underscore or number)
-        const baseName = filename.split('/').pop() // Handle folder structures
         const nameMatch = baseName.match(/^([A-Za-z]+)([A-Za-z]+)/)
         
         if (!nameMatch) {
@@ -112,16 +142,17 @@ export async function POST(request) {
           
           // No duplicate checking - allow multiple documents per user
           
-          // Upload to Supabase Storage
+          // Upload to Supabase Storage using sanitized filename
           const uploadResult = await uploadDocument(
             user.id,
-            baseName,
+            pdfValidation.sanitizedFilename,
             pdfData,
             'application/pdf',
             {
               documentType: 'document',
-              uploadedBy: adminUser.id,
-              year: year
+              uploadedBy: admin.id,
+              year: year,
+              originalFilename: baseName
             }
           )
 
@@ -139,10 +170,11 @@ export async function POST(request) {
           const newDocument = {
             id: documentId,
             type: 'document',
-            fileName: baseName,
+            fileName: pdfValidation.sanitizedFilename,
+            originalFileName: baseName,
             year,
             uploadedAt: new Date().toISOString(),
-            uploadedBy: adminUser.id,
+            uploadedBy: admin.id,
             storagePath: uploadResult.path
           }
 

@@ -46,9 +46,9 @@
 }
 
 .documentsGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-  gap: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .yearSection {
@@ -259,10 +259,6 @@
   }
 
   .documentTypes {
-    grid-template-columns: 1fr;
-  }
-
-  .documentsGrid {
     grid-template-columns: 1fr;
   }
 

@@ -1,8 +1,11 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { fetchWithCsrf } from '../../../../lib/csrfClient'
 import AdminHeader from '../../../components/AdminHeader'
 import styles from './page.module.css'
+import { formatCurrency } from '../../../../lib/formatters.js'
+import { formatDateTime } from '../../../../lib/dateUtils.js'
 
 export default function AdminTransactionDetailsPage({ params }) {
   const router = useRouter()
@@ -15,6 +18,8 @@ export default function AdminTransactionDetailsPage({ params }) {
   const [isProcessing, setIsProcessing] = useState(false)
 
   useEffect(() => {
+    if (typeof window === 'undefined') return
+    
     const init = async () => {
       try {
         const meId = localStorage.getItem('currentUserId')
@@ -104,22 +109,6 @@ export default function AdminTransactionDetailsPage({ params }) {
     init()
   }, [router, transactionId])
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount || 0)
-  }
-
-  const formatDate = (dateString) => {
-    if (!dateString) return '-'
-    return new Date(dateString).toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZone: 'America/New_York'
-    })
-  }
-
   const getStatusBadge = (status) => {
     const statusMap = {
       pending: { label: 'Pending', color: '#f59e0b' },
@@ -161,7 +150,7 @@ export default function AdminTransactionDetailsPage({ params }) {
     setIsProcessing(true)
 
     try {
-      const res = await fetch('/api/admin/pending-payouts', {
+      const res = await fetchWithCsrf('/api/admin/pending-payouts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -242,7 +231,7 @@ export default function AdminTransactionDetailsPage({ params }) {
             <div className={styles.summaryDetails}>
               <div className={styles.detailItem}>
                 <span className={styles.detailLabel}>Date</span>
-                <span className={styles.detailValue}>{formatDate(transaction.displayDate || transaction.date)}</span>
+                <span className={styles.detailValue}>{formatDateTime(transaction.displayDate || transaction.date)}</span>
               </div>
               {transaction.monthIndex != null && (
                 <div className={styles.detailItem}>
@@ -302,7 +291,7 @@ export default function AdminTransactionDetailsPage({ params }) {
                 {transaction.lockupEndDate && (
                   <div className={styles.infoCard}>
                     <div className={styles.infoLabel}>Lockup Ends</div>
-                    <div className={styles.infoValue}>{formatDate(transaction.lockupEndDate)}</div>
+                    <div className={styles.infoValue}>{formatDateTime(transaction.lockupEndDate)}</div>
                   </div>
                 )}
               </>

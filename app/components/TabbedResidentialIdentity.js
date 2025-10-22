@@ -146,6 +146,8 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
   }, [accountTypeProp])
 
   useEffect(() => {
+    if (typeof window === 'undefined') return
+    
     const bootstrap = async () => {
       const userId = localStorage.getItem('currentUserId')
       if (!userId) return
@@ -156,7 +158,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
           const u = data.user
           // Determine current investment accountType if available
           const investments = Array.isArray(u.investments) ? u.investments : []
-          const currentInv = investments.find(inv => inv.id === localStorage.getItem('currentInvestmentId'))
+          const currentInv = investments.find(inv => inv.id === (typeof window !== 'undefined' ? localStorage.getItem('currentInvestmentId') : null))
           if (!accountTypeProp && currentInv?.accountType) setAccountType(currentInv.accountType)
           
           // Check if user has any pending or active investments
@@ -164,17 +166,29 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
           const hasPendingOrActive = investments.some(inv => inv.status === 'pending' || inv.status === 'active')
           setHasActiveInvestments(hasPendingOrActive)
 
-          // SSN/TIN: If already encrypted (saved), show masked value so validation passes
+          // SSN/TIN: If already encrypted or masked, show masked value so validation passes
           // Show as "•••-••-••••" to indicate it's on file
           const savedSsn = u.ssn || u.taxId || ''
-          const isEncryptedSsn = savedSsn.includes(':') || savedSsn.length > 20
+          // Check if SSN is already masked (from API) or encrypted (old format) or exists
+          const isSsnOnFile = savedSsn && (savedSsn === '•••-••-••••' || savedSsn.includes(':') || savedSsn.length > 20)
           
           const savedJointSsn = u.jointHolder?.ssn || ''
-          const isEncryptedJointSsn = savedJointSsn.includes(':') || savedJointSsn.length > 20
+          const isJointSsnOnFile = savedJointSsn && (savedJointSsn === '•••-••-••••' || savedJointSsn.includes(':') || savedJointSsn.length > 20)
           
           const savedAuthRepSsn = u.authorizedRepresentative?.ssn || ''
-          const isEncryptedAuthRepSsn = savedAuthRepSsn.includes(':') || savedAuthRepSsn.length > 20
+          const isAuthRepSsnOnFile = savedAuthRepSsn && (savedAuthRepSsn === '•••-••-••••' || savedAuthRepSsn.includes(':') || savedAuthRepSsn.length > 20)
 
+          console.log('=== Loading user data for investment form ===')
+          console.log('User object:', u)
+          console.log('- User ID:', u.id)
+          console.log('- User Email:', u.email)
+          console.log('- User SSN field exists:', 'ssn' in u)
+          console.log('- User SSN value:', u.ssn)
+          console.log('- Saved SSN value:', savedSsn)
+          console.log('- Is SSN on file:', isSsnOnFile)
+          console.log('- Will set form SSN to:', isSsnOnFile ? '•••-••-••••' : savedSsn)
+          console.log('===========================================')
+          
           setForm(prev => ({
             ...prev,
             entityName: u.entityName || '',
@@ -188,7 +202,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
             zip: u.address?.zip || '',
             country: u.address?.country || 'United States',
             dob: u.dob || '',
-            ssn: isEncryptedSsn ? '•••-••-••••' : savedSsn,
+            ssn: isSsnOnFile ? '•••-••-••••' : savedSsn,
             jointHoldingType: u.jointHoldingType || '',
             jointHolder: {
               firstName: u.jointHolder?.firstName || '',
@@ -200,7 +214,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
               zip: u.jointHolder?.address?.zip || '',
               country: u.jointHolder?.address?.country || 'United States',
               dob: u.jointHolder?.dob || '',
-              ssn: isEncryptedJointSsn ? '•••-••-••••' : savedJointSsn,
+              ssn: isJointSsnOnFile ? '•••-••-••••' : savedJointSsn,
               email: u.jointHolder?.email || '',
               phone: formatPhoneFromDB(u.jointHolder?.phone || '')
             },
@@ -214,7 +228,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
               zip: u.authorizedRepresentative?.address?.zip || '',
               country: u.authorizedRepresentative?.address?.country || 'United States',
               dob: u.authorizedRepresentative?.dob || '',
-              ssn: isEncryptedAuthRepSsn ? '•••-••-••••' : savedAuthRepSsn
+              ssn: isAuthRepSsnOnFile ? '•••-••-••••' : savedAuthRepSsn
             }
           }))
         }
@@ -375,6 +389,8 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
     
     setIsSaving(true)
     try {
+      if (typeof window === 'undefined') return
+      
       const userId = localStorage.getItem('currentUserId')
       const investmentId = localStorage.getItem('currentInvestmentId')
       if (!userId) return
@@ -706,9 +722,10 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
                 onChange={handleChange} 
                 placeholder="123-45-6789" 
                 inputMode="numeric" 
-                disabled={hasActiveInvestments} 
-                readOnly={hasActiveInvestments}
+                disabled={hasActiveInvestments || form.authorizedRep.ssn === '•••-••-••••'} 
+                readOnly={hasActiveInvestments || form.authorizedRep.ssn === '•••-••-••••'}
                 autoComplete="off"
+                title={form.authorizedRep.ssn === '•••-••-••••' ? 'SSN on file - cannot be modified' : ''}
               />
               {errors['authorizedRep.ssn'] && <span className={styles.error}>{errors['authorizedRep.ssn']}</span>}
               {showAuthorizedRepSsnHelp && (
@@ -817,11 +834,17 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
             onChange={handleChange} 
             placeholder={accountType === 'entity' ? 'Enter EIN or TIN' : '123-45-6789'} 
             inputMode="numeric" 
-            disabled={hasActiveInvestments} 
-            readOnly={hasActiveInvestments}
+            disabled={hasActiveInvestments || form.ssn === '•••-••-••••'} 
+            readOnly={hasActiveInvestments || form.ssn === '•••-••-••••'}
             autoComplete="off"
+            title={form.ssn === '•••-••-••••' ? 'SSN on file - cannot be modified' : ''}
           />
           {errors.ssn && <span className={styles.error}>{errors.ssn}</span>}
+          {!form.ssn && !errors.ssn && (
+            <span className={styles.helpText} style={{color: '#f59e0b', marginTop: '4px'}}>
+              ⚠️ No SSN on file. Contact your administrator to add SSN to your profile before making an investment.
+            </span>
+          )}
           {showSsnHelp && (
             <div className={styles.helpText}>
               A Taxpayer Identification Number (TIN) is necessary for compliance with Anti-Money Laundering (AML) and Know Your Customer (KYC) regulations. This information is securely stored and used only for verification purposes.
@@ -879,9 +902,10 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
                 onChange={handleChange} 
                 placeholder="123-45-6789" 
                 inputMode="numeric" 
-                disabled={hasActiveInvestments} 
-                readOnly={hasActiveInvestments}
+                disabled={hasActiveInvestments || form.jointHolder.ssn === '•••-••-••••'} 
+                readOnly={hasActiveInvestments || form.jointHolder.ssn === '•••-••-••••'}
                 autoComplete="off"
+                title={form.jointHolder.ssn === '•••-••-••••' ? 'SSN on file - cannot be modified' : ''}
               />
               {errors['jointHolder.ssn'] && <span className={styles.error}>{errors['jointHolder.ssn']}</span>}
               {showJointSsnHelp && (

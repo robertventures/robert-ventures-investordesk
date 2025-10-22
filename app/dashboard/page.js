@@ -1,11 +1,12 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import logger from '@/lib/logger'
 import DashboardHeader from '../components/DashboardHeader'
 import PortfolioSummary from '../components/PortfolioSummary'
+import InvestmentsView from '../components/InvestmentsView'
 import ProfileView from '../components/ProfileView'
 import DocumentsView from '../components/DocumentsView'
-import TransactionsList from '../components/TransactionsList'
 import FixedInvestButton from '../components/FixedInvestButton'
 import styles from './page.module.css'
 
@@ -18,6 +19,8 @@ export default function DashboardPage() {
   // Guard against missing/removed account
   useEffect(() => {
     setMounted(true)
+    if (typeof window === 'undefined') return
+    
     const verify = async () => {
       const userId = localStorage.getItem('currentUserId')
       if (!userId) { router.push('/'); return }
@@ -34,6 +37,14 @@ export default function DashboardPage() {
           localStorage.removeItem('signupEmail')
           localStorage.removeItem('currentInvestmentId')
           router.push('/')
+          return
+        }
+        
+        // Redirect to onboarding if user needs to complete setup
+        if (data.user.needsOnboarding) {
+          logger.log('User needs onboarding, redirecting...')
+          router.push('/onboarding')
+          return
         }
       } catch {
         router.push('/')
@@ -45,7 +56,7 @@ export default function DashboardPage() {
   // Initialize activeView from URL params and sync URL with activeView
   useEffect(() => {
     const section = searchParams.get('section')
-    if (section && ['portfolio', 'profile', 'documents', 'contact', 'activity'].includes(section)) {
+    if (section && ['portfolio', 'investments', 'profile', 'documents', 'contact'].includes(section)) {
       setActiveView(section)
     }
   }, [searchParams])
@@ -59,14 +70,8 @@ export default function DashboardPage() {
 
   const renderContent = () => {
     switch (activeView) {
-      case 'activity':
-        return (
-          <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '24px' }}>
-            <h1 style={{ margin: '0 0 16px 0' }}>Activity</h1>
-            <p style={{ margin: '0 0 16px 0', color: '#6b7280' }}>Click an activity item to view full details.</p>
-            <TransactionsList limit={null} showViewAll={false} expandable={true} />
-          </div>
-        )
+      case 'investments':
+        return <InvestmentsView />
       case 'profile':
         return <ProfileView />
       case 'documents':

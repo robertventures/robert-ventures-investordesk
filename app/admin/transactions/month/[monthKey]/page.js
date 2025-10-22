@@ -1,8 +1,10 @@
 'use client'
 import { useEffect, useState, useMemo } from 'react'
 import { useRouter, useParams } from 'next/navigation'
+import { fetchWithCsrf } from '../../../../../lib/csrfClient'
 import AdminHeader from '../../../../components/AdminHeader'
 import styles from './page.module.css'
+import { formatCurrency } from '../../../../../lib/formatters.js'
 
 export default function MonthTransactionsPage() {
   const router = useRouter()
@@ -181,10 +183,6 @@ export default function MonthTransactionsPage() {
     })
   }, [monthKey])
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount || 0)
-  }
-
   const getEventIcon = (eventType) => {
     if (eventType === 'distribution') return '💸'
     if (eventType === 'contribution') return '📈'
@@ -224,7 +222,7 @@ export default function MonthTransactionsPage() {
       let errorCount = 0
       
       for (const transaction of pendingTransactions) {
-        const res = await fetch('/api/admin/pending-payouts', {
+        const res = await fetchWithCsrf('/api/admin/pending-payouts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

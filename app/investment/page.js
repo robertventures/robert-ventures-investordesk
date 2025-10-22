@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import logger from '@/lib/logger'
 import Header from '../components/Header'
 import styles from './page.module.css'
 import stepStyles from '../components/TabbedSignup.module.css'
@@ -115,7 +116,9 @@ export default function InvestmentPage() {
   }
 
   useEffect(() => {
-    const userId = typeof window !== 'undefined' ? localStorage.getItem('currentUserId') : null
+    if (typeof window === 'undefined') return
+    
+    const userId = localStorage.getItem('currentUserId')
     if (!userId) {
       window.location.href = '/'
     }
@@ -135,7 +138,16 @@ export default function InvestmentPage() {
         }
         if (data.success && data.user?.isAdmin) {
           window.location.href = '/dashboard'
+          return
         }
+        
+        // Redirect to onboarding if user needs to complete setup
+        if (data.success && data.user && data.user.needsOnboarding) {
+          logger.log('User needs onboarding, redirecting...')
+          window.location.href = '/onboarding'
+          return
+        }
+        
         // Check if user is verified before allowing investment
         if (data.success && data.user && !data.user.isVerified) {
           window.location.href = '/confirmation'
@@ -150,7 +162,7 @@ export default function InvestmentPage() {
         }
         
         // Load existing draft investment data if it exists
-        const investmentId = localStorage.getItem('currentInvestmentId')
+        const investmentId = typeof window !== 'undefined' ? localStorage.getItem('currentInvestmentId') : null
         if (data.success && investmentId) {
           const existingInvestment = (data.user.investments || []).find(inv => inv.id === investmentId && inv.status === 'draft')
           if (existingInvestment) {
@@ -160,7 +172,7 @@ export default function InvestmentPage() {
             if (existingInvestment.lockupPeriod) setInvestmentLockup(existingInvestment.lockupPeriod)
           } else {
             // Investment ID in localStorage doesn't exist anymore - clear it
-            console.log('Clearing stale investment ID from localStorage:', investmentId)
+            logger.log('Clearing stale investment ID from localStorage:', investmentId)
             localStorage.removeItem('currentInvestmentId')
           }
         }
@@ -189,7 +201,7 @@ export default function InvestmentPage() {
 
   return (
     <main className={styles.main}>
-      <Header />
+      <Header showBackButton={true} />
       <div className={styles.container}>
         <section className={`${stepStyles.card} ${isStep1Collapsed ? stepStyles.collapsed : ''}`}>
           <header className={stepStyles.cardHeader} onClick={() => { setActiveStep(1); setReviewModeStep1(false); setStep1Confirmed(false) }}>

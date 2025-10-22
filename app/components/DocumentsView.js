@@ -1,6 +1,8 @@
 'use client'
 import { useEffect, useState } from 'react'
 import styles from './DocumentsView.module.css'
+import { formatCurrency } from '../../lib/formatters.js'
+import { formatDateLocale } from '../../lib/dateUtils.js'
 
 export default function DocumentsView() {
   const [mounted, setMounted] = useState(false)
@@ -9,6 +11,8 @@ export default function DocumentsView() {
 
   useEffect(() => {
     setMounted(true)
+    if (typeof window === 'undefined') return
+    
     const loadUser = async () => {
       const userId = localStorage.getItem('currentUserId')
       if (!userId) {
@@ -32,16 +36,41 @@ export default function DocumentsView() {
   }, [])
 
   const downloadAgreement = (investment) => {
-    if (!investment.documents?.agreement) {
-      alert('Agreement data not found')
-      return
-    }
-
+    // Generate agreement data on-demand for both regular and imported investments
     const agreementData = {
-      ...investment.documents.agreement,
+      // If documents.agreement exists, use it; otherwise generate basic structure
+      ...(investment.documents?.agreement || {}),
+      
+      // Basic investment information
+      investmentId: investment.id,
+      userId: user.id,
+      amount: investment.amount,
+      bonds: investment.bonds,
+      lockupPeriod: investment.lockupPeriod,
+      paymentFrequency: investment.paymentFrequency,
+      accountType: investment.accountType,
+      status: investment.status,
+      submittedAt: investment.submittedAt || investment.createdAt,
+      confirmedAt: investment.confirmedAt,
+      lockupEndDate: investment.lockupEndDate,
+      
+      // User information
+      investor: {
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+        dob: user.dob,
+        address: user.address
+      },
+      
       // Add entity and joint holder data if applicable
       ...(investment.accountType === 'entity' && user?.entity ? { entity: user.entity } : {}),
-      ...(investment.accountType === 'joint' && user?.jointHolder ? { jointHolder: user.jointHolder } : {})
+      ...(investment.accountType === 'joint' && user?.jointHolder ? { jointHolder: user.jointHolder } : {}),
+      
+      // Metadata
+      generatedAt: new Date().toISOString(),
+      source: investment.documents?.agreement ? 'original' : 'generated'
     }
 
     const jsonString = JSON.stringify(agreementData, null, 2)
@@ -54,21 +83,6 @@ export default function DocumentsView() {
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
-  }
-
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount)
-  }
-
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    })
   }
 
   if (loading) {
@@ -85,10 +99,13 @@ export default function DocumentsView() {
     )
   }
 
-  // Get finalized investments with documents
+  // Get finalized investments (both regular and imported)
+  // Include pending, active, withdrawal_notice, and withdrawn investments
   const finalizedInvestments = (user?.investments || []).filter(investment =>
-    (investment.status === 'pending' || investment.status === 'active') &&
-    investment.documents?.agreement
+    investment.status === 'pending' || 
+    investment.status === 'active' ||
+    investment.status === 'withdrawal_notice' ||
+    investment.status === 'withdrawn'
   )
 
   // Get documents and sort by upload date (most recent first)
@@ -98,6 +115,8 @@ export default function DocumentsView() {
 
   const downloadDocument = async (docId, fileName) => {
     try {
+      if (typeof window === 'undefined') return
+      
       const userId = localStorage.getItem('currentUserId')
       const res = await fetch(`/api/users/${userId}/documents/${docId}?requestingUserId=${userId}`)
       
@@ -148,7 +167,7 @@ export default function DocumentsView() {
                     </h4>
                     <div className={styles.documentDetails}>
                       <p><strong>File:</strong> {doc.fileName}</p>
-                      <p><strong>Uploaded:</strong> {formatDate(doc.uploadedAt)}</p>
+                      <p><strong>Uploaded:</strong> {formatDateLocale(doc.uploadedAt)}</p>
                     </div>
                   </div>
                   <div className={styles.documentActions}>
@@ -183,7 +202,7 @@ export default function DocumentsView() {
                       <p><strong>Payment Frequency:</strong> {investment.paymentFrequency || 'N/A'}</p>
                       <p><strong>Lockup Period:</strong> {investment.lockupPeriod || 'N/A'}</p>
                       <p><strong>Status:</strong> {investment.status?.toUpperCase() || 'N/A'}</p>
-                      <p><strong>Submitted:</strong> {formatDate(investment.submittedAt || investment.updatedAt)}</p>
+                      <p><strong>Submitted:</strong> {formatDateLocale(investment.submittedAt || investment.updatedAt)}</p>
                     </div>
                   </div>
                   <div className={styles.documentActions}>

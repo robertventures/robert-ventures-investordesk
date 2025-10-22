@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { fetchWithCsrf, clearCsrfToken } from '../../lib/csrfClient'
 import styles from './AdminHeader.module.css'
 
 export default function AdminHeader({ onTabChange, activeTab }) {
@@ -9,6 +10,8 @@ export default function AdminHeader({ onTabChange, activeTab }) {
   const [showMobileNav, setShowMobileNav] = useState(false)
 
   useEffect(() => {
+    if (typeof window === 'undefined') return
+    
     const userId = localStorage.getItem('currentUserId')
     if (!userId) {
       router.push('/')
@@ -32,10 +35,13 @@ export default function AdminHeader({ onTabChange, activeTab }) {
   const handleLogout = async () => {
     try {
       // Call logout API to clear cookies
-      await fetch('/api/auth/logout', {
+      await fetchWithCsrf('/api/auth/logout', {
         method: 'POST',
         credentials: 'include'
       })
+      
+      // Clear cached CSRF token
+      clearCsrfToken()
       
       // Clear localStorage
       localStorage.removeItem('currentUserId')

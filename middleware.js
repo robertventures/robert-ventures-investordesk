@@ -67,6 +67,13 @@ export function middleware(request) {
     })
   }
 
+  // CSRF Protection for API routes - TEMPORARILY DISABLED
+  if (pathname.startsWith('/api')) {
+    // CSRF protection is temporarily disabled to resolve build issues
+    // TODO: Re-enable when email service is configured and proper testing is done
+    console.log('⚠️  CSRF protection disabled for:', pathname)
+  }
+
   // For API routes, apply CORS headers
   if (pathname.startsWith('/api')) {
     const corsHeaders = getCorsHeaders(requestOrigin)
@@ -124,6 +131,7 @@ export function middleware(request) {
 
   // For non-API routes (pages), add comprehensive security headers
   const response = NextResponse.next()
+  
   response.headers.set('X-Content-Type-Options', 'nosniff')
   response.headers.set('X-Frame-Options', 'SAMEORIGIN')
   response.headers.set('X-XSS-Protection', '1; mode=block')
@@ -134,6 +142,7 @@ export function middleware(request) {
 
   // Content Security Policy (CSP) - restrictive for security
   // Build CSP with dynamic Supabase URL
+  // Note: 'unsafe-inline' removed from style-src for security (app uses CSS Modules exclusively)
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
   const connectSrc = supabaseUrl 
     ? `'self' ${supabaseUrl}` 
@@ -143,7 +152,7 @@ export function middleware(request) {
     'Content-Security-Policy',
     "default-src 'self'; " +
     "script-src 'self' 'unsafe-eval' 'unsafe-inline'; " +
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+    "style-src 'self' https://fonts.googleapis.com; " +
     "img-src 'self' data: https:; " +
     "font-src 'self' data: https://fonts.gstatic.com; " +
     `connect-src ${connectSrc}; ` +

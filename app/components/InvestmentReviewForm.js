@@ -12,6 +12,8 @@ export default function InvestmentReviewForm() {
   const [showSuccessModal, setShowSuccessModal] = useState(false)
 
   useEffect(() => {
+    if (typeof window === 'undefined') return
+    
     const bootstrap = async () => {
       const userId = localStorage.getItem('currentUserId')
       const investmentId = localStorage.getItem('currentInvestmentId')
@@ -39,6 +41,8 @@ export default function InvestmentReviewForm() {
 
   const handleSign = async () => {
     try {
+      if (typeof window === 'undefined') return
+      
       const userId = localStorage.getItem('currentUserId')
       const investmentId = localStorage.getItem('currentInvestmentId')
       

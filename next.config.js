@@ -1,18 +1,16 @@
+import path from 'path'
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // App Router is enabled by default in Next.js 13.4+
-  async headers() {
-    return [
-      {
-        source: '/:path*',
-        headers: [
-          {
-            key: 'Content-Security-Policy',
-            value: "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com;"
-          }
-        ]
-      }
-    ]
+  // Note: CSP headers are now handled in middleware.js with nonce-based security
+  webpack: (config) => {
+    // Provide path alias so imports like '@/lib/...' resolve to project root
+    config.resolve.alias = {
+      ...(config.resolve.alias || {}),
+      '@': path.resolve(process.cwd())
+    }
+    return config
   }
 }
 

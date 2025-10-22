@@ -2,6 +2,7 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import styles from './DistributionsTab.module.css'
+import { formatCurrency } from '../../../lib/formatters.js'
 
 /**
  * Transactions tab showing all transactions: investments, monthly payments and compounding calculations
@@ -190,10 +191,6 @@ export default function DistributionsTab({ users, timeMachineData }) {
   useMemo(() => {
     setCurrentPage(1)
   }, [searchTerm, filterType])
-
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount || 0)
-  }
 
   const getEventIcon = (eventType) => {
     if (eventType === 'distribution') return '💸'

@@ -13,6 +13,8 @@ export default function TransactionsTable() {
   const [appTime, setAppTime] = useState(null)
 
   useEffect(() => {
+    if (typeof window === 'undefined') return
+    
     const loadData = async () => {
       const userId = localStorage.getItem('currentUserId')
       if (!userId) return

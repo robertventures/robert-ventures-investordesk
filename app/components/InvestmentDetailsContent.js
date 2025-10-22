@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { fetchWithCsrf } from '../../lib/csrfClient'
 import styles from './InvestmentDetailsContent.module.css'
 import TransactionsList from './TransactionsList'
 import { calculateInvestmentValue, formatCurrency, formatDate, getInvestmentStatus } from '../../lib/investmentCalculations.js'
@@ -16,6 +17,8 @@ export default function InvestmentDetailsContent({ investmentId }) {
   const [showWithdrawConfirm, setShowWithdrawConfirm] = useState(false)
 
   useEffect(() => {
+    if (typeof window === 'undefined') return
+    
     const loadData = async () => {
       const userId = localStorage.getItem('currentUserId')
       if (!userId) {
@@ -62,7 +65,7 @@ export default function InvestmentDetailsContent({ investmentId }) {
     setShowWithdrawConfirm(false)
     
     try {
-      const res = await fetch('/api/withdrawals', {
+      const res = await fetchWithCsrf('/api/withdrawals', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: userData.id, investmentId: investmentData.id })

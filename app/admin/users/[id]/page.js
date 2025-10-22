@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { fetchWithCsrf } from '../../../../lib/csrfClient'
 import AdminHeader from '../../../components/AdminHeader'
 import { calculateInvestmentValue } from '../../../../lib/investmentCalculations.js'
 import styles from './page.module.css'
@@ -35,6 +36,9 @@ export default function AdminUserDetailsPage({ params }) {
     return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`
   }
   const isCompleteSsn = (value = '') => value.replace(/\D/g, '').length === 9
+  const formatCity = (value = '') => value.replace(/[^a-zA-Z\s'\-\.]/g, '')
+  const formatName = (value = '') => value.replace(/[^a-zA-Z\s'\-\.]/g, '')
+  const formatStreet = (value = '') => value.replace(/[^a-zA-Z0-9\s'\-\.,#]/g, '')
 
   const US_STATES = useMemo(() => [
     'Alabama','Alaska','Arizona','Arkansas','California','Colorado','Connecticut','Delaware','Florida','Georgia','Hawaii','Idaho','Illinois','Indiana','Iowa','Kansas','Kentucky','Louisiana','Maine','Maryland','Massachusetts','Michigan','Minnesota','Mississippi','Missouri','Montana','Nebraska','Nevada','New Hampshire','New Jersey','New Mexico','New York','North Carolina','North Dakota','Ohio','Oklahoma','Oregon','Pennsylvania','Rhode Island','South Carolina','South Dakota','Tennessee','Texas','Utah','Vermont','Virginia','Washington','West Virginia','Wisconsin','Wyoming'
@@ -98,6 +102,8 @@ export default function AdminUserDetailsPage({ params }) {
   })()
 
   useEffect(() => {
+    if (typeof window === 'undefined') return
+    
     const init = async () => {
       try {
         const meId = localStorage.getItem('currentUserId')
@@ -234,6 +240,22 @@ export default function AdminUserDetailsPage({ params }) {
     }
     if (name === 'ssn' || name === 'jointHolder.ssn' || name === 'authorizedRep.ssn') {
       setField(name, formatSsn(value))
+      return
+    }
+    if (name === 'city' || name === 'jointHolder.city' || name === 'authorizedRep.city') {
+      setField(name, formatCity(value))
+      return
+    }
+    if (name === 'firstName' || name === 'lastName' || name === 'entityName' || 
+        name === 'jointHolder.firstName' || name === 'jointHolder.lastName' ||
+        name === 'authorizedRep.firstName' || name === 'authorizedRep.lastName') {
+      setField(name, formatName(value))
+      return
+    }
+    if (name === 'street1' || name === 'street2' || 
+        name === 'jointHolder.street1' || name === 'jointHolder.street2' ||
+        name === 'authorizedRep.street1' || name === 'authorizedRep.street2') {
+      setField(name, formatStreet(value))
       return
     }
     setField(name, value)
@@ -376,7 +398,7 @@ export default function AdminUserDetailsPage({ params }) {
       const payload = {
         email: form.email.trim(),
         ...(form.accountType !== 'entity' ? { firstName: form.firstName.trim(), lastName: form.lastName.trim() } : {}),
-        phone: form.phone.trim(),
+        phoneNumber: form.phone.trim(),
         ...(form.accountType !== 'entity' ? {
           dob: form.dob,
           ssn: form.ssn,
@@ -453,6 +475,159 @@ export default function AdminUserDetailsPage({ params }) {
       alert('An error occurred while saving')
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  const handleSendOnboardingEmail = async () => {
+    if (!window.confirm('Generate account setup link for this user?')) {
+      return
+    }
+
+    try {
+      // Generate onboarding token
+      const token = crypto.randomUUID()
+      const expires = new Date(Date.now() + 48 * 60 * 60 * 1000) // 48 hours
+
+      // Update user with token and set needs_onboarding flag
+      const updateRes = await fetch(`/api/users/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          needsOnboarding: true,
+          onboardingToken: token,
+          onboardingTokenExpires: expires.toISOString()
+        })
+      })
+
+      const updateData = await updateRes.json()
+      if (!updateData.success) {
+        alert('Failed to generate setup link: ' + updateData.error)
+        return
+      }
+
+      // Generate setup link (email sending disabled for now)
+      const emailRes = await fetchWithCsrf('/api/admin/send-onboarding-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: id, token })
+      })
+
+      const emailData = await emailRes.json()
+      if (!emailData.success) {
+        alert('Failed to generate setup link: ' + emailData.error)
+        return
+      }
+
+      // Copy link to clipboard
+      if (emailData.setupLink) {
+        try {
+          await navigator.clipboard.writeText(emailData.setupLink)
+          alert(`✅ Setup link generated and copied to clipboard!\n\nUser: ${user.email}\nLink: ${emailData.setupLink}\n\nValid for 48 hours.\n\n(Email sending will be enabled when the app launches)`)
+        } catch (clipboardErr) {
+          alert(`✅ Setup link generated!\n\nUser: ${user.email}\nLink: ${emailData.setupLink}\n\nValid for 48 hours.\n\n(Could not copy to clipboard - please copy manually)`)
+        }
+      } else {
+        alert(`✅ Setup link generated for ${user.email}!\n\nThe link is ready (email sending will be enabled when the app launches).`)
+      }
+      
+      // Refresh user data
+      const refreshRes = await fetch(`/api/users/${id}`)
+      const refreshData = await refreshRes.json()
+      if (refreshData.success) {
+        setUser(refreshData.user)
+      }
+    } catch (e) {
+      console.error('Failed to generate setup link:', e)
+      alert('An error occurred while generating the setup link')
+    }
+  }
+
+  const handleSendWelcomeEmail = async () => {
+    if (!window.confirm('Send welcome email with password reset link to this user?')) {
+      return
+    }
+
+    try {
+      const res = await fetchWithCsrf('/api/auth/send-welcome', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          adminUserId: currentUser.id,
+          userIds: [user.id],
+          single: true
+        })
+      })
+
+      const data = await res.json()
+      if (data.success) {
+        alert(`✅ Welcome email sent successfully to ${user.email}!\n\nThe user can now reset their password using the link in the email (valid for 24 hours).`)
+      } else {
+        alert('Failed to send welcome email: ' + data.error)
+      }
+    } catch (e) {
+      console.error('Failed to send welcome email:', e)
+      alert('An error occurred while sending the welcome email')
+    }
+  }
+
+  const handleCopySetupLink = async () => {
+    try {
+      const token = crypto.randomUUID()
+      const expires = new Date(Date.now() + 48 * 60 * 60 * 1000) // 48 hours
+
+      // Update user with token
+      const updateRes = await fetch(`/api/users/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          onboardingToken: token,
+          onboardingTokenExpires: expires.toISOString()
+        })
+      })
+
+      const updateData = await updateRes.json()
+      if (!updateData.success) {
+        alert('Failed to generate setup link: ' + updateData.error)
+        return
+      }
+
+      // Build and copy URL
+      const setupLink = `${process.env.NEXT_PUBLIC_APP_URL || window.location.origin}/onboarding?token=${token}`
+      await navigator.clipboard.writeText(setupLink)
+
+      alert(`✅ Setup link copied to clipboard!\n\nLink: ${setupLink}\n\nValid for 48 hours.`)
+    } catch (e) {
+      console.error('Failed to copy setup link:', e)
+      alert('An error occurred while generating the setup link')
+    }
+  }
+
+  const handleTestOnboarding = async () => {
+    try {
+      const token = crypto.randomUUID()
+      const expires = new Date(Date.now() + 48 * 60 * 60 * 1000) // 48 hours
+
+      // Update user with token
+      const updateRes = await fetch(`/api/users/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          onboardingToken: token,
+          onboardingTokenExpires: expires.toISOString()
+        })
+      })
+
+      const updateData = await updateRes.json()
+      if (!updateData.success) {
+        alert('Failed to generate test link: ' + updateData.error)
+        return
+      }
+
+      // Navigate to onboarding with token
+      router.push(`/onboarding?token=${token}`)
+    } catch (e) {
+      console.error('Failed to test onboarding:', e)
+      alert('An error occurred while setting up test onboarding')
     }
   }
 
@@ -753,6 +928,53 @@ export default function AdminUserDetailsPage({ params }) {
             ) : (
               <div className={styles.muted}>No investments</div>
             )}
+          </div>
+
+          {/* User Communications Section */}
+          <div className={styles.sectionCard}>
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.sectionTitle}>User Communications</h2>
+            </div>
+            
+            <div className={styles.communicationsGrid}>
+              {/* Welcome Email Card */}
+              <div className={styles.commCard}>
+                <h3>📧 Welcome Email</h3>
+                <p>Send password reset link (24 hours)</p>
+                <button onClick={handleSendWelcomeEmail}>
+                  Send Welcome Email
+                </button>
+              </div>
+
+              {/* Setup Email Card (only if onboarding not complete) */}
+              {!user.onboarding_completed_at && (
+                <div className={styles.commCard}>
+                  <h3>🎉 Setup Link</h3>
+                  <p>Generate & copy setup link (48 hours)</p>
+                  <button onClick={handleSendOnboardingEmail}>
+                    Generate Setup Link
+                  </button>
+                </div>
+              )}
+
+              {/* Copy Link Card */}
+              <div className={styles.commCard}>
+                <h3>🔗 Copy Setup Link</h3>
+                <p>Generate and copy setup URL</p>
+                <button onClick={handleCopySetupLink}>
+                  Copy Setup Link
+                </button>
+              </div>
+
+              {/* Test Onboarding Card */}
+              <div className={styles.commCard}>
+                <h3>🧪 Test Onboarding</h3>
+                <p>Login as user and test setup flow</p>
+                <button onClick={handleTestOnboarding}>
+                  Test Onboarding
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* Activity Section */}
@@ -1150,6 +1372,9 @@ export default function AdminUserDetailsPage({ params }) {
                     {isVerifying ? 'Verifying...' : 'Verify Account'}
                   </button>
                 )}
+              </div>
+              <div>
+                <b>Account Setup:</b> {user.onboarding_completed_at ? 'Complete' : user.needs_onboarding ? 'Pending' : 'N/A'}
               </div>
               <div>
                 <label><b>Email</b></label>
