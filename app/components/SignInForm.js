@@ -176,7 +176,7 @@ export default function SignInForm() {
         <button 
           onClick={() => router.push('/forgot-password')} 
           className={styles.linkButton}
-          style={{ marginBottom: '12px', display: 'block' }}
+          style={{ marginBottom: '12px' }}
         >
           Forgot Password?
         </button>
