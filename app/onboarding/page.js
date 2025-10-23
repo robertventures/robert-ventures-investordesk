@@ -108,7 +108,10 @@ export default function OnboardingPage() {
     setIsLoading(true)
     setError(null)
     
+    console.log('🔍 Starting token verification:', tokenValue)
+    
     try {
+      console.log('📡 Calling verify-onboarding-token API...')
       const response = await fetchWithCsrf('/api/auth/verify-onboarding-token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -116,13 +119,24 @@ export default function OnboardingPage() {
         body: JSON.stringify({ token: tokenValue })
       })
       
-      const data = await response.json()
+      console.log('📡 API response status:', response.status)
       
-      if (!data.success) {
-        setError(data.error || 'Invalid or expired setup link')
+      if (!response.ok) {
+        console.error('❌ API returned non-OK status:', response.status, response.statusText)
+        setError(`Server error (${response.status}). Please contact support.`)
         return
       }
       
+      const data = await response.json()
+      console.log('📦 API response data:', { success: data.success, error: data.error })
+      
+      if (!data.success) {
+        console.error('❌ Token verification failed:', data.error)
+        setError(data.error || 'Invalid or expired setup link. Please contact your administrator for a new link.')
+        return
+      }
+      
+      console.log('✅ Token verified successfully')
       setUserData(data.user)
       localStorage.setItem('currentUserId', data.user.id)
       sessionStorage.setItem('onboarding_via_token', 'true')
@@ -147,14 +161,16 @@ export default function OnboardingPage() {
         setInvestmentBankAssignments(initialAssignments)
       }
       
-      console.log('✅ Token verified, user auto-logged in:', data.user.email)
+      console.log('✅ User auto-logged in:', data.user.email)
       console.log('Bank account required:', needsBank)
       
       setCurrentStep(ONBOARDING_STEPS.PASSWORD)
     } catch (err) {
-      console.error('Error verifying token:', err)
-      setError('An error occurred. Please try again.')
+      console.error('❌ Error verifying token:', err)
+      console.error('Error details:', err.message, err.stack)
+      setError(`Connection error: ${err.message}. Please try again or contact support.`)
     } finally {
+      console.log('🏁 Token verification completed')
       setIsLoading(false)
     }
   }

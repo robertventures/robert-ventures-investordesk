@@ -585,11 +585,12 @@ export default function AdminUserDetailsPage({ params }) {
       const token = crypto.randomUUID()
       const expires = new Date(Date.now() + 48 * 60 * 60 * 1000) // 48 hours
 
-      // Update user with token
+      // Update user with token and set needs_onboarding flag
       const updateRes = await fetch(`/api/users/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          needsOnboarding: true,
           onboardingToken: token,
           onboardingTokenExpires: expires.toISOString()
         })
@@ -617,11 +618,12 @@ export default function AdminUserDetailsPage({ params }) {
       const token = crypto.randomUUID()
       const expires = new Date(Date.now() + 48 * 60 * 60 * 1000) // 48 hours
 
-      // Update user with token
+      // Update user with token and set needs_onboarding flag
       const updateRes = await fetch(`/api/users/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          needsOnboarding: true,
           onboardingToken: token,
           onboardingTokenExpires: expires.toISOString()
         })

@@ -11,7 +11,11 @@ export async function POST(request) {
   try {
     const { token } = await request.json()
 
+    console.log('🔍 [verify-onboarding-token] Token verification requested')
+    console.log('Token:', token?.substring(0, 8) + '...' || 'MISSING')
+
     if (!token) {
+      console.error('❌ [verify-onboarding-token] No token provided')
       return NextResponse.json(
         { success: false, error: 'Token is required' },
         { status: 400 }
@@ -19,6 +23,10 @@ export async function POST(request) {
     }
 
     const supabase = createServiceClient()
+    
+    console.log('📡 [verify-onboarding-token] Querying database for user with token')
+    const currentTime = new Date().toISOString()
+    console.log('Current time (UTC):', currentTime)
     
     // Find user with valid token
     const { data: user, error } = await supabase
@@ -29,19 +37,45 @@ export async function POST(request) {
         bank_accounts (*)
       `)
       .eq('onboarding_token', token)
-      .gt('onboarding_token_expires', new Date().toISOString())
+      .gt('onboarding_token_expires', currentTime)
       .eq('needs_onboarding', true)
       .maybeSingle()
 
     if (error) {
-      console.error('Error verifying onboarding token:', error)
+      console.error('❌ [verify-onboarding-token] Database error:', error)
       return NextResponse.json(
         { success: false, error: 'Failed to verify token' },
         { status: 500 }
       )
     }
 
+    console.log('📊 [verify-onboarding-token] Query result:', user ? 'User found' : 'No user found')
+
     if (!user) {
+      console.warn('⚠️ [verify-onboarding-token] No matching user found - possible reasons:')
+      console.warn('  1. Token does not match any user')
+      console.warn('  2. Token has expired')
+      console.warn('  3. User has needs_onboarding = false')
+      console.warn('  4. User has already completed onboarding')
+      
+      // Try to find the user without time/onboarding constraints for debugging
+      const { data: debugUser } = await supabase
+        .from('users')
+        .select('id, email, onboarding_token_expires, needs_onboarding, onboarding_completed_at')
+        .eq('onboarding_token', token)
+        .maybeSingle()
+      
+      if (debugUser) {
+        console.log('🔍 [verify-onboarding-token] Found user but conditions not met:', {
+          userId: debugUser.id,
+          email: debugUser.email,
+          tokenExpires: debugUser.onboarding_token_expires,
+          needsOnboarding: debugUser.needs_onboarding,
+          onboardingCompleted: debugUser.onboarding_completed_at,
+          isExpired: debugUser.onboarding_token_expires <= currentTime
+        })
+      }
+      
       return NextResponse.json(
         { success: false, error: 'Invalid or expired setup link. Please contact your administrator for a new link.' },
         { status: 401 }
@@ -50,11 +84,14 @@ export async function POST(request) {
 
     // Check if already completed onboarding
     if (user.onboarding_completed_at) {
+      console.warn('⚠️ [verify-onboarding-token] User already completed onboarding:', user.email)
       return NextResponse.json(
         { success: false, error: 'Account setup already completed. Please sign in normally.' },
         { status: 400 }
       )
     }
+
+    console.log('✅ [verify-onboarding-token] Token valid for user:', user.email)
 
     // Format user data for response
     const formattedUser = {
