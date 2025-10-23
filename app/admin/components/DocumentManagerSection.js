@@ -358,7 +358,7 @@ export default function DocumentManagerSection({ currentUser, onUploadComplete }
                           >
                             {user.email}
                             <br />
-                            <small>ID: {user.id} | Created: {new Date(user.createdAt).toLocaleDateString()}</small>
+                            <small>ID: {user.id} | Created: {new Date(user.displayCreatedAt || user.createdAt).toLocaleDateString()}</small>
                           </button>
                         ))}
                       </div>

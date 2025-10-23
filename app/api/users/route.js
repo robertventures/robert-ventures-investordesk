@@ -31,21 +31,27 @@ export async function GET(request) {
       const appTime = await getCurrentAppTime()
 
       // Convert snake_case to camelCase for frontend compatibility
-      const users = (usersData.users || []).map(u => ({
-        id: u.id,
-        email: u.email,
-        firstName: u.first_name,
-        lastName: u.last_name,
-        phoneNumber: u.phone_number,
-        dob: u.dob,
-        ssn: u.ssn, // Include SSN for profile completeness check
-        address: u.address,
-        accountType: u.account_type,
-        isAdmin: u.is_admin,
-        isVerified: u.is_verified,
-        verifiedAt: u.verified_at,
-        createdAt: u.created_at,
-        updatedAt: u.updated_at,
+      const users = (usersData.users || []).map(u => {
+        // Find account_created activity event for displayCreatedAt (Wealthblock imports)
+        const accountCreatedActivity = (u.activity || []).find(a => a.type === 'account_created')
+        const displayCreatedAt = accountCreatedActivity?.date || u.created_at
+        
+        return {
+          id: u.id,
+          email: u.email,
+          firstName: u.first_name,
+          lastName: u.last_name,
+          phoneNumber: u.phone_number,
+          dob: u.dob,
+          ssn: u.ssn, // Include SSN for profile completeness check
+          address: u.address,
+          accountType: u.account_type,
+          isAdmin: u.is_admin,
+          isVerified: u.is_verified,
+          verifiedAt: u.verified_at,
+          createdAt: u.created_at,
+          displayCreatedAt, // Wealthblock import date if available, else created_at
+          updatedAt: u.updated_at,
         investments: (u.investments || []).map(inv => ({
           ...inv,
           paymentFrequency: inv.payment_frequency,
@@ -81,7 +87,8 @@ export async function GET(request) {
         jointHoldingType: u.joint_holding_type || null,
         entityName: u.entity_name || null,
         authorizedRepresentative: u.authorized_representative || null
-      }))
+        }
+      })
 
       return NextResponse.json({
         success: true,

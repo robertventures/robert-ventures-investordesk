@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { fetchWithCsrf } from '../../../../lib/csrfClient'
 import AdminHeader from '../../../components/AdminHeader'
+import InvestmentAdminHeader from '../../components/InvestmentAdminHeader'
 import { calculateInvestmentValue, formatCurrency, formatDate } from '../../../../lib/investmentCalculations.js'
 import { formatDateForDisplay, formatDateTime } from '../../../../lib/dateUtils.js'
 import styles from './page.module.css'
@@ -325,19 +326,21 @@ export default function AdminInvestmentDetailsPage({ params }) {
     withdrawn: '#6b7280'
   }[investment.status] || '#6b7280'
 
+  // Construct transactions link
+  const transactionsHref = '/admin?tab=transactions';
+
   return (
     <div className={styles.main}>
       <AdminHeader activeTab="transactions" />
       <div className={styles.container}>
         <div className={styles.content}>
-          {/* Breadcrumb Navigation */}
-          <div className={styles.breadcrumb}>
-            <button className={styles.breadcrumbLink} onClick={() => router.push('/admin?tab=transactions')}>
-              ← Transactions
-            </button>
-            <span className={styles.breadcrumbSeparator}>/</span>
-            <span className={styles.breadcrumbCurrent}>Investment #{investment.id}</span>
-          </div>
+          {/* Investment Admin Header with breadcrumb, back, and actions */}
+          <InvestmentAdminHeader
+            investmentId={investment.id}
+            accountId={user.id}
+            accountName={`${user.firstName} ${user.lastName}`}
+            transactionsHref={transactionsHref}
+          />
 
           {/* Page Header */}
           <div className={styles.pageHeader}>
@@ -359,9 +362,6 @@ export default function AdminInvestmentDetailsPage({ params }) {
               }}>
                 {investment.status?.toUpperCase()}
               </span>
-              <button className={styles.secondaryButton} onClick={() => router.push(`/admin/users/${user.id}`)}>
-                View Account
-              </button>
             </div>
           </div>
 
@@ -810,11 +810,7 @@ export default function AdminInvestmentDetailsPage({ params }) {
                         fontSize: '14px',
                         fontWeight: '500'
                       }}>
-                        ⏳ Lockup ends on {lockupEnd.toLocaleDateString('en-US', { 
-                          month: 'long', 
-                          day: 'numeric', 
-                          year: 'numeric' 
-                        })} - Override confirmation required
+                        ⏳ Lockup ends on {formatDateForDisplay(investment.lockupEndDate)} - Override confirmation required
                       </div>
                     )
                   })()}
@@ -937,11 +933,7 @@ export default function AdminInvestmentDetailsPage({ params }) {
                         <p style={{ fontSize: '14px', color: '#92400e', marginBottom: '12px' }}>
                           This investment is still in its lockup period, which ends on{' '}
                           <strong>
-                            {lockupEnd.toLocaleDateString('en-US', { 
-                              month: 'long', 
-                              day: 'numeric', 
-                              year: 'numeric' 
-                            })}
+                            {formatDateForDisplay(investment.lockupEndDate)}
                           </strong>
                           . Terminating now will override the lockup agreement.
                         </p>

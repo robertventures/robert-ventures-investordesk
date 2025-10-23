@@ -1,13 +1,15 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { fetchWithCsrf } from '../../../../lib/csrfClient'
 import AdminHeader from '../../../components/AdminHeader'
 import { calculateInvestmentValue } from '../../../../lib/investmentCalculations.js'
+import { formatDateForDisplay } from '../../../../lib/dateUtils.js'
 import styles from './page.module.css'
 
 export default function AdminUserDetailsPage({ params }) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { id } = params
   const [currentUser, setCurrentUser] = useState(null)
   const [user, setUser] = useState(null)
@@ -17,6 +19,7 @@ export default function AdminUserDetailsPage({ params }) {
   const [isEditing, setIsEditing] = useState(false)
   const [appTime, setAppTime] = useState(null)
   const [activityPage, setActivityPage] = useState(1)
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'overview')
 
   const MIN_DOB = '1900-01-01'
   const ACTIVITY_ITEMS_PER_PAGE = 20
@@ -207,6 +210,13 @@ export default function AdminUserDetailsPage({ params }) {
         </div>
       </div>
     )
+  }
+
+  const handleTabChange = (tab) => {
+    setActiveTab(tab)
+    const url = new URL(window.location.href)
+    url.searchParams.set('tab', tab)
+    window.history.pushState({}, '', url)
   }
 
   
@@ -677,8 +687,33 @@ export default function AdminUserDetailsPage({ params }) {
             </div>
           </div>
 
-          {/* Primary Value Metrics - Featured at Top */}
-          <div className={styles.primaryMetricsGrid}>
+          {/* Tab Navigation */}
+          <div className={styles.tabNav}>
+            <button 
+              className={`${styles.tabButton} ${activeTab === 'overview' ? styles.tabButtonActive : ''}`}
+              onClick={() => handleTabChange('overview')}
+            >
+              Overview
+            </button>
+            <button 
+              className={`${styles.tabButton} ${activeTab === 'activity' ? styles.tabButtonActive : ''}`}
+              onClick={() => handleTabChange('activity')}
+            >
+              Activity
+            </button>
+            <button 
+              className={`${styles.tabButton} ${activeTab === 'profile' ? styles.tabButtonActive : ''}`}
+              onClick={() => handleTabChange('profile')}
+            >
+              Profile
+            </button>
+          </div>
+
+          {/* Tab Content */}
+          {activeTab === 'overview' && (
+            <>
+              {/* Primary Value Metrics - Featured at Top */}
+              <div className={styles.primaryMetricsGrid}>
             <div className={styles.primaryMetricCard}>
               <div className={styles.primaryMetricLabel}>Original Investment Value</div>
               <div className={styles.primaryMetricValue}>${originalInvestmentValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
@@ -805,22 +840,14 @@ export default function AdminUserDetailsPage({ params }) {
                       <div style={{ fontSize: '13px' }}>
                         <span style={{ color: '#6b7280', fontWeight: '500' }}>Created:</span>
                         <span style={{ color: '#111827', marginLeft: '4px', fontWeight: '500' }}>
-                          {inv.createdAt ? new Date(inv.createdAt).toLocaleDateString('en-US', {
-                            timeZone: 'America/New_York',
-                            month: 'short',
-                            day: 'numeric'
-                          }) : '-'}
+                          {inv.createdAt ? formatDateForDisplay(inv.createdAt) : '-'}
                         </span>
                       </div>
                       {inv.confirmedAt && (
                         <div style={{ fontSize: '13px' }}>
                           <span style={{ color: '#6b7280', fontWeight: '500' }}>Confirmed:</span>
                           <span style={{ color: '#111827', marginLeft: '4px', fontWeight: '500' }}>
-                            {new Date(inv.confirmedAt).toLocaleDateString('en-US', {
-                              timeZone: 'America/New_York',
-                              month: 'short',
-                              day: 'numeric'
-                            })}
+                            {formatDateForDisplay(inv.confirmedAt)}
                           </span>
                         </div>
                       )}
@@ -929,54 +956,12 @@ export default function AdminUserDetailsPage({ params }) {
               <div className={styles.muted}>No investments</div>
             )}
           </div>
+            </>
+          )}
 
-          {/* User Communications Section */}
-          <div className={styles.sectionCard}>
-            <div className={styles.sectionHeader}>
-              <h2 className={styles.sectionTitle}>User Communications</h2>
-            </div>
-            
-            <div className={styles.communicationsGrid}>
-              {/* Welcome Email Card */}
-              <div className={styles.commCard}>
-                <h3>📧 Welcome Email</h3>
-                <p>Send password reset link (24 hours)</p>
-                <button onClick={handleSendWelcomeEmail}>
-                  Send Welcome Email
-                </button>
-              </div>
-
-              {/* Setup Email Card (only if onboarding not complete) */}
-              {!user.onboarding_completed_at && (
-                <div className={styles.commCard}>
-                  <h3>🎉 Setup Link</h3>
-                  <p>Generate & copy setup link (48 hours)</p>
-                  <button onClick={handleSendOnboardingEmail}>
-                    Generate Setup Link
-                  </button>
-                </div>
-              )}
-
-              {/* Copy Link Card */}
-              <div className={styles.commCard}>
-                <h3>🔗 Copy Setup Link</h3>
-                <p>Generate and copy setup URL</p>
-                <button onClick={handleCopySetupLink}>
-                  Copy Setup Link
-                </button>
-              </div>
-
-              {/* Test Onboarding Card */}
-              <div className={styles.commCard}>
-                <h3>🧪 Test Onboarding</h3>
-                <p>Login as user and test setup flow</p>
-                <button onClick={handleTestOnboarding}>
-                  Test Onboarding
-                </button>
-              </div>
-            </div>
-          </div>
-
+          {/* Activity Tab */}
+          {activeTab === 'activity' && (
+            <>
           {/* Activity Section */}
           <div className={styles.sectionCard}>
             <div className={styles.sectionHeader}>
@@ -1221,14 +1206,7 @@ export default function AdminUserDetailsPage({ params }) {
                                 </button>
                               </div>
                             )}
-                            <div><b>Date:</b> {event.date ? new Date(event.date).toLocaleDateString('en-US', {
-                              timeZone: 'America/New_York',
-                              month: 'short',
-                              day: 'numeric',
-                              year: 'numeric',
-                              hour: 'numeric',
-                              minute: '2-digit'
-                            }) : '-'}</div>
+                            <div><b>Date:</b> {event.date ? formatDateForDisplay(event.date) : '-'}</div>
                             {event.monthIndex != null && (
                               <div><b>Month Index:</b> Month {event.monthIndex}</div>
                             )}
@@ -1344,6 +1322,58 @@ export default function AdminUserDetailsPage({ params }) {
                 <div className={styles.muted}>No activity yet</div>
               )
             })()}
+          </div>
+            </>
+          )}
+
+          {/* Profile Tab */}
+          {activeTab === 'profile' && (
+            <>
+          {/* User Communications Section */}
+          <div className={styles.sectionCard}>
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.sectionTitle}>User Communications</h2>
+            </div>
+            
+            <div className={styles.communicationsGrid}>
+              {/* Welcome Email Card */}
+              <div className={styles.commCard}>
+                <h3>📧 Welcome Email</h3>
+                <p>Send password reset link (24 hours)</p>
+                <button onClick={handleSendWelcomeEmail}>
+                  Send Welcome Email
+                </button>
+              </div>
+
+              {/* Setup Email Card (only if onboarding not complete) */}
+              {!user.onboarding_completed_at && (
+                <div className={styles.commCard}>
+                  <h3>🎉 Setup Link</h3>
+                  <p>Generate & copy setup link (48 hours)</p>
+                  <button onClick={handleSendOnboardingEmail}>
+                    Generate Setup Link
+                  </button>
+                </div>
+              )}
+
+              {/* Copy Link Card */}
+              <div className={styles.commCard}>
+                <h3>🔗 Copy Setup Link</h3>
+                <p>Generate and copy setup URL</p>
+                <button onClick={handleCopySetupLink}>
+                  Copy Setup Link
+                </button>
+              </div>
+
+              {/* Test Onboarding Card */}
+              <div className={styles.commCard}>
+                <h3>🧪 Test Onboarding</h3>
+                <p>Login as user and test setup flow</p>
+                <button onClick={handleTestOnboarding}>
+                  Test Onboarding
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* Account Profile Section */}
@@ -1627,6 +1657,8 @@ export default function AdminUserDetailsPage({ params }) {
                 </div>
               </div>
             </div>
+          )}
+            </>
           )}
         </div>
       </div>

@@ -497,9 +497,12 @@ export async function POST(request) {
 
             segments.forEach(segment => {
               const monthlyInterest = amount * monthlyRate
+              // Banking standard: divide annual interest by 365 days for partial months
+              const annualInterest = amount * annualRate
+              const dailyInterest = annualInterest / 365
               const distributionAmount = segment.type === 'full'
                 ? monthlyInterest
-                : monthlyInterest * (segment.days / segment.daysInMonth)
+                : dailyInterest * segment.days
 
               const segmentEndDate = new Date(segment.end)
               const nextYear = segmentEndDate.getUTCMonth() === 11
@@ -602,9 +605,10 @@ export async function POST(request) {
             let balance = amount
 
             segments.forEach(segment => {
+              // Banking standard: divide annual interest by 365 days for partial months
               const interest = segment.type === 'full'
                 ? balance * monthlyRate
-                : balance * (monthlyRate / segment.daysInMonth) * segment.days
+                : balance * (annualRate / 365) * segment.days
 
               const segmentEndDate = new Date(segment.end)
               const nextYear = segmentEndDate.getUTCMonth() === 11

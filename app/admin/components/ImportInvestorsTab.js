@@ -305,6 +305,18 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
       return
     }
 
+    // Validate investment dates against account creation date
+    if (manualForm.accountCreatedDate) {
+      if (currentInvestment.createdDate && currentInvestment.createdDate < manualForm.accountCreatedDate) {
+        setError(`Investment created date (${formatDateForDisplay(currentInvestment.createdDate)}) cannot be before account creation date (${formatDateForDisplay(manualForm.accountCreatedDate)})`)
+        return
+      }
+      if (currentInvestment.confirmedDate && currentInvestment.confirmedDate < manualForm.accountCreatedDate) {
+        setError(`Investment confirmed date (${formatDateForDisplay(currentInvestment.confirmedDate)}) cannot be before account creation date (${formatDateForDisplay(manualForm.accountCreatedDate)})`)
+        return
+      }
+    }
+
     const newInvestment = {
       ...currentInvestment,
       id: `TEMP-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
@@ -354,6 +366,21 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
     if (manualForm.phoneNumber && !isCompletePhone(manualForm.phoneNumber)) {
       setError('Phone number must be 10 digits')
       return
+    }
+
+    // Validate investment dates against account creation date
+    if (manualForm.accountCreatedDate && manualForm.investments.length > 0) {
+      for (let i = 0; i < manualForm.investments.length; i++) {
+        const inv = manualForm.investments[i]
+        if (inv.createdDate && inv.createdDate < manualForm.accountCreatedDate) {
+          setError(`Investment #${i + 1} created date (${formatDateForDisplay(inv.createdDate)}) cannot be before account creation date (${formatDateForDisplay(manualForm.accountCreatedDate)})`)
+          return
+        }
+        if (inv.confirmedDate && inv.confirmedDate < manualForm.accountCreatedDate) {
+          setError(`Investment #${i + 1} confirmed date (${formatDateForDisplay(inv.confirmedDate)}) cannot be before account creation date (${formatDateForDisplay(manualForm.accountCreatedDate)})`)
+          return
+        }
+      }
     }
 
     // Validate account-type-specific required fields
@@ -1102,6 +1129,37 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
                     />
                   </div>
                 </div>
+                
+                {/* Real-time validation warning */}
+                {manualForm.accountCreatedDate && (
+                  (currentInvestment.createdDate && currentInvestment.createdDate < manualForm.accountCreatedDate) ||
+                  (currentInvestment.confirmedDate && currentInvestment.confirmedDate < manualForm.accountCreatedDate)
+                ) && (
+                  <div style={{ 
+                    padding: '12px', 
+                    marginTop: '12px',
+                    marginBottom: '12px',
+                    background: '#fef3c7', 
+                    border: '1px solid #f59e0b', 
+                    borderRadius: '6px',
+                    color: '#92400e',
+                    fontSize: '14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    <span style={{ fontSize: '18px' }}>⚠️</span>
+                    <span>
+                      <strong>Warning:</strong> Investment date
+                      {currentInvestment.createdDate && currentInvestment.createdDate < manualForm.accountCreatedDate && 
+                        ` (Created: ${formatDateForDisplay(currentInvestment.createdDate)})`}
+                      {currentInvestment.confirmedDate && currentInvestment.confirmedDate < manualForm.accountCreatedDate && 
+                        ` (Confirmed: ${formatDateForDisplay(currentInvestment.confirmedDate)})`}
+                      {' '}cannot be before account creation date ({formatDateForDisplay(manualForm.accountCreatedDate)})
+                    </span>
+                  </div>
+                )}
+
                 <button 
                   type="button"
                   onClick={handleAddInvestment} 
@@ -1115,34 +1173,81 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
               {manualForm.investments.length > 0 && (
                 <div className={styles.investmentsList}>
                   <h5>Added Investments ({manualForm.investments.length})</h5>
+                  
+                  {/* Warning for existing investments with date conflicts */}
+                  {manualForm.accountCreatedDate && manualForm.investments.some(inv => 
+                    (inv.createdDate && inv.createdDate < manualForm.accountCreatedDate) ||
+                    (inv.confirmedDate && inv.confirmedDate < manualForm.accountCreatedDate)
+                  ) && (
+                    <div style={{ 
+                      padding: '12px', 
+                      marginBottom: '12px',
+                      background: '#fee2e2', 
+                      border: '1px solid #ef4444', 
+                      borderRadius: '6px',
+                      color: '#991b1b',
+                      fontSize: '14px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}>
+                      <span style={{ fontSize: '18px' }}>⚠️</span>
+                      <span>
+                        <strong>Date Conflict Detected:</strong> One or more investments have dates before the account creation date ({formatDateForDisplay(manualForm.accountCreatedDate)}). Please remove them and add with corrected dates.
+                      </span>
+                    </div>
+                  )}
+
                   <div className={styles.investmentItems}>
-                    {manualForm.investments.map(inv => (
-                      <div key={inv.id} className={styles.investmentItem}>
-                        <div className={styles.investmentInfo}>
-                          <span className={styles.investmentAmount}>${parseFloat(inv.amount).toLocaleString()}</span>
-                          <span className={styles.investmentDetails}>
-                            {inv.paymentFrequency} • {inv.lockupPeriod}
-                          </span>
-                          {inv.createdDate && (
-                            <span className={styles.investmentDate}>
-                              Created: {formatDateForDisplay(inv.createdDate)}
-                            </span>
-                          )}
-                          {inv.confirmedDate && (
-                            <span className={styles.investmentDate}>
-                              Confirmed: {formatDateForDisplay(inv.confirmedDate)}
-                            </span>
-                          )}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveInvestment(inv.id)}
-                          className={styles.investmentRemove}
+                    {manualForm.investments.map((inv, idx) => {
+                      const hasDateConflict = manualForm.accountCreatedDate && (
+                        (inv.createdDate && inv.createdDate < manualForm.accountCreatedDate) ||
+                        (inv.confirmedDate && inv.confirmedDate < manualForm.accountCreatedDate)
+                      )
+                      
+                      return (
+                        <div 
+                          key={inv.id} 
+                          className={styles.investmentItem}
+                          style={hasDateConflict ? { 
+                            border: '2px solid #ef4444',
+                            background: '#fef2f2'
+                          } : {}}
                         >
-                          ✕
-                        </button>
-                      </div>
-                    ))}
+                          <div className={styles.investmentInfo}>
+                            <span className={styles.investmentAmount}>${parseFloat(inv.amount).toLocaleString()}</span>
+                            <span className={styles.investmentDetails}>
+                              {inv.paymentFrequency} • {inv.lockupPeriod}
+                            </span>
+                            {inv.createdDate && (
+                              <span 
+                                className={styles.investmentDate}
+                                style={hasDateConflict && inv.createdDate < manualForm.accountCreatedDate ? { color: '#dc2626', fontWeight: 'bold' } : {}}
+                              >
+                                Created: {formatDateForDisplay(inv.createdDate)}
+                                {hasDateConflict && inv.createdDate < manualForm.accountCreatedDate && ' ⚠️'}
+                              </span>
+                            )}
+                            {inv.confirmedDate && (
+                              <span 
+                                className={styles.investmentDate}
+                                style={hasDateConflict && inv.confirmedDate < manualForm.accountCreatedDate ? { color: '#dc2626', fontWeight: 'bold' } : {}}
+                              >
+                                Confirmed: {formatDateForDisplay(inv.confirmedDate)}
+                                {hasDateConflict && inv.confirmedDate < manualForm.accountCreatedDate && ' ⚠️'}
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveInvestment(inv.id)}
+                            className={styles.investmentRemove}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      )
+                    })}
                   </div>
                   <div className={styles.investmentTotal}>
                     Total Investment Amount: ${manualForm.investments.reduce((sum, inv) => sum + parseFloat(inv.amount || 0), 0).toLocaleString()}

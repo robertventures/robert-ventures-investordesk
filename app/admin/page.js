@@ -10,6 +10,7 @@ import OperationsTab from './components/OperationsTab'
 import ActivityTab from './components/ActivityTab'
 import DistributionsTab from './components/DistributionsTab'
 import { calculateInvestmentValue } from '../../lib/investmentCalculations.js'
+import { formatDateForDisplay } from '../../lib/dateUtils.js'
 import styles from './page.module.css'
 
 /**
@@ -124,8 +125,8 @@ export default function AdminPage() {
 
   const sortedAccountUsers = useMemo(() => {
     return [...nonAdminUsers].sort((a, b) => {
-      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0
-      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0
+      const dateA = a.displayCreatedAt ? new Date(a.displayCreatedAt).getTime() : 0
+      const dateB = b.displayCreatedAt ? new Date(b.displayCreatedAt).getTime() : 0
       return dateB - dateA
     })
   }, [nonAdminUsers])
@@ -179,14 +180,14 @@ export default function AdminPage() {
       if (accountFilters.numInvestmentsMin && numInvestments < Number(accountFilters.numInvestmentsMin)) return false
       if (accountFilters.numInvestmentsMax && numInvestments > Number(accountFilters.numInvestmentsMax)) return false
       
-      // Filter by created date
-      if (accountFilters.createdDateStart && user.createdAt) {
-        const userDate = new Date(user.createdAt).setHours(0,0,0,0)
+      // Filter by created date (use displayCreatedAt for imported accounts)
+      if (accountFilters.createdDateStart && user.displayCreatedAt) {
+        const userDate = new Date(user.displayCreatedAt).setHours(0,0,0,0)
         const filterDate = new Date(accountFilters.createdDateStart).setHours(0,0,0,0)
         if (userDate < filterDate) return false
       }
-      if (accountFilters.createdDateEnd && user.createdAt) {
-        const userDate = new Date(user.createdAt).setHours(0,0,0,0)
+      if (accountFilters.createdDateEnd && user.displayCreatedAt) {
+        const userDate = new Date(user.displayCreatedAt).setHours(0,0,0,0)
         const filterDate = new Date(accountFilters.createdDateEnd).setHours(0,0,0,0)
         if (userDate > filterDate) return false
       }
@@ -854,7 +855,7 @@ export default function AdminPage() {
                         </div>
                         <div className={styles.accountStat}>
                           <div className={styles.statLabel}>Created</div>
-                          <div className={styles.statValue}>{user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '-'}</div>
+                          <div className={styles.statValue}>{user.displayCreatedAt ? formatDateForDisplay(user.displayCreatedAt) : '-'}</div>
                         </div>
                       </div>
                       <div className={styles.accountCardActions} onClick={(e) => e.stopPropagation()}>

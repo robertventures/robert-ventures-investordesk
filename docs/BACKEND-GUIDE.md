@@ -288,6 +288,30 @@ confirmed_date = datetime(2024, 11, 20, 0, 0, 0)  # UTC midnight
 - Import-Investors API: `/app/api/admin/import-investors/route.js`
 - Transaction Generation: `/app/api/migrate-transactions/route.js` (lines 456, 580)
 
+#### Account Created Date vs Database Created Date
+
+**Key Concept:** For imported accounts (from Wealthblock or other sources), we preserve the original account creation date while maintaining database audit timestamps.
+
+- **`created_at`** (database field): System timestamp when the user record was inserted into the database. Used for audit purposes and internal metrics like "New Accounts (last 30 days)".
+- **`displayCreatedAt`** (computed field): The user-facing account creation date shown in the Admin UI. For imported accounts, this is the date from the `account_created` activity event (the original Wealthblock date). For regular accounts, this falls back to `created_at`.
+
+**Implementation:**
+- Admin UI (Accounts tab) displays, filters, and sorts by `displayCreatedAt`
+- Admin metrics (Dashboard) use actual `created_at` for operational tracking
+- Import flow stores the Wealthblock date as an `account_created` activity event
+- API (`/api/users` GET all) computes `displayCreatedAt` from the activity event or falls back to `created_at`
+
+**Example:**
+```javascript
+// User imported from Wealthblock on Jan 15, 2025
+// Original Wealthblock account created on Nov 20, 2024
+users.created_at = "2025-01-15T10:00:00.000Z"  // DB insert time
+users.displayCreatedAt = "2024-11-20T00:00:00.000Z"  // Wealthblock date (from activity)
+
+// Admin Accounts tab shows: "Created: 11/20/2024"
+// Admin Dashboard metrics count this as created on Jan 15, 2025
+```
+
 ---
 
 ## Authentication & Security

@@ -32,6 +32,8 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   padding: var(--space-5);
+  overflow: visible;
+  min-height: 100vh;
 }
 
 /* Header */
@@ -157,6 +159,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  overflow: visible;
 }
 
 .searchInput {
@@ -352,6 +355,7 @@
   flex-direction: column;
   gap: 16px;
   margin-top: 20px;
+  overflow: visible;
 }
 
 .accountCard {

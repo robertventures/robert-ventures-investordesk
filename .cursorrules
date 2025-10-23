@@ -63,11 +63,13 @@
 - `NEXT_PUBLIC_APP_URL` and `NEXT_PUBLIC_BASE_URL` should point to `http://localhost:3000`
 
 ### Terminal & Server Management
+- **The user typically has a terminal already running** - use that existing terminal, do NOT create new terminals
 - **ALWAYS check if the development server is already running** on port 3000 before starting a new one
 - Use `lsof -i :3000` to check if port 3000 is in use
 - Do NOT create multiple terminals or server instances unnecessarily
 - If the server is already running, inform the user rather than starting a duplicate
 - Only restart the server if explicitly requested or if configuration changes require it
+- Respect the user's existing terminal session and workflow
 
 ### Environment Variables
 - Never commit `.env.local` to version control

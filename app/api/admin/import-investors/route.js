@@ -215,6 +215,40 @@ export async function POST(request) {
 
         // 4. Process investments if provided
         if (investorData.investments && Array.isArray(investorData.investments)) {
+          // Validate investment dates against account creation date
+          let hasInvalidDates = false
+          if (investorData.accountCreatedDate) {
+            for (let i = 0; i < investorData.investments.length; i++) {
+              const inv = investorData.investments[i]
+              if (inv.createdDate && inv.createdDate < investorData.accountCreatedDate) {
+                results.errors.push({
+                  email: normalizedEmail,
+                  error: `Investment #${i + 1} created date (${inv.createdDate}) cannot be before account creation date (${investorData.accountCreatedDate})`
+                })
+                hasInvalidDates = true
+                break
+              }
+              if (inv.confirmedDate && inv.confirmedDate < investorData.accountCreatedDate) {
+                results.errors.push({
+                  email: normalizedEmail,
+                  error: `Investment #${i + 1} confirmed date (${inv.confirmedDate}) cannot be before account creation date (${investorData.accountCreatedDate})`
+                })
+                hasInvalidDates = true
+                break
+              }
+            }
+          }
+
+          // If validation failed, skip this investor entirely
+          if (hasInvalidDates) {
+            // Rollback: Delete user and auth records
+            await supabase.from('users').delete().eq('id', userId)
+            await supabase.from('activity').delete().eq('user_id', userId)
+            await supabase.auth.admin.deleteUser(authUserId)
+            results.skipped++
+            continue
+          }
+
           for (const investmentData of investorData.investments) {
             try {
               const investmentResult = await createInvestment(
