@@ -22,14 +22,12 @@ export default function OperationsTab({
   isSeedingAccounts,
   onRefreshWithdrawals,
   onImportComplete,
-  onToggleAutoApprove,
-  onMigrateTransactions
+  onToggleAutoApprove
 }) {
   const [masterPassword, setMasterPassword] = useState(null)
   const [masterPasswordInfo, setMasterPasswordInfo] = useState(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [copied, setCopied] = useState(false)
-  const [isMigrating, setIsMigrating] = useState(false)
 
   // Fetch current master password info
   useEffect(() => {
@@ -106,34 +104,6 @@ export default function OperationsTab({
     const minutes = Math.floor(ms / 60000)
     const seconds = Math.floor((ms % 60000) / 1000)
     return `${minutes}m ${seconds}s`
-  }
-
-  const handleMigrateTransactions = async () => {
-    if (!confirm('Regenerate all transaction data? This will recalculate distributions and compounding based on current app time.')) {
-      return
-    }
-    
-    setIsMigrating(true)
-    try {
-      const result = await onMigrateTransactions()
-      if (result.success) {
-        const summary = [
-          `Transaction regeneration complete!`,
-          ``,
-          `✅ Transactions saved: ${result.transactionsUpserted || 0}`,
-          `✅ Activity events created: ${result.activityEventsInserted || 0}`,
-          `✅ Users updated: ${result.usersUpdated || 0}`
-        ].join('\n')
-        alert(summary)
-      } else {
-        alert('Failed to regenerate transactions: ' + (result.error || 'Unknown error'))
-      }
-    } catch (error) {
-      console.error('Error regenerating transactions:', error)
-      alert('An error occurred while regenerating transactions')
-    } finally {
-      setIsMigrating(false)
-    }
   }
 
   return (

@@ -321,7 +321,7 @@ export async function POST(request) {
       } catch (migrateError) {
         console.error('⚠️  Failed to trigger transaction regeneration:', migrateError)
         results.transactionsRegenerated = false
-        results.message = `Import successful! However, failed to auto-generate transactions: ${migrateError.message}. Please manually click "Regenerate Transactions" in Operations tab.`
+        results.message = `Import successful! However, automatic transaction generation failed: ${migrateError.message}. Please re-run the import.`
       }
     }
 

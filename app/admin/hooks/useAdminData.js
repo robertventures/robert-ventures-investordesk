@@ -225,23 +225,6 @@ export function useAdminData() {
     }
   }
 
-  // Manual transaction migration for when needed (Time Machine changes, admin action)
-  const migrateTransactions = async () => {
-    try {
-      const res = await fetchWithCsrf('/api/migrate-transactions', { method: 'POST' })
-      const data = await res.json()
-      if (data.success) {
-        // Clear cache and reload users after migration
-        clearCache(CACHE_KEY_USERS)
-        await loadUsers(false)
-      }
-      return data
-    } catch (e) {
-      logger.error('Failed to migrate transactions', e)
-      return { success: false, error: e.message }
-    }
-  }
-
   // Clear all caches
   const clearAllCaches = () => {
     clearCache(CACHE_KEY_USERS)
@@ -262,8 +245,7 @@ export function useAdminData() {
     refreshUsers: loadUsers,
     refreshWithdrawals: loadWithdrawals,
     refreshPayouts: loadPendingPayouts,
-    refreshTimeMachine: loadTimeMachine,
-    migrateTransactions  // Expose for manual triggering
+    refreshTimeMachine: loadTimeMachine
   }
 }
 

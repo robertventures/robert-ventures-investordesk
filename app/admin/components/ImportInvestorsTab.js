@@ -1489,7 +1489,7 @@ export default function ImportInvestorsTab({ currentUser, onImportComplete }) {
           
           {importResults.imported > 0 && !importResults.transactionsRegenerated && (
             <div className={styles.warningMessage}>
-              <strong>⚠️ ACTION REQUIRED:</strong> Automatic transaction generation failed. Please click <strong>"Regenerate Transactions"</strong> in the Operations tab above to calculate all monthly distributions based on the investment dates you provided.
+              <strong>⚠️ ACTION REQUIRED:</strong> Automatic transaction generation failed. Please re-run the import to calculate all monthly distributions based on the investment dates you provided.
             </div>
           )}
           
