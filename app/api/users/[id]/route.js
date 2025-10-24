@@ -86,29 +86,6 @@ export async function GET(request, { params }) {
       )
     }
 
-    // Prefer user's primary address stored on users.address, with a temporary fallback to addresses table
-    const supabase = createServiceClient()
-    const { data: addresses } = await supabase
-      .from('addresses')
-      .select('*')
-      .eq('user_id', id)
-      .order('is_primary', { ascending: false })
-      .order('created_at', { ascending: false })
-
-    const primaryAddress = addresses && addresses.length > 0 
-      ? (addresses.find(addr => addr.is_primary) || addresses[0])
-      : null
-
-    // Use user.address if present; otherwise fallback to legacy addresses table
-    const addressData = user.address || (primaryAddress ? {
-      street1: primaryAddress.street1,
-      street2: primaryAddress.street2,
-      city: primaryAddress.city,
-      state: primaryAddress.state,
-      zip: primaryAddress.zip,
-      country: primaryAddress.country
-    } : null)
-
     // Convert snake_case to camelCase for frontend
     const safeUser = {
       id: user.id,
@@ -117,7 +94,7 @@ export async function GET(request, { params }) {
       lastName: user.last_name,
       phoneNumber: user.phone_number,
       dob: user.dob,
-      address: addressData,
+      address: user.address || null,
       accountType: user.account_type,
       isAdmin: user.is_admin,
       isVerified: user.is_verified,
