@@ -175,7 +175,7 @@ export default function ConfirmationPage() {
       
       logger.log('✅ Account created and verified successfully, user auto-logged in, redirecting to investment page')
       
-      // Redirect to investment page to continue the onboarding flow
+      // Redirect to investment page where personal info will be collected
       router.push('/investment?context=onboarding')
     } catch (err) {
       logger.error('Verification error:', err)
