@@ -5,6 +5,7 @@ import { generateUserId, generateTransactionId, generateSequentialInvestmentId, 
 import { requireAdmin, authErrorResponse } from '../../../../lib/authMiddleware.js'
 import { getCurrentAppTime } from '../../../../lib/appTime.js'
 import { dateOnlyToISO, addYears } from '../../../../lib/dateUtils.js'
+import { encrypt, isEncrypted } from '../../../../lib/encryption.js'
 
 /**
  * Import investors from Wealthblock CSV migration
@@ -36,6 +37,28 @@ export async function POST(request) {
     }
 
     const supabase = createServiceClient()
+
+    // Helper: check if a column exists on a table (lean-schema safe writes)
+    const tableColumnExists = async (tableName, columnName) => {
+      try {
+        const { error } = await supabase.from(tableName).select(columnName).limit(1)
+        if (error) {
+          const msg = `${error.message || ''} ${error.details || ''}`.toLowerCase()
+          if (msg.includes('column') && msg.includes(tableName) && msg.includes(`'${columnName}'`)) {
+            return false
+          }
+        }
+        return true
+      } catch (e) {
+        return false
+      }
+    }
+
+    // Resolve optional user columns once (same DB for whole batch)
+    const hasUsersAddress = await tableColumnExists('users', 'address')
+    const hasUsersEntity = await tableColumnExists('users', 'entity')
+    const hasUsersJointHolder = await tableColumnExists('users', 'joint_holder')
+    const hasUsersJointHoldingType = await tableColumnExists('users', 'joint_holding_type')
     const results = {
       total: investors.length,
       imported: 0,
@@ -116,6 +139,20 @@ export async function POST(request) {
         const needsOnboarding = !investorData.ssn || hasMonthlyPayments
 
         // 2. Create database user record
+        // Prepare SSN securely (pre-encrypt for lean DB without triggers)
+        let secureSSN = investorData.ssn || ''
+        if (secureSSN && !isEncrypted(secureSSN)) {
+          try {
+            secureSSN = encrypt(secureSSN)
+          } catch (e) {
+            results.errors.push({ email: normalizedEmail, error: 'Failed to secure SSN' })
+            results.skipped++
+            // Clean up auth user since we won't proceed
+            await supabase.auth.admin.deleteUser(authUserId)
+            continue
+          }
+        }
+
         const userRecord = {
           id: userId,
           auth_id: authUserId,
@@ -124,7 +161,7 @@ export async function POST(request) {
           last_name: investorData.lastName || '',
           phone_number: investorData.phoneNumber || '',
           dob: investorData.dob || '',
-          ssn: investorData.ssn || '', // SSN from import form (will be encrypted by database)
+          ssn: secureSSN,
           is_verified: true, // Auto-verify imported accounts (admin-created)
           verified_at: timestamp, // Set verification timestamp
           is_admin: false,
@@ -134,21 +171,36 @@ export async function POST(request) {
           updated_at: timestamp
         }
 
-        // Add account-type-specific fields
+        // Include joint holder fields only if columns exist
         if (investorData.accountType === 'joint') {
-          userRecord.joint_holding_type = investorData.jointHoldingType || null
-          userRecord.joint_holder = investorData.jointHolder || null
-        } else if (investorData.accountType === 'entity') {
-          userRecord.entity_name = investorData.entity?.name || ''
-          userRecord.entity_type = investorData.entity?.entityType || 'LLC'
-          userRecord.tax_id = investorData.entity?.taxId || ''
-          userRecord.entity_registration_date = investorData.entity?.registrationDate || null
-          userRecord.entity_address = investorData.entity?.address || null
-          userRecord.authorized_representative = investorData.authorizedRepresentative || null
-        } else if (investorData.accountType === 'ira') {
-          userRecord.ira_type = investorData.ira?.accountType || 'traditional'
-          userRecord.ira_custodian = investorData.ira?.custodian || ''
-          userRecord.ira_account_number = investorData.ira?.accountNumber || ''
+          if (hasUsersJointHoldingType) {
+            userRecord.joint_holding_type = investorData.jointHoldingType || null
+          }
+          if (hasUsersJointHolder) {
+            userRecord.joint_holder = investorData.jointHolder || null
+          }
+        }
+
+        // Store entity/IRA supplemental info into JSONB 'entity' if available
+        if (hasUsersEntity) {
+          const entityPayload = {}
+          if (investorData.accountType === 'entity') {
+            entityPayload.type = investorData.entity?.entityType || 'LLC'
+            entityPayload.name = investorData.entity?.name || ''
+            if (investorData.entity?.taxId) entityPayload.taxId = investorData.entity.taxId
+            if (investorData.entity?.registrationDate) entityPayload.registrationDate = investorData.entity.registrationDate
+            if (investorData.entity?.address) entityPayload.address = investorData.entity.address
+            if (investorData.authorizedRepresentative) entityPayload.authorizedRepresentative = investorData.authorizedRepresentative
+          } else if (investorData.accountType === 'ira' && investorData.ira) {
+            entityPayload.ira = {
+              accountType: investorData.ira.accountType || 'traditional',
+              custodian: investorData.ira.custodian || '',
+              accountNumber: investorData.ira.accountNumber || ''
+            }
+          }
+          if (Object.keys(entityPayload).length > 0) {
+            userRecord.entity = entityPayload
+          }
         }
 
         const { error: userError } = await supabase
@@ -167,32 +219,36 @@ export async function POST(request) {
           continue
         }
 
-        // 2.5. Update user with address if provided (store directly on user record)
-        if (investorData.address && (
-          investorData.address.street1 || 
-          investorData.address.city || 
-          investorData.address.state || 
-          investorData.address.zip
-        )) {
-          const { error: addressError } = await supabase
-            .from('users')
-            .update({
-              address: {
-                street1: investorData.address.street1 || '',
-                street2: investorData.address.street2 || '',
-                city: investorData.address.city || '',
-                state: investorData.address.state || '',
-                zip: investorData.address.zip || '',
-                country: investorData.address.country || 'United States'
-              },
-              updated_at: timestamp
-            })
-            .eq('id', userId)
+        // 2.5. Update user with address if provided (guard column existence)
+        if (hasUsersAddress) {
+          if (investorData.address && (
+            investorData.address.street1 || 
+            investorData.address.city || 
+            investorData.address.state || 
+            investorData.address.zip
+          )) {
+            const { error: addressError } = await supabase
+              .from('users')
+              .update({
+                address: {
+                  street1: investorData.address.street1 || '',
+                  street2: investorData.address.street2 || '',
+                  city: investorData.address.city || '',
+                  state: investorData.address.state || '',
+                  zip: investorData.address.zip || '',
+                  country: investorData.address.country || 'United States'
+                },
+                updated_at: timestamp
+              })
+              .eq('id', userId)
 
-          if (addressError) {
-            console.error(`Failed to set address for ${normalizedEmail}:`, addressError)
-            // Don't fail the whole import for address errors
+            if (addressError) {
+              console.error(`Failed to set address for ${normalizedEmail}:`, addressError)
+              // Don't fail the whole import for address errors
+            }
           }
+        } else {
+          console.warn("'users.address' column not found; skipping address for", normalizedEmail)
         }
 
         // 3. Create account_created activity

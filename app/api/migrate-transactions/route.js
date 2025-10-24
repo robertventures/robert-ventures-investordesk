@@ -212,6 +212,17 @@ export async function POST(request) {
       // eslint-disable-next-line no-await-in-loop
       txColumnExists[col] = await tableColumnExists('transactions', col)
     }
+
+    // Build an allowlist of columns we are permitted to send to the database.
+    // This provides a hard guard so accidental properties never reach PostgREST.
+    const coreTxColumns = ['id', 'user_id', 'investment_id', 'type', 'amount', 'status', 'date']
+    const allowedTxColumns = new Set([
+      ...coreTxColumns,
+      ...Object.entries(txColumnExists)
+        .filter(([, exists]) => !!exists)
+        .map(([name]) => name)
+    ])
+    console.log('[transactions] allowed columns resolved:', Array.from(allowedTxColumns).join(','))
     const usersData = await getUsers()
     const appTime = await getCurrentAppTime()
     const now = new Date(appTime || new Date().toISOString())
@@ -839,7 +850,14 @@ export async function POST(request) {
           if (tx.createdAt && txColumnExists.created_at) dbTx.created_at = tx.createdAt
           if (tx.updatedAt && txColumnExists.updated_at) dbTx.updated_at = tx.updatedAt
 
-          transactionsToUpsert.push(dbTx)
+          // Final sanitize: only include columns explicitly allowed for this DB
+          const sanitized = {}
+          for (const key of allowedTxColumns) {
+            if (Object.prototype.hasOwnProperty.call(dbTx, key)) {
+              sanitized[key] = dbTx[key]
+            }
+          }
+          transactionsToUpsert.push(sanitized)
         }
       }
     }
