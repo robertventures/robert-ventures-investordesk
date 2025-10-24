@@ -685,13 +685,14 @@ export async function POST(request) {
                 amount: Math.round(interest * 100) / 100,
                 status: 'received',  // Auto-complete for compounding (no admin approval needed)
                 date: contributionDateIso,
+                distributionTxId,  // MUST be top-level for validation logic
                 metadata: {
                   displayDate: compoundingDateIso,  // Show same display date as distribution
                   monthIndex,
                   lockupPeriod: lockup,
                   paymentFrequency: payFreq,
                   principal: Math.round(balance * 100) / 100,
-                  distributionTxId  // Link to the distribution that was reinvested
+                  distributionTxId  // Also store in metadata for persistence
                 }
               })
 
