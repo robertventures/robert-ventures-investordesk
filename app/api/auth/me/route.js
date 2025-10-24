@@ -32,6 +32,8 @@ export async function GET(request) {
         isAdmin: user.is_admin || false,
         isVerified: user.is_verified || false,
         verifiedAt: user.verified_at,
+        needsOnboarding: user.needs_onboarding || false,
+        onboardingCompletedAt: user.onboarding_completed_at,
         createdAt: user.created_at,
         updatedAt: user.updated_at,
         investments: user.investments || [],

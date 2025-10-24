@@ -13,8 +13,12 @@ export default function AuthWrapper({ children }) {
   // Public routes that don't require authentication
   const publicRoutes = ['/', '/sign-in', '/forgot-password', '/reset-password', '/confirmation']
   
+  // Routes that don't require onboarding check
+  const noOnboardingCheckRoutes = ['/onboarding']
+  
   // Check if current route is public
   const isPublicRoute = publicRoutes.includes(pathname) || pathname.startsWith('/reset-password')
+  const isOnboardingRoute = noOnboardingCheckRoutes.includes(pathname)
 
   useEffect(() => {
     // Initialize CSRF token on app load
@@ -37,6 +41,20 @@ export default function AuthWrapper({ children }) {
             // Store user ID in localStorage for backward compatibility
             localStorage.setItem('currentUserId', data.user.id)
             localStorage.setItem('signupEmail', data.user.email)
+            
+            // Check if user needs onboarding and redirect before rendering
+            if (data.user.needsOnboarding && !isOnboardingRoute) {
+              logger.log('User needs onboarding, redirecting from AuthWrapper...')
+              router.push('/onboarding')
+              return
+            }
+            
+            // If user completed onboarding but is on onboarding page, redirect to dashboard
+            if (!data.user.needsOnboarding && isOnboardingRoute) {
+              logger.log('User onboarding complete, redirecting to dashboard...')
+              router.push('/dashboard')
+              return
+            }
           }
         } else {
           // Clear localStorage if not authenticated
