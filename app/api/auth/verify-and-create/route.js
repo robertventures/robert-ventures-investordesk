@@ -44,7 +44,7 @@ export async function POST(request) {
     // Create the actual user in Supabase
     const userData = {
       email: verifyResult.email,
-      password: verifyResult.hashedPassword, // Already hashed
+      password: verifyResult.plainPassword, // Plain password for Supabase Auth
       isVerified: true, // Set as verified immediately since they just verified
       verifiedAt: new Date().toISOString()
     }

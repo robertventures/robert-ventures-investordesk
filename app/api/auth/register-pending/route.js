@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { getUserByEmail } from '../../../../lib/supabaseDatabase.js'
-import { hashPassword } from '../../../../lib/auth.js'
 import { rateLimit, RATE_LIMIT_CONFIGS } from '../../../../lib/rateLimit.js'
 import { validateEmail, validatePassword, ValidationError } from '../../../../lib/validation.js'
 import { storePendingUser } from '../../../../lib/pendingUsers.js'
@@ -64,11 +63,10 @@ export async function POST(request) {
       throw error
     }
 
-    // Hash password
-    const hashedPassword = await hashPassword(password)
-
-    // Store as pending user (not in Supabase users table yet)
-    const result = await storePendingUser(validatedEmail, hashedPassword)
+    // Store as pending user with PLAIN PASSWORD (temporary, only for 1 hour)
+    // Note: We don't hash here because Supabase Auth needs plain password on signup
+    // The database is encrypted at rest, and this is only temporary storage
+    const result = await storePendingUser(validatedEmail, password)
 
     if (result.success) {
       console.log('✅ Pending user registration created:', {
