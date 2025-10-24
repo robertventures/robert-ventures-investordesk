@@ -65,13 +65,6 @@ function formatUserForResponse(user) {
   }
 }
 
-    if (_action === 'upsertAddress') {
-      return NextResponse.json(
-        { success: false, error: 'Deprecated: use PUT /api/users/profile with { address }' },
-        { status: 410 }
-      )
-    }
-
 /**
  * GET /api/users/[id]
  * Get user by ID
@@ -695,6 +688,13 @@ export async function PUT(request, { params }) {
           { status: 500 }
         )
       }
+    }
+
+    if (_action === 'upsertAddress') {
+      return NextResponse.json(
+        { success: false, error: 'Deprecated: use PUT /api/users/profile with { address }' },
+        { status: 410 }
+      )
     }
 
     if (_action === 'addAddress') {
