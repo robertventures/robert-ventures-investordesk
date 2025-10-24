@@ -181,6 +181,37 @@ export async function POST(request) {
     }
 
     const supabase = createServiceClient()
+
+    // Schema-guard helpers: Only persist columns that exist in current DB
+    const tableColumnExists = async (tableName, columnName) => {
+      try {
+        const { error } = await supabase.from(tableName).select(columnName).limit(1)
+        if (error) {
+          const msg = `${error.message || ''} ${error.details || ''}`.toLowerCase()
+          if (msg.includes('column') && msg.includes(tableName) && msg.includes(`'${columnName}'`)) {
+            return false
+          }
+        }
+        return true
+      } catch (e) {
+        return false
+      }
+    }
+
+    const txOptionalColumns = [
+      'display_date', 'month_index', 'lockup_period', 'payment_frequency',
+      'payout_method', 'payout_bank_id', 'payout_bank_nickname',
+      'principal', 'distribution_tx_id', 'withdrawal_id', 'payout_due_by',
+      'confirmed_at', 'approved_at', 'rejected_at', 'completed_at', 'failed_at',
+      'auto_approved', 'manually_completed', 'failure_reason', 'retry_count', 'last_retry_at',
+      'legacy_reference_id', 'created_at', 'updated_at'
+    ]
+
+    const txColumnExists = {}
+    for (const col of txOptionalColumns) {
+      // eslint-disable-next-line no-await-in-loop
+      txColumnExists[col] = await tableColumnExists('transactions', col)
+    }
     const usersData = await getUsers()
     const appTime = await getCurrentAppTime()
     const now = new Date(appTime || new Date().toISOString())
@@ -773,40 +804,40 @@ export async function POST(request) {
           }
 
           // Optional metadata fields (only set if present)
-          if (tx.displayDate) dbTx.display_date = tx.displayDate
-          if (tx.monthIndex !== undefined) dbTx.month_index = tx.monthIndex
-          if (tx.lockupPeriod) dbTx.lockup_period = tx.lockupPeriod
-          if (tx.paymentFrequency) dbTx.payment_frequency = tx.paymentFrequency
+          if (tx.displayDate && txColumnExists.display_date) dbTx.display_date = tx.displayDate
+          if (tx.monthIndex !== undefined && txColumnExists.month_index) dbTx.month_index = tx.monthIndex
+          if (tx.lockupPeriod && txColumnExists.lockup_period) dbTx.lockup_period = tx.lockupPeriod
+          if (tx.paymentFrequency && txColumnExists.payment_frequency) dbTx.payment_frequency = tx.paymentFrequency
 
           // Payout information (monthly payout investments)
-          if (tx.payoutMethod) dbTx.payout_method = tx.payoutMethod
-          if (tx.payoutBankId) dbTx.payout_bank_id = tx.payoutBankId
-          if (tx.payoutBankNickname) dbTx.payout_bank_nickname = tx.payoutBankNickname
+          if (tx.payoutMethod && txColumnExists.payout_method) dbTx.payout_method = tx.payoutMethod
+          if (tx.payoutBankId && txColumnExists.payout_bank_id) dbTx.payout_bank_id = tx.payoutBankId
+          if (tx.payoutBankNickname && txColumnExists.payout_bank_nickname) dbTx.payout_bank_nickname = tx.payoutBankNickname
 
           // Compounding/investment metadata
-          if (tx.principal !== undefined) dbTx.principal = tx.principal
-          if (tx.distributionTxId) dbTx.distribution_tx_id = tx.distributionTxId
-          if (tx.withdrawalId) dbTx.withdrawal_id = tx.withdrawalId
-          if (tx.payoutDueBy) dbTx.payout_due_by = tx.payoutDueBy
+          if (tx.principal !== undefined && txColumnExists.principal) dbTx.principal = tx.principal
+          if (tx.distributionTxId && txColumnExists.distribution_tx_id) dbTx.distribution_tx_id = tx.distributionTxId
+          if (tx.withdrawalId && txColumnExists.withdrawal_id) dbTx.withdrawal_id = tx.withdrawalId
+          if (tx.payoutDueBy && txColumnExists.payout_due_by) dbTx.payout_due_by = tx.payoutDueBy
 
           // State timestamps
-          if (tx.confirmedAt) dbTx.confirmed_at = tx.confirmedAt
-          if (tx.approvedAt) dbTx.approved_at = tx.approvedAt
-          if (tx.rejectedAt) dbTx.rejected_at = tx.rejectedAt
-          if (tx.completedAt) dbTx.completed_at = tx.completedAt
-          if (tx.failedAt) dbTx.failed_at = tx.failedAt
+          if (tx.confirmedAt && txColumnExists.confirmed_at) dbTx.confirmed_at = tx.confirmedAt
+          if (tx.approvedAt && txColumnExists.approved_at) dbTx.approved_at = tx.approvedAt
+          if (tx.rejectedAt && txColumnExists.rejected_at) dbTx.rejected_at = tx.rejectedAt
+          if (tx.completedAt && txColumnExists.completed_at) dbTx.completed_at = tx.completedAt
+          if (tx.failedAt && txColumnExists.failed_at) dbTx.failed_at = tx.failedAt
 
           // Flags and retry info
-          if (tx.autoApproved !== undefined) dbTx.auto_approved = tx.autoApproved
-          if (tx.manuallyCompleted !== undefined) dbTx.manually_completed = tx.manuallyCompleted
-          if (tx.failureReason) dbTx.failure_reason = tx.failureReason
-          if (tx.retryCount !== undefined) dbTx.retry_count = tx.retryCount
-          if (tx.lastRetryAt) dbTx.last_retry_at = tx.lastRetryAt
+          if (tx.autoApproved !== undefined && txColumnExists.auto_approved) dbTx.auto_approved = tx.autoApproved
+          if (tx.manuallyCompleted !== undefined && txColumnExists.manually_completed) dbTx.manually_completed = tx.manuallyCompleted
+          if (tx.failureReason && txColumnExists.failure_reason) dbTx.failure_reason = tx.failureReason
+          if (tx.retryCount !== undefined && txColumnExists.retry_count) dbTx.retry_count = tx.retryCount
+          if (tx.lastRetryAt && txColumnExists.last_retry_at) dbTx.last_retry_at = tx.lastRetryAt
 
           // Legacy reference and bookkeeping
-          if (tx.legacyReferenceId) dbTx.legacy_reference_id = tx.legacyReferenceId
-          if (tx.createdAt) dbTx.created_at = tx.createdAt
-          if (tx.updatedAt) dbTx.updated_at = tx.updatedAt
+          if (tx.legacyReferenceId && txColumnExists.legacy_reference_id) dbTx.legacy_reference_id = tx.legacyReferenceId
+          if (tx.createdAt && txColumnExists.created_at) dbTx.created_at = tx.createdAt
+          if (tx.updatedAt && txColumnExists.updated_at) dbTx.updated_at = tx.updatedAt
 
           transactionsToUpsert.push(dbTx)
         }
