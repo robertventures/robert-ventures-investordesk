@@ -70,11 +70,16 @@ const TransactionsList = memo(function TransactionsList({ limit = null, showView
             const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
             return transactions.map(tx => ({
               ...tx,
+              // Extract metadata fields if they exist in JSONB
+              monthIndex: tx.monthIndex || tx.metadata?.monthIndex,
+              lockupPeriod: tx.lockupPeriod || tx.metadata?.lockupPeriod || inv.lockupPeriod,
+              paymentFrequency: tx.paymentFrequency || tx.metadata?.paymentFrequency || inv.paymentFrequency,
+              payoutBankNickname: tx.payoutBankNickname || tx.metadata?.payoutBankNickname,
+              payoutDueBy: tx.payoutDueBy || tx.metadata?.payoutDueBy,
+              withdrawalId: tx.withdrawalId || tx.metadata?.withdrawalId,
               type: tx.type,
               date: tx.date || tx.createdAt,
               investmentId: inv.id,
-              lockupPeriod: inv.lockupPeriod,
-              paymentFrequency: inv.paymentFrequency,
               investmentAmount: inv.amount || 0
             }))
           })

@@ -199,12 +199,7 @@ export async function POST(request) {
     }
 
     const txOptionalColumns = [
-      'display_date', 'month_index', 'lockup_period', 'payment_frequency',
-      'payout_method', 'payout_bank_id', 'payout_bank_nickname',
-      'principal', 'distribution_tx_id', 'withdrawal_id', 'payout_due_by',
-      'confirmed_at', 'approved_at', 'rejected_at', 'completed_at', 'failed_at',
-      'auto_approved', 'manually_completed', 'failure_reason', 'retry_count', 'last_retry_at',
-      'legacy_reference_id', 'created_at', 'updated_at'
+      'description', 'metadata', 'created_at'
     ]
 
     const txColumnExists = {}
@@ -485,11 +480,10 @@ export async function POST(request) {
           amount,
           status: investmentStatus,
           date: investmentDate,
-          lockupPeriod: lockup,
-          paymentFrequency: payFreq,
-          confirmedAt: inv.confirmedAt || null,
-          approvedAt: inv.confirmedAt || null,
-          rejectedAt: inv.rejectedAt || null
+          metadata: {
+            lockupPeriod: lockup,
+            paymentFrequency: payFreq
+          }
         })
 
         // Distributions for monthly payout investments
@@ -594,19 +588,14 @@ export async function POST(request) {
                 amount: Math.round(distributionAmount * 100) / 100,
                 status,
                 date: distributionDateIso,
-                monthIndex,
-                lockupPeriod: lockup,
-                paymentFrequency: payFreq,
-                payoutMethod,
-                payoutBankId,
-                payoutBankNickname,
-                autoApproved: autoApproved || existingTx?.autoApproved || false,
-                failureReason: legacyEvent?.failureReason || existingTx?.failureReason || null,
-                retryCount: legacyEvent?.retryCount ?? existingTx?.retryCount ?? 0,
-                lastRetryAt: legacyEvent?.lastRetryAt || existingTx?.lastRetryAt || null,
-                completedAt: completedAt || legacyEvent?.completedAt || existingTx?.completedAt || null,
-                manuallyCompleted: legacyEvent?.manuallyCompleted || existingTx?.manuallyCompleted || false,
-                failedAt: legacyEvent?.failedAt || existingTx?.failedAt || null
+                metadata: {
+                  monthIndex,
+                  lockupPeriod: lockup,
+                  paymentFrequency: payFreq,
+                  payoutMethod,
+                  payoutBankId,
+                  payoutBankNickname
+                }
               })
 
               monthIndex += 1
@@ -675,13 +664,13 @@ export async function POST(request) {
                 amount: Math.round(interest * 100) / 100,
                 status: 'received',  // Auto-complete for compounding (no admin approval needed)
                 date: compoundingDateIso,
-                displayDate: compoundingDateIso,
-                monthIndex,
-                lockupPeriod: lockup,
-                paymentFrequency: payFreq,
-                principal: Math.round(balance * 100) / 100,
-                completedAt: compoundingDateIso,  // Mark as completed immediately
-                legacyReferenceId: legacyDistributionEvent?.id || null
+                metadata: {
+                  displayDate: compoundingDateIso,
+                  monthIndex,
+                  lockupPeriod: lockup,
+                  paymentFrequency: payFreq,
+                  principal: Math.round(balance * 100) / 100
+                }
               })
 
               // 2. Then, create the CONTRIBUTION (distribution reinvested)
@@ -696,14 +685,14 @@ export async function POST(request) {
                 amount: Math.round(interest * 100) / 100,
                 status: 'received',  // Auto-complete for compounding (no admin approval needed)
                 date: contributionDateIso,
-                displayDate: compoundingDateIso,  // Show same display date as distribution
-                monthIndex,
-                lockupPeriod: lockup,
-                paymentFrequency: payFreq,
-                principal: Math.round(balance * 100) / 100,
-                distributionTxId,  // Link to the distribution that was reinvested
-                completedAt: contributionDateIso,  // Mark as completed immediately
-                legacyReferenceId: legacyContributionEvent?.id || null
+                metadata: {
+                  displayDate: compoundingDateIso,  // Show same display date as distribution
+                  monthIndex,
+                  lockupPeriod: lockup,
+                  paymentFrequency: payFreq,
+                  principal: Math.round(balance * 100) / 100,
+                  distributionTxId  // Link to the distribution that was reinvested
+                }
               })
 
               balance += interest
@@ -749,11 +738,10 @@ export async function POST(request) {
             amount: wd.amount || 0,
             status,
             date: redemptionDate,
-            withdrawalId: wd.id,
-            payoutDueBy: wd.payoutDueBy || null,
-            approvedAt: wd.approvedAt || null,
-            paidAt: wd.paidAt || null,
-            rejectedAt: wd.rejectedAt || null
+            metadata: {
+              withdrawalId: wd.id,
+              payoutDueBy: wd.payoutDueBy || null
+            }
           })
         }
 
@@ -814,41 +802,16 @@ export async function POST(request) {
             date: tx.date
           }
 
-          // Optional metadata fields (only set if present)
-          if (tx.displayDate && txColumnExists.display_date) dbTx.display_date = tx.displayDate
-          if (tx.monthIndex !== undefined && txColumnExists.month_index) dbTx.month_index = tx.monthIndex
-          if (tx.lockupPeriod && txColumnExists.lockup_period) dbTx.lockup_period = tx.lockupPeriod
-          if (tx.paymentFrequency && txColumnExists.payment_frequency) dbTx.payment_frequency = tx.paymentFrequency
-
-          // Payout information (monthly payout investments)
-          if (tx.payoutMethod && txColumnExists.payout_method) dbTx.payout_method = tx.payoutMethod
-          if (tx.payoutBankId && txColumnExists.payout_bank_id) dbTx.payout_bank_id = tx.payoutBankId
-          if (tx.payoutBankNickname && txColumnExists.payout_bank_nickname) dbTx.payout_bank_nickname = tx.payoutBankNickname
-
-          // Compounding/investment metadata
-          if (tx.principal !== undefined && txColumnExists.principal) dbTx.principal = tx.principal
-          if (tx.distributionTxId && txColumnExists.distribution_tx_id) dbTx.distribution_tx_id = tx.distributionTxId
-          if (tx.withdrawalId && txColumnExists.withdrawal_id) dbTx.withdrawal_id = tx.withdrawalId
-          if (tx.payoutDueBy && txColumnExists.payout_due_by) dbTx.payout_due_by = tx.payoutDueBy
-
-          // State timestamps
-          if (tx.confirmedAt && txColumnExists.confirmed_at) dbTx.confirmed_at = tx.confirmedAt
-          if (tx.approvedAt && txColumnExists.approved_at) dbTx.approved_at = tx.approvedAt
-          if (tx.rejectedAt && txColumnExists.rejected_at) dbTx.rejected_at = tx.rejectedAt
-          if (tx.completedAt && txColumnExists.completed_at) dbTx.completed_at = tx.completedAt
-          if (tx.failedAt && txColumnExists.failed_at) dbTx.failed_at = tx.failedAt
-
-          // Flags and retry info
-          if (tx.autoApproved !== undefined && txColumnExists.auto_approved) dbTx.auto_approved = tx.autoApproved
-          if (tx.manuallyCompleted !== undefined && txColumnExists.manually_completed) dbTx.manually_completed = tx.manuallyCompleted
-          if (tx.failureReason && txColumnExists.failure_reason) dbTx.failure_reason = tx.failureReason
-          if (tx.retryCount !== undefined && txColumnExists.retry_count) dbTx.retry_count = tx.retryCount
-          if (tx.lastRetryAt && txColumnExists.last_retry_at) dbTx.last_retry_at = tx.lastRetryAt
-
-          // Legacy reference and bookkeeping
-          if (tx.legacyReferenceId && txColumnExists.legacy_reference_id) dbTx.legacy_reference_id = tx.legacyReferenceId
-          if (tx.createdAt && txColumnExists.created_at) dbTx.created_at = tx.createdAt
-          if (tx.updatedAt && txColumnExists.updated_at) dbTx.updated_at = tx.updatedAt
+          // Optional fields (only write if column exists and value present)
+          if (tx.metadata && txColumnExists.metadata) {
+            dbTx.metadata = tx.metadata
+          }
+          if (tx.description && txColumnExists.description) {
+            dbTx.description = tx.description
+          }
+          if (tx.createdAt && txColumnExists.created_at) {
+            dbTx.created_at = tx.createdAt
+          }
 
           // Final sanitize: only include columns explicitly allowed for this DB
           const sanitized = {}

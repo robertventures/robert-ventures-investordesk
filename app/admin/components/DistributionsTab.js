@@ -61,12 +61,14 @@ export default function DistributionsTab({ users, timeMachineData }) {
             if (txTime <= currentAppTime) {
               events.push({
                 ...tx,
+                // Extract metadata fields if they exist in JSONB
+                monthIndex: tx.monthIndex || tx.metadata?.monthIndex,
+                lockupPeriod: tx.lockupPeriod || tx.metadata?.lockupPeriod || investment.lockupPeriod,
+                paymentFrequency: tx.paymentFrequency || tx.metadata?.paymentFrequency || investment.paymentFrequency,
                 userId: user.id,
                 userEmail: user.email,
                 userName: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
-                investmentId: investment.id,
-                lockupPeriod: investment.lockupPeriod || tx.lockupPeriod,
-                paymentFrequency: investment.paymentFrequency || tx.paymentFrequency
+                investmentId: investment.id
               })
             }
           }
