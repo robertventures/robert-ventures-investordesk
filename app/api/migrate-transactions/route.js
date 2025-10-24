@@ -761,7 +761,7 @@ export async function POST(request) {
         if (!inv || !inv.id || !inv.transactions) continue
         for (const tx of inv.transactions) {
           // Convert camelCase to snake_case for database
-          // IMPORTANT: Only include core fields that exist in transactions table schema
+          // Persist all relevant fields so subsequent runs have complete data
           const dbTx = {
             id: tx.id,
             user_id: user.id,
@@ -771,7 +771,43 @@ export async function POST(request) {
             status: tx.status,
             date: tx.date
           }
-          
+
+          // Optional metadata fields (only set if present)
+          if (tx.displayDate) dbTx.display_date = tx.displayDate
+          if (tx.monthIndex !== undefined) dbTx.month_index = tx.monthIndex
+          if (tx.lockupPeriod) dbTx.lockup_period = tx.lockupPeriod
+          if (tx.paymentFrequency) dbTx.payment_frequency = tx.paymentFrequency
+
+          // Payout information (monthly payout investments)
+          if (tx.payoutMethod) dbTx.payout_method = tx.payoutMethod
+          if (tx.payoutBankId) dbTx.payout_bank_id = tx.payoutBankId
+          if (tx.payoutBankNickname) dbTx.payout_bank_nickname = tx.payoutBankNickname
+
+          // Compounding/investment metadata
+          if (tx.principal !== undefined) dbTx.principal = tx.principal
+          if (tx.distributionTxId) dbTx.distribution_tx_id = tx.distributionTxId
+          if (tx.withdrawalId) dbTx.withdrawal_id = tx.withdrawalId
+          if (tx.payoutDueBy) dbTx.payout_due_by = tx.payoutDueBy
+
+          // State timestamps
+          if (tx.confirmedAt) dbTx.confirmed_at = tx.confirmedAt
+          if (tx.approvedAt) dbTx.approved_at = tx.approvedAt
+          if (tx.rejectedAt) dbTx.rejected_at = tx.rejectedAt
+          if (tx.completedAt) dbTx.completed_at = tx.completedAt
+          if (tx.failedAt) dbTx.failed_at = tx.failedAt
+
+          // Flags and retry info
+          if (tx.autoApproved !== undefined) dbTx.auto_approved = tx.autoApproved
+          if (tx.manuallyCompleted !== undefined) dbTx.manually_completed = tx.manuallyCompleted
+          if (tx.failureReason) dbTx.failure_reason = tx.failureReason
+          if (tx.retryCount !== undefined) dbTx.retry_count = tx.retryCount
+          if (tx.lastRetryAt) dbTx.last_retry_at = tx.lastRetryAt
+
+          // Legacy reference and bookkeeping
+          if (tx.legacyReferenceId) dbTx.legacy_reference_id = tx.legacyReferenceId
+          if (tx.createdAt) dbTx.created_at = tx.createdAt
+          if (tx.updatedAt) dbTx.updated_at = tx.updatedAt
+
           transactionsToUpsert.push(dbTx)
         }
       }
