@@ -426,43 +426,19 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
           name: form.entityName,
           registrationDate: form.dob,
           // Only send taxId if it's not masked (already on file)
-          ...(isSsnMasked ? {} : { taxId: form.ssn }),
-          address: {
-            street1: form.street1,
-            street2: form.street2,
-            city: form.city,
-            state: form.state,
-            zip: form.zip,
-            country: form.country
-          }
+          ...(isSsnMasked ? {} : { taxId: form.ssn })
         }} : {}),
         ...(accountType !== 'entity' ? {
           dob: form.dob,
           // Only send ssn if it's not masked (already on file)
-          ...(isSsnMasked ? {} : { ssn: form.ssn }),
-          address: {
-            street1: form.street1,
-            street2: form.street2,
-            city: form.city,
-            state: form.state,
-            zip: form.zip,
-            country: form.country
-          }
+          ...(isSsnMasked ? {} : { ssn: form.ssn })
         } : {}),
         ...(accountType === 'entity' ? { authorizedRepresentative: {
           firstName: form.authorizedRep.firstName.trim(),
           lastName: form.authorizedRep.lastName.trim(),
           dob: form.authorizedRep.dob,
           // Only send ssn if it's not masked (already on file)
-          ...(isAuthRepSsnMasked ? {} : { ssn: form.authorizedRep.ssn }),
-          address: {
-            street1: form.authorizedRep.street1,
-            street2: form.authorizedRep.street2,
-            city: form.authorizedRep.city,
-            state: form.authorizedRep.state,
-            zip: form.authorizedRep.zip,
-            country: form.authorizedRep.country
-          }
+          ...(isAuthRepSsnMasked ? {} : { ssn: form.authorizedRep.ssn })
         }} : {})
       }
 
@@ -487,7 +463,56 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(userData)
       })
-      await resUser.json()
+      const userResponse = await resUser.json()
+
+      if (!userResponse.success) {
+        console.error('Failed to update user profile:', userResponse.error)
+        alert('Failed to save personal information. Please try again.')
+        return
+      }
+
+      console.log('✅ User profile updated successfully')
+
+      // Save addresses to the addresses table
+      try {
+        const addressesToSave = []
+
+        // Add main address if provided
+        if (form.street1 && form.city && form.state && form.zip) {
+          addressesToSave.push(mainAddress)
+        }
+
+        // Add joint holder address if joint account
+        if (accountType === 'joint' && form.jointHolder.street1 && form.jointHolder.city && form.jointHolder.state && form.jointHolder.zip) {
+          addressesToSave.push(jointAddressData)
+        }
+
+        // Add authorized rep address if entity account
+        if (accountType === 'entity' && form.authorizedRep.street1 && form.authorizedRep.city && form.authorizedRep.state && form.authorizedRep.zip) {
+          addressesToSave.push(repAddressData)
+        }
+
+        // Save addresses one by one
+        for (const address of addressesToSave) {
+          const addressRes = await fetch(`/api/users/${userId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              _action: 'addAddress',
+              address
+            })
+          })
+          const addressResponse = await addressRes.json()
+          if (!addressResponse.success) {
+            console.warn('Failed to save address:', addressResponse.error)
+          } else {
+            console.log('✅ Address saved successfully:', address.label)
+          }
+        }
+      } catch (addressError) {
+        console.warn('Failed to save addresses:', addressError)
+        // Don't block the flow for address save failures
+      }
 
       // Also reflect into the current investment if available
       if (investmentId) {
@@ -498,29 +523,13 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
             entity: {
               name: form.entityName,
               registrationDate: form.dob,
-              taxId: form.ssn,
-              address: {
-                street1: form.street1,
-                street2: form.street2,
-                city: form.city,
-                state: form.state,
-                zip: form.zip,
-                country: form.country
-              }
+              taxId: form.ssn
             },
             authorizedRepresentative: {
               firstName: form.authorizedRep.firstName.trim(),
               lastName: form.authorizedRep.lastName.trim(),
               dob: form.authorizedRep.dob,
-              ssn: form.authorizedRep.ssn,
-              address: {
-                street1: form.authorizedRep.street1,
-                street2: form.authorizedRep.street2,
-                city: form.authorizedRep.city,
-                state: form.authorizedRep.state,
-                zip: form.authorizedRep.zip,
-                country: form.authorizedRep.country
-              }
+              ssn: form.authorizedRep.ssn
             }
           }
         } else if (accountType === 'joint') {
@@ -547,7 +556,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
           }
         }
 
-        await fetch(`/api/users/${userId}`, {
+        const investmentRes = await fetch(`/api/users/${userId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -556,7 +565,47 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
             fields: investmentFields
           })
         })
+        const investmentResponse = await investmentRes.json()
+
+        if (!investmentResponse.success) {
+          console.error('Failed to update investment:', investmentResponse.error)
+          // Don't block the flow for investment update failures
+        }
       }
+
+      // Prepare address data for saving
+      const mainAddress = {
+        street1: form.street1,
+        street2: form.street2,
+        city: form.city,
+        state: form.state,
+        zip: form.zip,
+        country: form.country,
+        label: 'Home',
+        isPrimary: true
+      }
+
+      const jointAddressData = accountType === 'joint' ? {
+        street1: form.jointHolder.street1,
+        street2: form.jointHolder.street2,
+        city: form.jointHolder.city,
+        state: form.jointHolder.state,
+        zip: form.jointHolder.zip,
+        country: form.jointHolder.country,
+        label: 'Joint Holder',
+        isPrimary: false
+      } : null
+
+      const repAddressData = accountType === 'entity' ? {
+        street1: form.authorizedRep.street1,
+        street2: form.authorizedRep.street2,
+        city: form.authorizedRep.city,
+        state: form.authorizedRep.state,
+        zip: form.authorizedRep.zip,
+        country: form.authorizedRep.country,
+        label: 'Authorized Rep',
+        isPrimary: false
+      } : null
 
       const summary = {
         ...(accountType !== 'entity' ? {
