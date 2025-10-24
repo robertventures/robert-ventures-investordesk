@@ -137,8 +137,17 @@ export default function ConfirmationPage() {
       const data = await res.json()
 
       if (!data.success) {
+        // Log full error details for debugging
+        console.error('❌ Verification failed:', data)
+        
         // Provide helpful error messages
         let errorMessage = data.error || 'Verification failed. Please try again.'
+        
+        // Show additional details if available (for debugging)
+        if (data.details) {
+          console.error('❌ Error details:', data.details)
+          errorMessage = `${errorMessage} (${data.details})`
+        }
         
         // If pending registration expired or not found
         if (errorMessage.includes('not found or expired')) {

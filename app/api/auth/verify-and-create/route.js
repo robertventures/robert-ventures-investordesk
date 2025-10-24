@@ -22,9 +22,12 @@ export async function POST(request) {
     }
 
     // Verify the pending user and get their data
+    console.log('🔍 Attempting to verify pending user:', email)
     const verifyResult = await verifyAndRemovePendingUser(email, verificationCode)
+    console.log('📋 Verify result:', { success: verifyResult.success, hasPassword: !!verifyResult.plainPassword })
 
     if (!verifyResult.success) {
+      console.error('❌ Verification failed:', verifyResult.error)
       return NextResponse.json(
         { success: false, error: verifyResult.error },
         { status: 400 }
@@ -42,6 +45,7 @@ export async function POST(request) {
     }
 
     // Create the actual user in Supabase
+    console.log('👤 Creating user account for:', verifyResult.email)
     const userData = {
       email: verifyResult.email,
       password: verifyResult.plainPassword, // Plain password for Supabase Auth
@@ -53,8 +57,13 @@ export async function POST(request) {
 
     if (!result.success) {
       console.error('❌ Failed to create user after verification:', result.error)
+      console.error('❌ Full error details:', JSON.stringify(result, null, 2))
       return NextResponse.json(
-        { success: false, error: 'Failed to create account. Please try again.' },
+        { 
+          success: false, 
+          error: 'Failed to create account. Please try again.',
+          details: result.error // Return actual error for debugging
+        },
         { status: 500 }
       )
     }
@@ -97,9 +106,19 @@ export async function POST(request) {
     return response
 
   } catch (error) {
-    console.error('Error in POST /api/auth/verify-and-create:', error)
+    console.error('❌ CRITICAL ERROR in POST /api/auth/verify-and-create:', error)
+    console.error('Error stack:', error.stack)
+    console.error('Error message:', error.message)
     return NextResponse.json(
-      { success: false, error: 'Internal server error' },
+      { 
+        success: false, 
+        error: 'Internal server error',
+        // Include error details in development/testing
+        debug: process.env.NODE_ENV !== 'production' ? {
+          message: error.message,
+          stack: error.stack
+        } : undefined
+      },
       { status: 500 }
     )
   }
