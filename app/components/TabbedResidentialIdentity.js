@@ -75,6 +75,29 @@ const isAdultDob = (value = '') => {
   return date <= adultCutoff
 }
 
+// Map state abbreviations to full names to ensure select pre-fills correctly
+const STATE_ABBR_TO_NAME = {
+  AL: 'Alabama', AK: 'Alaska', AZ: 'Arizona', AR: 'Arkansas', CA: 'California',
+  CO: 'Colorado', CT: 'Connecticut', DE: 'Delaware', FL: 'Florida', GA: 'Georgia',
+  HI: 'Hawaii', ID: 'Idaho', IL: 'Illinois', IN: 'Indiana', IA: 'Iowa', KS: 'Kansas',
+  KY: 'Kentucky', LA: 'Louisiana', ME: 'Maine', MD: 'Maryland', MA: 'Massachusetts',
+  MI: 'Michigan', MN: 'Minnesota', MS: 'Mississippi', MO: 'Missouri', MT: 'Montana',
+  NE: 'Nebraska', NV: 'Nevada', NH: 'New Hampshire', NJ: 'New Jersey', NM: 'New Mexico',
+  NY: 'New York', NC: 'North Carolina', ND: 'North Dakota', OH: 'Ohio', OK: 'Oklahoma',
+  OR: 'Oregon', PA: 'Pennsylvania', RI: 'Rhode Island', SC: 'South Carolina', SD: 'South Dakota',
+  TN: 'Tennessee', TX: 'Texas', UT: 'Utah', VT: 'Vermont', VA: 'Virginia',
+  WA: 'Washington', WV: 'West Virginia', WI: 'Wisconsin', WY: 'Wyoming'
+}
+
+const toFullStateName = (value = '') => {
+  const trimmed = (value || '').trim()
+  if (!trimmed) return ''
+  if (trimmed.length === 2) {
+    return STATE_ABBR_TO_NAME[trimmed.toUpperCase()] || trimmed
+  }
+  return trimmed
+}
+
 export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary, accountType: accountTypeProp }) {
   const US_STATES = [
     'Alabama','Alaska','Arizona','Arkansas','California','Colorado','Connecticut','Delaware','Florida','Georgia','Hawaii','Idaho','Illinois','Indiana','Iowa','Kansas','Kentucky','Louisiana','Maine','Maryland','Massachusetts','Michigan','Minnesota','Mississippi','Missouri','Montana','Nebraska','Nevada','New Hampshire','New Jersey','New Mexico','New York','North Carolina','North Dakota','Ohio','Oklahoma','Oregon','Pennsylvania','Rhode Island','South Carolina','South Dakota','Tennessee','Texas','Utah','Vermont','Virginia','Washington','West Virginia','Wisconsin','Wyoming'
@@ -166,6 +189,9 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
           const hasPendingOrActive = investments.some(inv => inv.status === 'pending' || inv.status === 'active')
           setHasActiveInvestments(hasPendingOrActive)
 
+          // Prefill from user's current address (single source of truth)
+          const addressForPrefill = u.address || null
+
           // SSN/TIN: If already encrypted or masked, show masked value so validation passes
           // Show as "•••-••-••••" to indicate it's on file
           const savedSsn = u.ssn || u.taxId || ''
@@ -195,12 +221,12 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
             firstName: u.firstName || '',
             lastName: u.lastName || '',
             phone: formatPhoneFromDB(u.phoneNumber || ''),
-            street1: u.address?.street1 || '',
-            street2: u.address?.street2 || '',
-            city: u.address?.city || '',
-            state: u.address?.state || '',
-            zip: u.address?.zip || '',
-            country: u.address?.country || 'United States',
+            street1: addressForPrefill?.street1 || '',
+            street2: addressForPrefill?.street2 || '',
+            city: addressForPrefill?.city || '',
+            state: toFullStateName(addressForPrefill?.state || ''),
+            zip: addressForPrefill?.zip || '',
+            country: addressForPrefill?.country || 'United States',
             dob: u.dob || '',
             ssn: isSsnOnFile ? '•••-••-••••' : savedSsn,
             jointHoldingType: u.jointHoldingType || '',
@@ -210,7 +236,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
               street1: u.jointHolder?.address?.street1 || '',
               street2: u.jointHolder?.address?.street2 || '',
               city: u.jointHolder?.address?.city || '',
-              state: u.jointHolder?.address?.state || '',
+              state: toFullStateName(u.jointHolder?.address?.state || ''),
               zip: u.jointHolder?.address?.zip || '',
               country: u.jointHolder?.address?.country || 'United States',
               dob: u.jointHolder?.dob || '',
@@ -224,7 +250,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
               street1: u.authorizedRepresentative?.address?.street1 || '',
               street2: u.authorizedRepresentative?.address?.street2 || '',
               city: u.authorizedRepresentative?.address?.city || '',
-              state: u.authorizedRepresentative?.address?.state || '',
+              state: toFullStateName(u.authorizedRepresentative?.address?.state || ''),
               zip: u.authorizedRepresentative?.address?.zip || '',
               country: u.authorizedRepresentative?.address?.country || 'United States',
               dob: u.authorizedRepresentative?.dob || '',
@@ -422,6 +448,15 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
           lastName: form.lastName.trim()
         } : {}),
         phoneNumber: normalizePhoneForDB(form.phone.trim()),
+        // Always update user's single address with latest values
+        address: {
+          street1: form.street1,
+          street2: form.street2,
+          city: form.city,
+          state: form.state,
+          zip: form.zip,
+          country: form.country
+        },
         ...(accountType === 'entity' ? { entity: {
           name: form.entityName,
           registrationDate: form.dob,
@@ -473,46 +508,41 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
 
       console.log('✅ User profile updated successfully')
 
-      // Save addresses to the addresses table
-      try {
-        const addressesToSave = []
-
-        // Add main address if provided
-        if (form.street1 && form.city && form.state && form.zip) {
-          addressesToSave.push(mainAddress)
-        }
-
-        // Add joint holder address if joint account
-        if (accountType === 'joint' && form.jointHolder.street1 && form.jointHolder.city && form.jointHolder.state && form.jointHolder.zip) {
-          addressesToSave.push(jointAddressData)
-        }
-
-        // Add authorized rep address if entity account
-        if (accountType === 'entity' && form.authorizedRep.street1 && form.authorizedRep.city && form.authorizedRep.state && form.authorizedRep.zip) {
-          addressesToSave.push(repAddressData)
-        }
-
-        // Save addresses one by one
-        for (const address of addressesToSave) {
-          const addressRes = await fetch(`/api/users/${userId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              _action: 'addAddress',
-              address
-            })
-          })
-          const addressResponse = await addressRes.json()
-          if (!addressResponse.success) {
-            console.warn('Failed to save address:', addressResponse.error)
-          } else {
-            console.log('✅ Address saved successfully:', address.label)
-          }
-        }
-      } catch (addressError) {
-        console.warn('Failed to save addresses:', addressError)
-        // Don't block the flow for address save failures
+      // Prepare address data for saving (defined BEFORE usage below)
+      const mainAddress = {
+        street1: form.street1,
+        street2: form.street2,
+        city: form.city,
+        state: form.state,
+        zip: form.zip,
+        country: form.country,
+        label: 'Home',
+        isPrimary: true
       }
+
+      const jointAddressData = accountType === 'joint' ? {
+        street1: form.jointHolder.street1,
+        street2: form.jointHolder.street2,
+        city: form.jointHolder.city,
+        state: form.jointHolder.state,
+        zip: form.jointHolder.zip,
+        country: form.jointHolder.country,
+        label: 'Joint Holder',
+        isPrimary: false
+      } : null
+
+      const repAddressData = accountType === 'entity' ? {
+        street1: form.authorizedRep.street1,
+        street2: form.authorizedRep.street2,
+        city: form.authorizedRep.city,
+        state: form.authorizedRep.state,
+        zip: form.authorizedRep.zip,
+        country: form.authorizedRep.country,
+        label: 'Authorized Rep',
+        isPrimary: false
+      } : null
+
+      // No longer write to addresses table; user's address is updated above
 
       // Also reflect into the current investment if available
       if (investmentId) {
@@ -572,40 +602,6 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
           // Don't block the flow for investment update failures
         }
       }
-
-      // Prepare address data for saving
-      const mainAddress = {
-        street1: form.street1,
-        street2: form.street2,
-        city: form.city,
-        state: form.state,
-        zip: form.zip,
-        country: form.country,
-        label: 'Home',
-        isPrimary: true
-      }
-
-      const jointAddressData = accountType === 'joint' ? {
-        street1: form.jointHolder.street1,
-        street2: form.jointHolder.street2,
-        city: form.jointHolder.city,
-        state: form.jointHolder.state,
-        zip: form.jointHolder.zip,
-        country: form.jointHolder.country,
-        label: 'Joint Holder',
-        isPrimary: false
-      } : null
-
-      const repAddressData = accountType === 'entity' ? {
-        street1: form.authorizedRep.street1,
-        street2: form.authorizedRep.street2,
-        city: form.authorizedRep.city,
-        state: form.authorizedRep.state,
-        zip: form.authorizedRep.zip,
-        country: form.authorizedRep.country,
-        label: 'Authorized Rep',
-        isPrimary: false
-      } : null
 
       const summary = {
         ...(accountType !== 'entity' ? {

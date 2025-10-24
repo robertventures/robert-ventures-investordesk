@@ -167,7 +167,7 @@ export async function POST(request) {
           continue
         }
 
-        // 2.5. Create primary address in addresses table if provided
+        // 2.5. Update user with address if provided (store directly on user record)
         if (investorData.address && (
           investorData.address.street1 || 
           investorData.address.city || 
@@ -175,24 +175,22 @@ export async function POST(request) {
           investorData.address.zip
         )) {
           const { error: addressError } = await supabase
-            .from('addresses')
-            .insert({
-              id: `addr-${userId}-${Date.now()}`,
-              user_id: userId,
-              street1: investorData.address.street1 || '',
-              street2: investorData.address.street2 || '',
-              city: investorData.address.city || '',
-              state: investorData.address.state || '',
-              zip: investorData.address.zip || '',
-              country: investorData.address.country || 'United States',
-              label: 'Home',
-              is_primary: true,
-              created_at: timestamp,
+            .from('users')
+            .update({
+              address: {
+                street1: investorData.address.street1 || '',
+                street2: investorData.address.street2 || '',
+                city: investorData.address.city || '',
+                state: investorData.address.state || '',
+                zip: investorData.address.zip || '',
+                country: investorData.address.country || 'United States'
+              },
               updated_at: timestamp
             })
+            .eq('id', userId)
 
           if (addressError) {
-            console.error(`Failed to create address for ${normalizedEmail}:`, addressError)
+            console.error(`Failed to set address for ${normalizedEmail}:`, addressError)
             // Don't fail the whole import for address errors
           }
         }

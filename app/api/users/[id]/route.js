@@ -65,6 +65,13 @@ function formatUserForResponse(user) {
   }
 }
 
+    if (_action === 'upsertAddress') {
+      return NextResponse.json(
+        { success: false, error: 'Deprecated: use PUT /api/users/profile with { address }' },
+        { status: 410 }
+      )
+    }
+
 /**
  * GET /api/users/[id]
  * Get user by ID
@@ -86,7 +93,7 @@ export async function GET(request, { params }) {
       )
     }
 
-    // Fetch addresses from the addresses table
+    // Prefer user's primary address stored on users.address, with a temporary fallback to addresses table
     const supabase = createServiceClient()
     const { data: addresses } = await supabase
       .from('addresses')
@@ -95,20 +102,19 @@ export async function GET(request, { params }) {
       .order('is_primary', { ascending: false })
       .order('created_at', { ascending: false })
 
-    // Get primary address or use legacy address field
     const primaryAddress = addresses && addresses.length > 0 
-      ? addresses.find(addr => addr.is_primary) || addresses[0]
+      ? (addresses.find(addr => addr.is_primary) || addresses[0])
       : null
-    
-    // Populate the address field from primary address or legacy field
-    const addressData = primaryAddress ? {
+
+    // Use user.address if present; otherwise fallback to legacy addresses table
+    const addressData = user.address || (primaryAddress ? {
       street1: primaryAddress.street1,
       street2: primaryAddress.street2,
       city: primaryAddress.city,
       state: primaryAddress.state,
       zip: primaryAddress.zip,
       country: primaryAddress.country
-    } : (user.address || null)
+    } : null)
 
     // Convert snake_case to camelCase for frontend
     const safeUser = {
@@ -155,19 +161,7 @@ export async function GET(request, { params }) {
       withdrawals: user.withdrawals || [],
       bankAccounts: user.bank_accounts || [],
       banking: user.banking || null,
-      addresses: (addresses || []).map(addr => ({
-        id: addr.id,
-        street1: addr.street1,
-        street2: addr.street2,
-        city: addr.city,
-        state: addr.state,
-        zip: addr.zip,
-        country: addr.country,
-        label: addr.label,
-        isPrimary: addr.is_primary,
-        createdAt: addr.created_at,
-        updatedAt: addr.updated_at
-      })),
+      // Do not return addresses array anymore; single source of truth is user.address
       activity: (user.activity || []).map(act => ({
         ...act,
         investmentId: act.investment_id
@@ -704,202 +698,24 @@ export async function PUT(request, { params }) {
     }
 
     if (_action === 'addAddress') {
-      // Add a new address
-      const { address } = body
-      if (!address) {
-        return NextResponse.json(
-          { success: false, error: 'Address data is required' },
-          { status: 400 }
-        )
-      }
-
-      try {
-        const supabase = createServiceClient()
-        
-        // Check if this is the first address
-        const { count: addressCount, error: countError } = await supabase
-          .from('addresses')
-          .select('*', { count: 'exact', head: true })
-          .eq('user_id', id)
-
-        console.log('Address count for user:', addressCount)
-        
-        // Insert address
-        const { data: newAddress, error: insertError } = await supabase
-          .from('addresses')
-          .insert({
-            id: address.id || `addr-${Date.now()}`,
-            user_id: id,
-            street1: address.street1,
-            street2: address.street2 || null,
-            city: address.city,
-            state: address.state,
-            zip: address.zip,
-            country: address.country || 'United States',
-            label: address.label || 'Home',
-            is_primary: addressCount === 0,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          })
-          .select()
-          .single()
-
-        if (insertError) {
-          console.error('Error inserting address:', insertError)
-          return NextResponse.json(
-            { success: false, error: `Failed to add address: ${insertError.message}` },
-            { status: 500 }
-          )
-        }
-
-        // Fetch updated user data
-        const updatedUser = await getUser(id, true)
-        const safeUser = formatUserForResponse(updatedUser)
-
-        return NextResponse.json({
-          success: true,
-          user: safeUser,
-          address: newAddress
-        })
-      } catch (error) {
-        console.error('Error adding address:', error)
-        return NextResponse.json(
-          { success: false, error: `Internal error: ${error.message}` },
-          { status: 500 }
-        )
-      }
+      return NextResponse.json(
+        { success: false, error: 'Deprecated: use PUT /api/users/profile with { address }' },
+        { status: 410 }
+      )
     }
 
     if (_action === 'removeAddress') {
-      // Remove an address
-      const { addressId } = body
-      if (!addressId) {
-        return NextResponse.json(
-          { success: false, error: 'Address ID is required' },
-          { status: 400 }
-        )
-      }
-
-      try {
-        const supabase = createServiceClient()
-        
-        // Check if this is the primary address
-        const { data: addressToRemove, error: fetchError } = await supabase
-          .from('addresses')
-          .select('is_primary')
-          .eq('id', addressId)
-          .eq('user_id', id)
-          .maybeSingle()
-
-        if (fetchError || !addressToRemove) {
-          return NextResponse.json(
-            { success: false, error: 'Address not found' },
-            { status: 404 }
-          )
-        }
-
-        if (addressToRemove.is_primary) {
-          return NextResponse.json(
-            { success: false, error: 'Cannot remove primary address. Please set another address as primary first.' },
-            { status: 400 }
-          )
-        }
-
-        // Delete address
-        const { error: deleteError } = await supabase
-          .from('addresses')
-          .delete()
-          .eq('id', addressId)
-          .eq('user_id', id)
-
-        if (deleteError) {
-          console.error('Error deleting address:', deleteError)
-          return NextResponse.json(
-            { success: false, error: 'Failed to remove address' },
-            { status: 500 }
-          )
-        }
-
-        // Fetch updated user data
-        const updatedUser = await getUser(id, true)
-        const safeUser = formatUserForResponse(updatedUser)
-
-        return NextResponse.json({
-          success: true,
-          user: safeUser
-        })
-      } catch (error) {
-        console.error('Error removing address:', error)
-        return NextResponse.json(
-          { success: false, error: 'Failed to remove address' },
-          { status: 500 }
-        )
-      }
+      return NextResponse.json(
+        { success: false, error: 'Deprecated: address is now stored at user level only' },
+        { status: 410 }
+      )
     }
 
     if (_action === 'setDefaultAddress') {
-      // Set primary address
-      const { addressId } = body
-      if (!addressId) {
-        return NextResponse.json(
-          { success: false, error: 'Address ID is required' },
-          { status: 400 }
-        )
-      }
-
-      try {
-        const supabase = createServiceClient()
-        
-        // Verify address exists and belongs to user
-        const { data: address, error: fetchError } = await supabase
-          .from('addresses')
-          .select('id')
-          .eq('id', addressId)
-          .eq('user_id', id)
-          .maybeSingle()
-
-        if (fetchError || !address) {
-          return NextResponse.json(
-            { success: false, error: 'Address not found' },
-            { status: 404 }
-          )
-        }
-
-        // Set all addresses to non-primary
-        await supabase
-          .from('addresses')
-          .update({ is_primary: false })
-          .eq('user_id', id)
-
-        // Set selected address as primary
-        const { error: updateError } = await supabase
-          .from('addresses')
-          .update({ is_primary: true, updated_at: new Date().toISOString() })
-          .eq('id', addressId)
-
-        if (updateError) {
-          console.error('Error setting primary address:', updateError)
-          return NextResponse.json(
-            { success: false, error: 'Failed to set primary address' },
-            { status: 500 }
-          )
-        }
-
-        // Fetch updated user data
-        const updatedUser = await getUser(id, true)
-        const safeUser = formatUserForResponse(updatedUser)
-
-        return NextResponse.json({
-          success: true,
-          user: safeUser
-        })
-      } catch (error) {
-        console.error('Error setting primary address:', error)
-        return NextResponse.json(
-          { success: false, error: 'Failed to set primary address' },
-          { status: 500 }
-        )
-      }
+      return NextResponse.json(
+        { success: false, error: 'Deprecated: address is now stored at user level only' },
+        { status: 410 }
+      )
     }
 
     if (_action === 'setInitialPassword') {

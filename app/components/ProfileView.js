@@ -94,16 +94,14 @@ export default function ProfileView() {
   const [showRepSSN, setShowRepSSN] = useState(false)
   const [showBankModal, setShowBankModal] = useState(false)
   const [isRemovingBank, setIsRemovingBank] = useState(null)
-  const [showAddressModal, setShowAddressModal] = useState(false)
-  const [isRemovingAddress, setIsRemovingAddress] = useState(null)
+  // Single user address (horizontal form in Addresses tab)
   const [addressForm, setAddressForm] = useState({
     street1: '',
     street2: '',
     city: '',
     state: '',
     zip: '',
-    country: 'United States',
-    label: 'Home'
+    country: 'United States'
   })
 
   useEffect(() => {
@@ -201,6 +199,15 @@ export default function ProfileView() {
               country: data.user.authorizedRepresentative?.address?.country || 'United States'
             }
           }
+        })
+        // Prefill single address form from user.address
+        setAddressForm({
+          street1: data.user.address?.street1 || '',
+          street2: data.user.address?.street2 || '',
+          city: data.user.address?.city || '',
+          state: data.user.address?.state || '',
+          zip: data.user.address?.zip || '',
+          country: data.user.address?.country || 'United States'
         })
       }
       } catch (e) {
@@ -622,93 +629,34 @@ export default function ProfileView() {
     }
   }
 
-  const handleAddressAdded = async (address) => {
-    try {
-      if (typeof window === 'undefined') return
-      
-      const userId = localStorage.getItem('currentUserId')
-      const res = await fetch(`/api/users/${userId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          _action: 'addAddress',
-          address
-        })
-      })
-      const data = await res.json()
-      if (data.success) {
-        await loadUser()
-        setShowAddressModal(false)
-        setAddressForm({
-          street1: '',
-          street2: '',
-          city: '',
-          state: '',
-          zip: '',
-          country: 'United States',
-          label: 'Home'
-        })
-      } else {
-        alert(data.error || 'Failed to add address')
-      }
-    } catch (e) {
-      logger.error('Failed to add address', e)
-      alert('An error occurred. Please try again.')
+  // Save address via users.profile (single source of truth)
+  const handleSaveAddress = async () => {
+    const errorsLocal = {}
+    if (!addressForm.street1.trim()) errorsLocal.addressStreet1 = 'Required'
+    if (!addressForm.city.trim()) errorsLocal.addressCity = 'Required'
+    if (!addressForm.state.trim()) errorsLocal.addressState = 'Required'
+    if (!addressForm.zip.trim()) errorsLocal.addressZip = 'Required'
+    if (Object.keys(errorsLocal).length) {
+      setErrors(prev => ({ ...prev, ...errorsLocal }))
+      return
     }
-  }
-
-  const handleSetDefaultAddress = async (addressId) => {
     try {
       if (typeof window === 'undefined') return
-      
-      const userId = localStorage.getItem('currentUserId')
-      const res = await fetch(`/api/users/${userId}`, {
+      const res = await fetch('/api/users/profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          _action: 'setDefaultAddress',
-          addressId
-        })
+        body: JSON.stringify({ address: addressForm })
       })
       const data = await res.json()
-      if (data.success) {
-        await loadUser()
-      } else {
-        alert(data.error || 'Failed to set primary address')
+      if (!data.success) {
+        alert(data.error || 'Failed to save address')
+        return
       }
+      await loadUser()
+      setSaveSuccess(true)
     } catch (e) {
-      logger.error('Failed to set primary address', e)
+      logger.error('Failed to save address', e)
       alert('An error occurred. Please try again.')
-    }
-  }
-
-  const handleRemoveAddress = async (addressId, addressLabel) => {
-    if (!confirm(`Are you sure you want to remove ${addressLabel}?`)) return
-    
-    setIsRemovingAddress(addressId)
-    try {
-      if (typeof window === 'undefined') return
-      
-      const userId = localStorage.getItem('currentUserId')
-      const res = await fetch(`/api/users/${userId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          _action: 'removeAddress',
-          addressId
-        })
-      })
-      const data = await res.json()
-      if (data.success) {
-        await loadUser()
-      } else {
-        alert(data.error || 'Failed to remove address')
-      }
-    } catch (e) {
-      logger.error('Failed to remove address', e)
-      alert('An error occurred. Please try again.')
-    } finally {
-      setIsRemovingAddress(null)
     }
   }
 
@@ -732,7 +680,7 @@ export default function ProfileView() {
   const tabs = [
     { id: 'investor-info', label: 'Investor Info' },
     { id: 'trusted-contact', label: 'Trusted Contact' },
-    { id: 'addresses', label: 'Addresses' },
+    { id: 'addresses', label: 'Address' },
     { id: 'banking', label: 'Banking Information' },
     { id: 'security', label: 'Security' }
   ]
@@ -802,18 +750,15 @@ export default function ProfileView() {
         )}
 
         {activeTab === 'addresses' && (
-          <AddressesTab
-            userData={userData}
-            showAddressModal={showAddressModal}
-            setShowAddressModal={setShowAddressModal}
-            handleAddressAdded={handleAddressAdded}
-            handleSetDefaultAddress={handleSetDefaultAddress}
-            handleRemoveAddress={handleRemoveAddress}
-            isRemovingAddress={isRemovingAddress}
+          <AddressTab
             addressForm={addressForm}
             setAddressForm={setAddressForm}
             formatCity={formatCity}
             formatStreet={formatStreet}
+            errors={errors}
+            onSaveAddress={handleSaveAddress}
+            isSaving={isSaving}
+            saveSuccess={saveSuccess}
           />
         )}
 
@@ -1491,12 +1436,7 @@ function SecurityTab({ userData, passwordForm, errors, handlePasswordChange, han
   )
 }
 
-function AddressesTab({ userData, showAddressModal, setShowAddressModal, handleAddressAdded, handleSetDefaultAddress, handleRemoveAddress, isRemovingAddress, addressForm, setAddressForm, formatCity, formatStreet }) {
-  const availableAddresses = Array.isArray(userData?.addresses) ? userData.addresses : []
-  const primaryAddress = availableAddresses.find(addr => addr.isPrimary)
-
-  const [addressErrors, setAddressErrors] = useState({})
-
+function AddressTab({ addressForm, setAddressForm, formatCity, formatStreet, errors, onSaveAddress, isSaving, saveSuccess }) {
   const handleAddressFormChange = (e) => {
     const { name, value } = e.target
     let formattedValue = value
@@ -1506,220 +1446,97 @@ function AddressesTab({ userData, showAddressModal, setShowAddressModal, handleA
       formattedValue = formatStreet(value)
     }
     setAddressForm(prev => ({ ...prev, [name]: formattedValue }))
-    if (addressErrors[name]) {
-      setAddressErrors(prev => ({ ...prev, [name]: '' }))
-    }
-  }
-
-  const validateAddressForm = () => {
-    const errors = {}
-    if (!addressForm.street1.trim()) errors.street1 = 'Required'
-    if (!addressForm.city.trim()) errors.city = 'Required'
-    else if (/[0-9]/.test(addressForm.city)) errors.city = 'No numbers allowed'
-    if (!addressForm.state.trim()) errors.state = 'Required'
-    if (!addressForm.zip.trim()) errors.zip = 'Required'
-    else if (addressForm.zip.length !== 5) errors.zip = 'Must be 5 digits'
-    setAddressErrors(errors)
-    return Object.keys(errors).length === 0
-  }
-
-  const handleSubmitAddress = () => {
-    if (!validateAddressForm()) return
-    handleAddressAdded(addressForm)
   }
 
   return (
     <div className={styles.content}>
       <section className={styles.section}>
-        <h2 className={styles.sectionTitle}>Saved Addresses</h2>
+        <h2 className={styles.sectionTitle}>Address</h2>
         <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '16px' }}>
-          Manage your saved addresses. You can have multiple addresses for different purposes (home, business, etc.).
+          Your primary address for all investments. This address will be used to prefill forms when you make new investments.
         </p>
 
-        {availableAddresses.length === 0 ? (
-          <div className={styles.emptyState}>
-            <p>No addresses saved yet.</p>
-            <button
-              className={styles.addBankButton}
-              onClick={() => setShowAddressModal(true)}
-            >
-              Add Address
-            </button>
-          </div>
-        ) : (
-          <>
-            <div className={styles.bankCardsGrid}>
-              {availableAddresses.map(address => (
-                <AddressCard
-                  key={address.id}
-                  address={address}
-                  isPrimary={address.isPrimary}
-                  onSetPrimary={handleSetDefaultAddress}
-                  onRemove={handleRemoveAddress}
-                  isRemoving={isRemovingAddress === address.id}
-                />
-              ))}
+        <div className={styles.subCard}>
+          <h3 className={styles.subSectionTitle}>Primary Address</h3>
+          <div className={styles.compactGrid}>
+            <div className={styles.field}>
+              <label className={styles.label}>Street Address 1</label>
+              <input
+                className={`${styles.input} ${errors.addressStreet1 ? styles.inputError : ''}`}
+                name="street1"
+                value={addressForm.street1}
+                onChange={handleAddressFormChange}
+                placeholder="123 Main St"
+              />
+              {errors.addressStreet1 && <span className={styles.errorText}>{errors.addressStreet1}</span>}
             </div>
-            <div className={styles.actions}>
-              <button
-                className={styles.addBankButton}
-                onClick={() => setShowAddressModal(true)}
-              >
-                Add New Address
-              </button>
+            <div className={styles.field}>
+              <label className={styles.label}>Street Address 2</label>
+              <input
+                className={styles.input}
+                name="street2"
+                value={addressForm.street2}
+                onChange={handleAddressFormChange}
+                placeholder="Apt, Suite, etc. (Optional)"
+              />
             </div>
-          </>
-        )}
-      </section>
-
-      {/* Address Modal */}
-      {showAddressModal && (
-        <div className={styles.overlay} onClick={() => setShowAddressModal(false)}>
-          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-            <div className={styles.modalHeader}>
-              <h3 className={styles.modalTitle}>Add New Address</h3>
-              <button className={styles.closeButton} onClick={() => setShowAddressModal(false)}>✕</button>
+            <div className={styles.field}>
+              <label className={styles.label}>City</label>
+              <input
+                className={`${styles.input} ${errors.addressCity ? styles.inputError : ''}`}
+                name="city"
+                value={addressForm.city}
+                onChange={handleAddressFormChange}
+                placeholder="New York"
+              />
+              {errors.addressCity && <span className={styles.errorText}>{errors.addressCity}</span>}
             </div>
-            <div className={styles.modalContent}>
-              <div className={styles.compactGrid}>
-                <div className={styles.field}>
-                  <label className={styles.label}>Label</label>
-                  <select
-                    className={styles.input}
-                    name="label"
-                    value={addressForm.label}
-                    onChange={handleAddressFormChange}
-                  >
-                    <option value="Home">Home</option>
-                    <option value="Work">Work</option>
-                    <option value="Mailing">Mailing</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>Street Address 1</label>
-                  <input
-                    className={`${styles.input} ${addressErrors.street1 ? styles.inputError : ''}`}
-                    name="street1"
-                    value={addressForm.street1}
-                    onChange={handleAddressFormChange}
-                    placeholder="123 Main St"
-                  />
-                  {addressErrors.street1 && <span className={styles.errorText}>{addressErrors.street1}</span>}
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>Street Address 2</label>
-                  <input
-                    className={styles.input}
-                    name="street2"
-                    value={addressForm.street2}
-                    onChange={handleAddressFormChange}
-                    placeholder="Apt, Suite, etc. (Optional)"
-                  />
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>City</label>
-                  <input
-                    className={`${styles.input} ${addressErrors.city ? styles.inputError : ''}`}
-                    name="city"
-                    value={addressForm.city}
-                    onChange={handleAddressFormChange}
-                    placeholder="New York"
-                  />
-                  {addressErrors.city && <span className={styles.errorText}>{addressErrors.city}</span>}
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>State</label>
-                  <input
-                    className={`${styles.input} ${addressErrors.state ? styles.inputError : ''}`}
-                    name="state"
-                    value={addressForm.state}
-                    onChange={handleAddressFormChange}
-                    placeholder="NY"
-                  />
-                  {addressErrors.state && <span className={styles.errorText}>{addressErrors.state}</span>}
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>ZIP Code</label>
-                  <input
-                    className={`${styles.input} ${addressErrors.zip ? styles.inputError : ''}`}
-                    name="zip"
-                    value={addressForm.zip}
-                    onChange={handleAddressFormChange}
-                    placeholder="10001"
-                    maxLength={5}
-                  />
-                  {addressErrors.zip && <span className={styles.errorText}>{addressErrors.zip}</span>}
-                </div>
-                <div className={styles.field}>
-                  <label className={styles.label}>Country</label>
-                  <input
-                    className={styles.input}
-                    name="country"
-                    value={addressForm.country}
-                    disabled
-                  />
-                </div>
-              </div>
+            <div className={styles.field}>
+              <label className={styles.label}>State</label>
+              <input
+                className={`${styles.input} ${errors.addressState ? styles.inputError : ''}`}
+                name="state"
+                value={addressForm.state}
+                onChange={handleAddressFormChange}
+                placeholder="NY"
+              />
+              {errors.addressState && <span className={styles.errorText}>{errors.addressState}</span>}
             </div>
-            <div className={styles.modalFooter}>
-              <button className={styles.cancelButton} onClick={() => setShowAddressModal(false)}>
-                Cancel
-              </button>
-              <button className={styles.saveButton} onClick={handleSubmitAddress}>
-                Add Address
-              </button>
+            <div className={styles.field}>
+              <label className={styles.label}>ZIP Code</label>
+              <input
+                className={`${styles.input} ${errors.addressZip ? styles.inputError : ''}`}
+                name="zip"
+                value={addressForm.zip}
+                onChange={handleAddressFormChange}
+                placeholder="10001"
+                maxLength={5}
+              />
+              {errors.addressZip && <span className={styles.errorText}>{errors.addressZip}</span>}
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>Country</label>
+              <input
+                className={styles.input}
+                name="country"
+                value={addressForm.country}
+                disabled
+              />
             </div>
           </div>
         </div>
-      )}
-    </div>
-  )
-}
 
-function AddressCard({ address, isPrimary, onSetPrimary, onRemove, isRemoving }) {
-  const fullAddress = [
-    address.street1,
-    address.street2,
-    `${address.city}, ${address.state} ${address.zip}`,
-    address.country
-  ].filter(Boolean).join('\n')
-
-  return (
-    <div className={styles.bankCard}>
-      {isPrimary && (
-        <div className={styles.defaultBadge}>Primary</div>
-      )}
-      <div className={styles.bankCardHeader}>
-        <div className={styles.bankCardLogo} style={{ backgroundColor: '#3b82f620' }}>
-          📍
-        </div>
-        <div className={styles.bankCardInfo}>
-          <div className={styles.bankCardName}>{address.label || 'Address'}</div>
-          <div className={styles.bankCardDetails} style={{ whiteSpace: 'pre-line', lineHeight: '1.5' }}>
-            {address.street1}
-            {address.street2 && <><br />{address.street2}</>}
-            <br />{address.city}, {address.state} {address.zip}
-          </div>
-        </div>
-      </div>
-      <div className={styles.bankCardActions}>
-        {!isPrimary && (
+        <div className={styles.actions}>
           <button
-            className={styles.bankCardButton}
-            onClick={() => onSetPrimary(address.id)}
+            className={styles.saveButton}
+            onClick={onSaveAddress}
+            disabled={isSaving}
           >
-            Set as Primary
+            {isSaving ? 'Saving...' : 'Save Address'}
           </button>
-        )}
-        <button
-          className={`${styles.bankCardButton} ${styles.bankCardButtonDanger}`}
-          onClick={() => onRemove(address.id, address.label)}
-          disabled={isRemoving || isPrimary}
-        >
-          {isRemoving ? 'Removing...' : 'Remove'}
-        </button>
-      </div>
+          {saveSuccess && <span className={styles.success}>Saved!</span>}
+        </div>
+      </section>
     </div>
   )
 }
