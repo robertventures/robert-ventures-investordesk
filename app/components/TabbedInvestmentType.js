@@ -26,10 +26,48 @@ export default function TabbedInvestmentType({ onCompleted, showContinueButton =
     if (lockedAccountType && key !== lockedAccountType) return
     setSelected(key)
     if (typeof onChange === 'function') onChange(key)
+
+    // Always try to save account type to user record if not already set
+    try {
+      if (typeof window === 'undefined') return
+
+      const userId = localStorage.getItem('currentUserId')
+      if (!userId) return
+
+      // Check if user already has an account type
+      const userRes = await fetch(`/api/users/${userId}`)
+      const userData = await userRes.json()
+
+      if (userData.success && !userData.user.accountType) {
+        console.log(`Setting user ${userId} account type to ${key}`, {
+          currentAccountType: userData.user.accountType,
+          newAccountType: key
+        })
+
+        const res = await fetch(`/api/users/${userId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accountType: key })
+        })
+
+        const updateResponse = await res.json()
+
+        if (!res.ok || !updateResponse.success) {
+          console.error('Failed to set user account type:', updateResponse?.error || 'Unknown error')
+        } else {
+          console.log(`✅ Successfully set user account type to ${key}`)
+        }
+      } else {
+        console.log(`User ${userId} already has account type: ${userData.user.accountType}`)
+      }
+    } catch (e) {
+      console.error('Failed to set account type', e)
+    }
+
     if (!autoSaveOnSelect) return
     try {
       if (typeof window === 'undefined') return
-      
+
       const userId = localStorage.getItem('currentUserId')
       const investmentId = localStorage.getItem('currentInvestmentId')
       if (!userId || !investmentId) return
@@ -50,8 +88,45 @@ export default function TabbedInvestmentType({ onCompleted, showContinueButton =
 
   const handleContinue = async () => {
     const userId = localStorage.getItem('currentUserId')
+    if (!userId) return
+
+    // First, ensure the user's account type is set
+    try {
+      const userRes = await fetch(`/api/users/${userId}`)
+      const userData = await userRes.json()
+
+      if (userData.success && !userData.user.accountType) {
+        console.log(`Setting user ${userId} account type to ${selected}`, {
+          currentAccountType: userData.user.accountType,
+          newAccountType: selected
+        })
+
+        const res = await fetch(`/api/users/${userId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accountType: selected })
+        })
+
+        const updateResponse = await res.json()
+
+        if (!res.ok || !updateResponse.success) {
+          console.error('Failed to set user account type:', updateResponse?.error || 'Unknown error')
+        } else {
+          console.log(`✅ Successfully set user account type to ${selected}`)
+        }
+      } else {
+        console.log(`User ${userId} already has account type: ${userData.user.accountType}`)
+      }
+    } catch (e) {
+      console.error('Failed to set user account type', e)
+    }
+
     const investmentId = localStorage.getItem('currentInvestmentId')
-    if (!userId || !investmentId) return
+    if (!investmentId) {
+      setIsSaving(true)
+      return
+    }
+
     setIsSaving(true)
     try {
       const res = await fetch(`/api/users/${userId}`, {

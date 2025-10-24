@@ -235,8 +235,11 @@ export default function InvestmentForm({ onCompleted, onReviewSummary, disableAu
         amount: formData.investmentAmount,
         paymentFrequency: formData.paymentFrequency,
         lockupPeriod,
-        bonds
+        bonds,
+        accountType
       }
+
+      console.log('Creating investment with payload:', investmentPayload)
 
       // Check if resuming an existing draft investment
       const existingInvestmentId = localStorage.getItem('currentInvestmentId')
