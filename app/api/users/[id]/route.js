@@ -154,6 +154,7 @@ export async function GET(request, { params }) {
       })),
       withdrawals: user.withdrawals || [],
       bankAccounts: user.bank_accounts || [],
+      banking: user.banking || null,
       addresses: (addresses || []).map(addr => ({
         id: addr.id,
         street1: addr.street1,
@@ -174,7 +175,9 @@ export async function GET(request, { params }) {
       jointHolder: user.joint_holder || null,
       jointHoldingType: user.joint_holding_type || null,
       entityName: user.entity_name || null,
-      authorizedRepresentative: user.authorized_representative || null
+      entity: user.entity || null,
+      authorizedRepresentative: user.authorized_representative || null,
+      trustedContact: user.trusted_contact || null
     }
 
     // Always include SSN indicator (encrypted or decrypted based on query param)

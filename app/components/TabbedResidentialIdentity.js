@@ -840,7 +840,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
             title={form.ssn === '•••-••-••••' ? 'SSN on file - cannot be modified' : ''}
           />
           {errors.ssn && <span className={styles.error}>{errors.ssn}</span>}
-          {!form.ssn && !errors.ssn && (
+          {!form.ssn && !errors.ssn && hasActiveInvestments && (
             <span className={styles.helpText} style={{color: '#f59e0b', marginTop: '4px'}}>
               ⚠️ No SSN on file. Contact your administrator to add SSN to your profile before making an investment.
             </span>
