@@ -8,6 +8,24 @@ const nextConfig = {
   // Reduce hydration warnings in development
   reactStrictMode: true,
   
+  // Proxy API requests to backend in development to avoid CORS/cookie issues
+  async rewrites() {
+    // Get backend URL from env, default to localhost:8000 in development
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 
+                   (process.env.NODE_ENV === 'development' ? 'http://localhost:8000' : '')
+    
+    if (!apiUrl) {
+      return []
+    }
+    
+    return [
+      {
+        source: '/api/:path*',
+        destination: `${apiUrl}/api/:path*`,
+      },
+    ]
+  },
+  
   // Suppress hydration warnings for browser extensions
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production' ? {

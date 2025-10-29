@@ -114,7 +114,8 @@ async def login(credentials: LoginRequest, response: Response):
             httponly=True,
             secure=settings.ENVIRONMENT == 'production',
             samesite="none" if settings.ENVIRONMENT == 'production' else "lax",
-            max_age=7 * 24 * 60 * 60  # 7 days
+            max_age=7 * 24 * 60 * 60,  # 7 days
+            path="/"
         )
         
         # Do not log login activity - too noisy
@@ -226,15 +227,27 @@ async def logout(response: Response, request: Request):
         # Do not log logout activity - too noisy
         # Only track significant events like account creation, investment submission
         
-        # Clear cookie
-        response.delete_cookie(key="auth_token")
+        # Clear cookie with same parameters as set_cookie to ensure proper deletion
+        response.delete_cookie(
+            key="auth_token",
+            httponly=True,
+            secure=settings.ENVIRONMENT == 'production',
+            samesite="none" if settings.ENVIRONMENT == 'production' else "lax",
+            path="/"
+        )
         
         return {"success": True, "message": "Logged out successfully"}
         
     except Exception as e:
         print(f"Logout error: {e}")
         # Always succeed for logout
-        response.delete_cookie(key="auth_token")
+        response.delete_cookie(
+            key="auth_token",
+            httponly=True,
+            secure=settings.ENVIRONMENT == 'production',
+            samesite="none" if settings.ENVIRONMENT == 'production' else "lax",
+            path="/"
+        )
         return {"success": True, "message": "Logged out"}
 
 
@@ -426,7 +439,8 @@ async def verify_and_create(verify_data: VerifyRequest, response: Response):
             httponly=True,
             secure=settings.ENVIRONMENT == 'production',
             samesite="none" if settings.ENVIRONMENT == 'production' else "lax",
-            max_age=7 * 24 * 60 * 60
+            max_age=7 * 24 * 60 * 60,
+            path="/"
         )
         
         # Remove sensitive data
