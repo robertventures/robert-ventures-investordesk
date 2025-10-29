@@ -554,9 +554,23 @@ async def delete_user(user_id: str, request: Request):
         
         # First, get the user to retrieve auth_id
         print(f"[DELETE /api/users/{user_id}] Fetching user from database...")
-        user_response = supabase.table('users').select('auth_id, email').eq('id', user_id).maybe_single().execute()
-        
-        user = user_response.data if user_response.data else None
+        try:
+            user_response = supabase.table('users').select('auth_id, email').eq('id', user_id).execute()
+            
+            # Handle response data
+            if user_response.data and len(user_response.data) > 0:
+                user = user_response.data[0]
+            else:
+                user = None
+                
+        except Exception as fetch_error:
+            print(f"[DELETE /api/users/{user_id}] ❌ Error fetching user: {fetch_error}")
+            import traceback
+            traceback.print_exc()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error fetching user: {str(fetch_error)}"
+            )
         
         if not user:
             print(f"[DELETE /api/users/{user_id}] ❌ User not found in database")
@@ -617,20 +631,72 @@ async def delete_user(user_id: str, request: Request):
         if user.get('auth_id'):
             print(f"[DELETE /api/users/{user_id}] Deleting from Supabase Auth ({user.get('auth_id')})...")
             try:
-                auth_delete_response = supabase.auth.admin.delete_user(user.get('auth_id'))
+                # Use the admin client to delete the user
+                from database import supabase as admin_client
                 
-                # Check if there was an error
-                if hasattr(auth_delete_response, 'error') and auth_delete_response.error:
-                    auth_deletion_failed = True
-                    auth_error_message = str(auth_delete_response.error)
-                    print(f"[DELETE /api/users/{user_id}] ❌ Failed to delete auth user: {auth_error_message}")
-                else:
-                    print(f"[DELETE /api/users/{user_id}] ✅ Deleted from Supabase Auth")
+                # In supabase-py 2.x, we need to use the auth admin API
+                # The API path depends on the version and might be:
+                # - supabase.auth.admin.delete_user() 
+                # - supabase.auth.delete_user()
+                # - Manual REST API call
+                
+                try:
+                    # Try method 1: auth.admin.delete_user (most common in 2.x)
+                    if hasattr(admin_client.auth, 'admin'):
+                        auth_response = admin_client.auth.admin.delete_user(user.get('auth_id'))
+                        print(f"[DELETE /api/users/{user_id}] ✅ Deleted from Supabase Auth via admin API")
+                    else:
+                        # Method 2: Direct auth API (some versions)
+                        # This might not exist, so we'll catch it
+                        raise AttributeError("auth.admin not available")
+                        
+                except (AttributeError, Exception) as auth_err:
+                    # If the SDK methods don't work, use direct REST API call
+                    print(f"[DELETE /api/users/{user_id}] SDK auth deletion failed, trying REST API: {auth_err}")
+                    
+                    import httpx
+                    from config import settings
+                    
+                    supabase_url = settings.SUPABASE_URL
+                    service_key = settings.SUPABASE_SERVICE_KEY
+                    
+                    if supabase_url and service_key:
+                        # Make direct REST API call to delete auth user
+                        auth_url = f"{supabase_url}/auth/v1/admin/users/{user.get('auth_id')}"
+                        headers = {
+                            "apikey": service_key,
+                            "Authorization": f"Bearer {service_key}",
+                            "Content-Type": "application/json"
+                        }
+                        
+                        async with httpx.AsyncClient() as client:
+                            try:
+                                response = await client.delete(auth_url, headers=headers, timeout=10.0)
+                                
+                                if response.status_code == 200 or response.status_code == 204:
+                                    print(f"[DELETE /api/users/{user_id}] ✅ Deleted from Supabase Auth via REST API")
+                                elif response.status_code == 404:
+                                    print(f"[DELETE /api/users/{user_id}] ✓ Auth user already deleted (404)")
+                                else:
+                                    error_body = response.text
+                                    print(f"[DELETE /api/users/{user_id}] ⚠️ Auth REST API returned {response.status_code}: {error_body}")
+                                    auth_deletion_failed = True
+                                    auth_error_message = f"Auth API returned {response.status_code}: {error_body}"
+                            except Exception as rest_err:
+                                print(f"[DELETE /api/users/{user_id}] ❌ REST API call failed: {rest_err}")
+                                auth_deletion_failed = True
+                                auth_error_message = f"REST API error: {str(rest_err)}"
+                    else:
+                        print(f"[DELETE /api/users/{user_id}] ❌ Missing Supabase credentials for REST API")
+                        auth_deletion_failed = True
+                        auth_error_message = "Missing Supabase credentials for auth deletion"
                     
             except Exception as auth_error:
                 auth_deletion_failed = True
                 auth_error_message = str(auth_error)
                 print(f"[DELETE /api/users/{user_id}] ❌ Exception deleting auth user: {auth_error_message}")
+                import traceback
+                traceback.print_exc()
         else:
             print(f"[DELETE /api/users/{user_id}] ⚠️ No auth_id, skipping auth deletion")
         
