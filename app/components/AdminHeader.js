@@ -41,15 +41,15 @@ export default function AdminHeader({ onTabChange, activeTab }) {
       localStorage.removeItem('signupEmail')
       localStorage.removeItem('currentInvestmentId')
       
-      // Redirect to home
-      router.push('/')
+      // Redirect to sign-in page
+      router.push('/sign-in')
     } catch (error) {
       console.error('Logout error:', error)
       // Still redirect even if API call fails
       localStorage.removeItem('currentUserId')
       localStorage.removeItem('signupEmail')
       localStorage.removeItem('currentInvestmentId')
-      router.push('/')
+      router.push('/sign-in')
     }
   }
 

@@ -46,10 +46,15 @@ export default function AuthWrapper({ children }) {
             return
           }
           
-          // If user completed onboarding but is on onboarding page, redirect to dashboard
+          // If user completed onboarding but is on onboarding page, redirect to appropriate dashboard
           if (!data.user.needsOnboarding && isOnboardingRoute) {
             logger.log('User onboarding complete, redirecting to dashboard...')
-            router.push('/dashboard')
+            // Check if user is admin and redirect accordingly
+            if (data.user.isAdmin) {
+              router.push('/admin')
+            } else {
+              router.push('/dashboard')
+            }
             return
           }
         } else {
@@ -67,9 +72,14 @@ export default function AuthWrapper({ children }) {
           return
         }
 
-        // If user is logged in and on sign-in route, redirect to dashboard
+        // If user is logged in and on sign-in route, redirect to appropriate dashboard
         if (isLoggedIn && pathname === '/sign-in') {
-          router.push('/dashboard')
+          // Check if user is admin and redirect accordingly
+          if (data.user.isAdmin) {
+            router.push('/admin')
+          } else {
+            router.push('/dashboard')
+          }
           return
         }
       } catch (error) {
