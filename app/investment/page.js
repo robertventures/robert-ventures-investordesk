@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { apiClient } from '@/lib/apiClient'
 import logger from '@/lib/logger'
@@ -11,7 +11,7 @@ import TabbedInvestmentType from '../components/TabbedInvestmentType'
 import InvestmentForm from '../components/InvestmentForm'
 import TabbedResidentialIdentity from '../components/TabbedResidentialIdentity'
 
-export default function InvestmentPage() {
+function InvestmentPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const context = searchParams?.get('context') // 'onboarding' or 'new'
@@ -345,5 +345,20 @@ export default function InvestmentPage() {
         </div>
       )}
     </main>
+  )
+}
+
+export default function InvestmentPage() {
+  return (
+    <Suspense fallback={
+      <main className={styles.main}>
+        <Header />
+        <div className={styles.container}>
+          <p>Loading...</p>
+        </div>
+      </main>
+    }>
+      <InvestmentPageContent />
+    </Suspense>
   )
 }

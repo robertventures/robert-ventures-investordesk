@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { fetchWithCsrf } from '../../../../lib/csrfClient'
 import AdminHeader from '../../../components/AdminHeader'
@@ -7,7 +7,7 @@ import { calculateInvestmentValue } from '../../../../lib/investmentCalculations
 import { formatDateForDisplay } from '../../../../lib/dateUtils.js'
 import styles from './page.module.css'
 
-export default function AdminUserDetailsPage({ params }) {
+function AdminUserDetailsContent({ params }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { id } = params
@@ -1665,6 +1665,22 @@ export default function AdminUserDetailsPage({ params }) {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function AdminUserDetailsPage({ params }) {
+  return (
+    <Suspense fallback={
+      <div className={styles.main}>
+        <div className={styles.container}>
+          <div style={{ padding: '40px', textAlign: 'center' }}>
+            Loading...
+          </div>
+        </div>
+      </div>
+    }>
+      <AdminUserDetailsContent params={params} />
+    </Suspense>
   )
 }
 

@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { fetchWithCsrf } from '../../lib/csrfClient'
 import { apiClient } from '../../lib/apiClient'
@@ -17,7 +17,7 @@ import styles from './page.module.css'
 /**
  * Main Admin Dashboard - Refactored for better organization
  */
-export default function AdminPage() {
+function AdminPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   
@@ -947,6 +947,22 @@ export default function AdminPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function AdminPage() {
+  return (
+    <Suspense fallback={
+      <div className={styles.main}>
+        <div className={styles.container}>
+          <div style={{ padding: '40px', textAlign: 'center' }}>
+            Loading...
+          </div>
+        </div>
+      </div>
+    }>
+      <AdminPageContent />
+    </Suspense>
   )
 }
 

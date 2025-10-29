@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { fetchWithCsrf } from '../../lib/csrfClient'
 import Header from '../components/Header'
@@ -13,7 +13,7 @@ const ONBOARDING_STEPS = {
   COMPLETE: 'complete'
 }
 
-export default function OnboardingPage() {
+function OnboardingContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const token = searchParams?.get('token')
@@ -643,5 +643,22 @@ export default function OnboardingPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function OnboardingPage() {
+  return (
+    <Suspense fallback={
+      <div className={styles.main}>
+        <Header />
+        <div className={styles.container}>
+          <div className={styles.onboardingBox}>
+            <p>Loading...</p>
+          </div>
+        </div>
+      </div>
+    }>
+      <OnboardingContent />
+    </Suspense>
   )
 }

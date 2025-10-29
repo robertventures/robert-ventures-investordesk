@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { apiClient } from '@/lib/apiClient'
 import logger from '@/lib/logger'
@@ -11,7 +11,7 @@ import DocumentsView from '../components/DocumentsView'
 import FixedInvestButton from '../components/FixedInvestButton'
 import styles from './page.module.css'
 
-export default function DashboardPage() {
+function DashboardPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [mounted, setMounted] = useState(false)
@@ -109,5 +109,19 @@ export default function DashboardPage() {
       </div>
       <FixedInvestButton />
     </div>
+  )
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={
+      <div className={styles.main}>
+        <div style={{ padding: '40px', textAlign: 'center' }}>
+          Loading...
+        </div>
+      </div>
+    }>
+      <DashboardPageContent />
+    </Suspense>
   )
 }

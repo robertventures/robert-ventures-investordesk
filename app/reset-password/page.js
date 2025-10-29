@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { apiClient } from '../../lib/apiClient'
 import Header from '../components/Header'
 import styles from './page.module.css'
 
-export default function ResetPasswordPage() {
+function ResetPasswordContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [token, setToken] = useState('')
@@ -216,6 +216,23 @@ export default function ResetPasswordPage() {
         </div>
       </div>
     </main>
+  )
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={
+      <main className={styles.main}>
+        <Header />
+        <div className={styles.container}>
+          <div className={styles.card}>
+            <p>Loading...</p>
+          </div>
+        </div>
+      </main>
+    }>
+      <ResetPasswordContent />
+    </Suspense>
   )
 }
 
