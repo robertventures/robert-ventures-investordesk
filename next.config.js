@@ -24,15 +24,13 @@ const nextConfig = {
     }
     
   // Reduce watcher pressure to avoid EMFILE on macOS/Linux
-  // - Ignore heavy directories entirely (backend, backups, etc.)
+  // - Ignore heavy directories entirely (backend, node_modules, etc.)
   // - Allow switching to polling via WATCHPACK_POLLING=true
   const ignoredWatchGlobs = [
     '**/node_modules/**',
     '**/.git/**',
     '**/backend/**',
     '**/backend/venv/**',
-    '**/_backup/**',
-    '**/bug-reports/**',
     '**/.next/**',
     '**/venv/**',
     '**/__pycache__/**',
@@ -51,8 +49,7 @@ const nextConfig = {
     ...config.snapshot,
     managedPaths: [path.resolve(process.cwd(), 'node_modules')],
     immutablePaths: [
-      path.resolve(process.cwd(), 'backend'),
-      path.resolve(process.cwd(), '_backup')
+      path.resolve(process.cwd(), 'backend')
     ]
   }
     

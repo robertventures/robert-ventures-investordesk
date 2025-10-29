@@ -87,15 +87,17 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 - ✅ Rotate secrets if they are ever exposed
 
 ### 3. Verify Supabase connection (optional but recommended)
-```bash
-npm run verify-data
-```
 
-This will check:
+You can verify your setup through:
+- **Supabase Dashboard**: Visit your project at `https://supabase.com/dashboard`
+- **Test the Backend**: Run `npm run backend:dev` to start the Python backend and test API endpoints
+- **Check Tables**: Verify tables exist in the Supabase SQL Editor (users, investments, transactions, etc.)
+
+This ensures:
 - ✅ All environment variables are set correctly
 - ✅ Supabase connection is working
-- ✅ User data is being read from Supabase (not local files)
-- ✅ Auth user deletion capability is available
+- ✅ User data is being read from Supabase database
+- ✅ Auth functionality is properly configured
 
 ### 4. Run the development server
 ```bash

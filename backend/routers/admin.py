@@ -898,7 +898,7 @@ async def seed_test_accounts(request: Request, action_data: dict):
         
         return {
             "success": False,
-            "error": "Seed functionality not yet implemented in Python backend. Please use the Node.js seed script from scripts/seed-supabase.js"
+            "error": "Seed functionality not yet implemented in Python backend. Please create seed data directly in Supabase or implement seeding in this endpoint."
         }
         
     except HTTPException:

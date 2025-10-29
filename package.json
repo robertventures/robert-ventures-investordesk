@@ -7,9 +7,6 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "seed-supabase": "node --env-file=.env.local scripts/seed-supabase.js",
-    "verify-data": "node --env-file=.env.local scripts/verify-data-sources.js",
-    "verify-app-settings": "node --env-file=.env.local scripts/verify-app-settings-table.js",
     "backend:setup": "cd backend && python3 -m venv venv && source venv/bin/activate && pip install --upgrade pip && pip install -r requirements.txt",
     "backend:dev": "cd backend && source venv/bin/activate && python3 -m uvicorn main:app --reload --port 8000",
     "dev:all": "concurrently \"npm run dev\" \"npm run backend:dev\" --names \"NEXT,PYTHON\" --prefix-colors \"blue,green\""

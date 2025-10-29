@@ -113,7 +113,7 @@ async def login(credentials: LoginRequest, response: Response):
             value=session_token,
             httponly=True,
             secure=settings.ENVIRONMENT == 'production',
-            samesite="lax",
+            samesite="none" if settings.ENVIRONMENT == 'production' else "lax",
             max_age=7 * 24 * 60 * 60  # 7 days
         )
         
@@ -425,7 +425,7 @@ async def verify_and_create(verify_data: VerifyRequest, response: Response):
             value=token,
             httponly=True,
             secure=settings.ENVIRONMENT == 'production',
-            samesite="lax",
+            samesite="none" if settings.ENVIRONMENT == 'production' else "lax",
             max_age=7 * 24 * 60 * 60
         )
         

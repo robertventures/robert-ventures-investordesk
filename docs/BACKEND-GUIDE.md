@@ -3549,12 +3549,13 @@ NEXT_PUBLIC_APP_URL=https://yourdomain.com
 ### Verification & Troubleshooting
 
 **Verify Setup:**
-```bash
-npm run verify-data
-```
+You can verify your Supabase connection through:
+1. **Supabase Dashboard**: Visit your project dashboard to check tables and data
+2. **Python Backend**: Use the FastAPI backend to test database connectivity
+3. **Direct Query**: Test queries using the Supabase SQL Editor
 
 **Checks:**
-- ✅ All environment variables set
+- ✅ All environment variables set correctly
 - ✅ Supabase connection working
 - ✅ Users readable from database
 - ✅ Auth admin methods available
