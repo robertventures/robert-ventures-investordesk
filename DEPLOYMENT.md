@@ -5,7 +5,7 @@ This guide explains how to deploy the Robert Ventures InvestorDesk to production
 ## Architecture
 
 - **Frontend**: Netlify (Next.js application)
-- **Backend**: Heroku (Python FastAPI application)
+- **Backend**: Railway (Python FastAPI application)
 - **Database**: Supabase (PostgreSQL)
 
 ## The Cookie Problem & Solution
@@ -16,9 +16,9 @@ When frontend and backend are on different domains, browsers reject cookies with
 
 ## Step-by-Step Deployment
 
-### 1. Deploy Backend to Heroku
+### 1. Deploy Backend to Railway
 
-Your backend should already be deployed. Ensure these environment variables are set in Heroku:
+Your backend should already be deployed. Ensure these environment variables are set in Railway:
 
 ```bash
 ENVIRONMENT=production
@@ -30,31 +30,41 @@ CORS_ORIGINS=https://your-app.netlify.app
 
 **⚠️ Critical**: Set `ENVIRONMENT=production` - this enables `SameSite=None` cookies for cross-origin requests.
 
-**To set in Heroku**:
-```bash
-heroku config:set ENVIRONMENT=production -a your-app-name
-heroku config:set CORS_ORIGINS=https://your-app.netlify.app -a your-app-name
-```
+**To set in Railway**:
+- Go to your Railway project dashboard
+- Click on your backend service
+- Go to "Variables" tab
+- Add/update the environment variables above
 
-Or via Heroku Dashboard: Settings → Config Vars
+Or via Railway CLI:
+```bash
+railway variables set ENVIRONMENT=production
+railway variables set CORS_ORIGINS=https://your-app.netlify.app
+```
 
 ### 2. Update netlify.toml with Backend URL
 
-Edit `netlify.toml` and replace `YOUR-HEROKU-APP` with your actual Heroku app name:
+Edit `netlify.toml` and replace `YOUR-RAILWAY-APP` with your actual Railway deployment URL:
 
 ```toml
 [[redirects]]
   from = "/api/*"
-  to = "https://your-actual-app.herokuapp.com/api/:splat"
+  to = "https://your-actual-app.up.railway.app/api/:splat"
   status = 200
   force = true
   headers = {X-From = "Netlify"}
 ```
 
-**Example**: If your Heroku app is `robert-ventures-api`, use:
+**Example**: If your Railway deployment is `robert-ventures-api.up.railway.app`, use:
 ```toml
-to = "https://robert-ventures-api.herokuapp.com/api/:splat"
+to = "https://robert-ventures-api.up.railway.app/api/:splat"
 ```
+
+**To find your Railway URL**:
+- Go to your Railway project dashboard
+- Click on your backend service
+- Click on "Settings" → "Domains"
+- Copy the public URL (e.g., `something.up.railway.app`)
 
 ### 3. Configure Netlify Environment Variables
 
@@ -88,14 +98,14 @@ Netlify will automatically rebuild and deploy.
 After deployment:
 
 1. **Check Backend Health**:
-   - Visit `https://your-app.herokuapp.com/health`
+   - Visit `https://your-app.up.railway.app/health`
    - Should show `"environment": "production"`
 
 2. **Test Login**:
    - Go to your Netlify site
    - Sign in as admin
    - Open browser DevTools → Network tab
-   - Login request should go to `https://your-app.netlify.app/api/auth/login` (NOT directly to Heroku)
+   - Login request should go to `https://your-app.netlify.app/api/auth/login` (NOT directly to Railway)
 
 3. **Test Logout**:
    - Click "Sign Out"
@@ -113,9 +123,9 @@ User Browser
     ↓
 Netlify (your-app.netlify.app)
     ↓
-    ↓ Proxy redirects to: https://your-app.herokuapp.com/api/auth/login
+    ↓ Proxy redirects to: https://your-app.up.railway.app/api/auth/login
     ↓
-Heroku Backend
+Railway Backend
     ↓
     ↓ Sets cookie with SameSite=None, Secure=true
     ↓
@@ -138,8 +148,8 @@ User Browser
 ### Issue: Still getting cookie errors
 
 **Check**:
-1. Heroku env: `ENVIRONMENT=production` ✓
-2. Heroku env: `CORS_ORIGINS` includes your Netlify URL ✓
+1. Railway env: `ENVIRONMENT=production` ✓
+2. Railway env: `CORS_ORIGINS` includes your Netlify URL ✓
 3. Netlify: `NEXT_PUBLIC_API_URL` is NOT set ✓
 4. `netlify.toml`: Redirect URL is correct ✓
 
@@ -150,10 +160,10 @@ User Browser
 - Should show `200` status
 - Check Response headers for CORS
 
-**Check Heroku logs**:
-```bash
-heroku logs --tail -a your-app-name
-```
+**Check Railway logs**:
+- Go to Railway dashboard → Your service → "Deployments"
+- Click on latest deployment → "View Logs"
+- Look for errors or CORS issues
 
 ### Issue: Logout still auto-logs in
 
@@ -167,7 +177,7 @@ heroku logs --tail -a your-app-name
 
 ## Security Checklist
 
-- ✅ `ENVIRONMENT=production` on Heroku
+- ✅ `ENVIRONMENT=production` on Railway
 - ✅ `JWT_SECRET` is strong and unique in production
 - ✅ `SUPABASE_SERVICE_KEY` is kept secure (server-only)
 - ✅ CORS origins list only includes your production domains
@@ -182,19 +192,19 @@ If you have staging + production:
 
 **Staging**:
 - Netlify site: `staging-app.netlify.app`
-- Heroku app: `staging-api.herokuapp.com`
+- Railway deployment: `staging-api.up.railway.app`
 - Update `netlify.toml` in staging branch
 
 **Production**:
 - Netlify site: `your-app.netlify.app`
-- Heroku app: `production-api.herokuapp.com`  
+- Railway deployment: `production-api.up.railway.app`  
 - Update `netlify.toml` in main branch
 
 ### Custom Domains
 
 If using custom domains:
 
-1. Update `CORS_ORIGINS` in Heroku:
+1. Update `CORS_ORIGINS` in Railway:
    ```
    CORS_ORIGINS=https://investors.robertventures.com
    ```

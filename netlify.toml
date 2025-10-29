@@ -9,10 +9,10 @@
   NPM_FLAGS = "--legacy-peer-deps"
 
 # Proxy API requests to backend (fixes cross-origin cookie issues)
-# IMPORTANT: Replace the URL below with your actual Heroku backend URL
+# IMPORTANT: Replace the URL below with your actual Railway backend URL
 [[redirects]]
   from = "/api/*"
-  to = "https://YOUR-HEROKU-APP.herokuapp.com/api/:splat"
+  to = "https://YOUR-RAILWAY-APP.up.railway.app/api/:splat"
   status = 200
   force = true
   headers = {X-From = "Netlify"}
