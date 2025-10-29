@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { apiClient } from '../../lib/apiClient'
 import styles from './InvestmentForm.module.css'
 
 export default function InvestmentForm({ onCompleted, onReviewSummary, disableAuthGuard = false, accountType, initialAmount, initialPaymentFrequency, initialLockup, onValuesChange }) {
@@ -120,7 +121,7 @@ export default function InvestmentForm({ onCompleted, onReviewSummary, disableAu
       if (!investmentId) return
 
       try {
-        const res = await fetch(`/api/users/${userId}`)
+        const res = await apiClient.getUser(userId)
         const data = await res.json()
         if (data.success && data.user) {
           const investment = data.user.investments?.find(inv => inv.id === investmentId)
@@ -235,7 +236,6 @@ export default function InvestmentForm({ onCompleted, onReviewSummary, disableAu
         amount: formData.investmentAmount,
         paymentFrequency: formData.paymentFrequency,
         lockupPeriod,
-        bonds,
         accountType
       }
 
@@ -246,16 +246,7 @@ export default function InvestmentForm({ onCompleted, onReviewSummary, disableAu
       
       if (existingInvestmentId) {
         // Update existing draft investment
-        const res = await fetch(`/api/users/${userId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            _action: 'updateInvestment',
-            investmentId: existingInvestmentId,
-            fields: investmentPayload
-          })
-        })
-        const data = await res.json()
+        const data = await apiClient.updateInvestment(userId, existingInvestmentId, investmentPayload)
         if (!data.success) {
           // If investment not found, clear stale ID and create new one
           if (data.error && data.error.includes('not found')) {
@@ -270,26 +261,13 @@ export default function InvestmentForm({ onCompleted, onReviewSummary, disableAu
         
         // If account type was already chosen, update it
         if (accountType) {
-          await fetch(`/api/users/${userId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              _action: 'updateInvestment',
-              investmentId: existingInvestmentId,
-              fields: { accountType }
-            })
-          })
+          await apiClient.updateInvestment(userId, existingInvestmentId, { accountType })
         }
         
         notifyCompletion(existingInvestmentId, lockupPeriod)
       } else {
         // Create new draft investment
-        const res = await fetch(`/api/users/${userId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ _action: 'startInvestment', investment: investmentPayload })
-        })
-        const data = await res.json()
+        const data = await apiClient.createInvestment(userId, investmentPayload)
         if (!data.success) {
           alert(data.error || 'Failed to start investment')
           return
@@ -300,15 +278,7 @@ export default function InvestmentForm({ onCompleted, onReviewSummary, disableAu
           localStorage.setItem('currentInvestmentId', data.investment.id)
           // If account type was already chosen earlier in the step, persist it now
           if (accountType) {
-            await fetch(`/api/users/${userId}`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                _action: 'updateInvestment',
-                investmentId: data.investment.id,
-                fields: { accountType }
-              })
-            })
+            await apiClient.updateInvestment(userId, data.investment.id, { accountType })
           }
         }
         notifyCompletion(data.investment?.id, lockupPeriod)

@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { fetchWithCsrf, clearCsrfToken } from '../../lib/csrfClient'
+import { apiClient } from '../../lib/apiClient'
 import styles from './AdminHeader.module.css'
 
 export default function AdminHeader({ onTabChange, activeTab }) {
@@ -20,9 +20,8 @@ export default function AdminHeader({ onTabChange, activeTab }) {
 
     const loadUser = async () => {
       try {
-        const res = await fetch(`/api/users/${userId}`)
-        const data = await res.json()
-        if (data.success && data.user) {
+        const data = await apiClient.getUser(userId)
+        if (data && data.success && data.user) {
           setCurrentUser(data.user)
         }
       } catch (e) {
@@ -35,13 +34,7 @@ export default function AdminHeader({ onTabChange, activeTab }) {
   const handleLogout = async () => {
     try {
       // Call logout API to clear cookies
-      await fetchWithCsrf('/api/auth/logout', {
-        method: 'POST',
-        credentials: 'include'
-      })
-      
-      // Clear cached CSRF token
-      clearCsrfToken()
+      await apiClient.logout()
       
       // Clear localStorage
       localStorage.removeItem('currentUserId')

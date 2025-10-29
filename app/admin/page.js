@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { fetchWithCsrf } from '../../lib/csrfClient'
+import { apiClient } from '../../lib/apiClient'
 import AdminHeader from '../components/AdminHeader'
 import { useAdminData } from './hooks/useAdminData'
 import { useAdminMetrics } from './hooks/useAdminMetrics'
@@ -234,17 +235,12 @@ export default function AdminPage() {
   const approveInvestment = async (userId, investmentId) => {
     try {
       setSavingId(investmentId)
-      const res = await fetch(`/api/users/${userId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          _action: 'updateInvestment',
-          investmentId,
-          adminUserId: currentUser?.id,
-          fields: { status: 'active' }
-        })
+      const data = await apiClient.updateUser(userId, {
+        _action: 'updateInvestment',
+        investmentId,
+        adminUserId: currentUser?.id,
+        fields: { status: 'active' }
       })
-      const data = await res.json()
       if (!data.success) {
         alert(data.error || 'Failed to confirm investment')
         return
@@ -261,17 +257,12 @@ export default function AdminPage() {
   const rejectInvestment = async (userId, investmentId) => {
     try {
       setSavingId(investmentId)
-      const res = await fetch(`/api/users/${userId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          _action: 'updateInvestment',
-          investmentId,
-          adminUserId: currentUser?.id,
-          fields: { status: 'rejected' }
-        })
+      const data = await apiClient.updateUser(userId, {
+        _action: 'updateInvestment',
+        investmentId,
+        adminUserId: currentUser?.id,
+        fields: { status: 'rejected' }
       })
-      const data = await res.json()
       if (!data.success) {
         alert(data.error || 'Failed to reject investment')
         return

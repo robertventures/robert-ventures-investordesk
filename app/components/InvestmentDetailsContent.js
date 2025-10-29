@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { apiClient } from '../../lib/apiClient'
 import { fetchWithCsrf } from '../../lib/csrfClient'
 import styles from './InvestmentDetailsContent.module.css'
 import TransactionsList from './TransactionsList'
@@ -28,14 +29,15 @@ export default function InvestmentDetailsContent({ investmentId }) {
 
       try {
         // Get current app time for calculations
-        const timeRes = await fetch('/api/admin/time-machine')
-        const timeData = await timeRes.json()
-        const currentAppTime = timeData.success ? timeData.appTime : new Date().toISOString()
+        const [timeData, data] = await Promise.all([
+          apiClient.getAppTime(),
+          apiClient.getUser(userId)
+        ])
+        
+        const currentAppTime = timeData?.success ? timeData.appTime : new Date().toISOString()
         setAppTime(currentAppTime)
 
-        const res = await fetch(`/api/users/${userId}`)
-        const data = await res.json()
-        if (data.success && data.user) {
+        if (data && data.success && data.user) {
           const investment = data.user.investments?.find(inv => inv.id === investmentId)
           if (investment) {
             setInvestmentData(investment)

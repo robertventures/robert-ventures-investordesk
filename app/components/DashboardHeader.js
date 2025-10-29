@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { fetchWithCsrf, clearCsrfToken } from '../../lib/csrfClient'
+import { apiClient } from '@/lib/apiClient'
 import logger from '@/lib/logger'
 import styles from './DashboardHeader.module.css'
 
@@ -23,8 +23,7 @@ export default function DashboardHeader({ onViewChange, activeView }) {
 
     const loadUser = async () => {
       try {
-        const res = await fetch(`/api/users/${userId}`)
-        const data = await res.json()
+        const data = await apiClient.getUser(userId)
         if (data.success && data.user) {
           setUserData(data.user)
         }
@@ -47,13 +46,7 @@ export default function DashboardHeader({ onViewChange, activeView }) {
   const handleLogout = async () => {
     try {
       // Call logout API to clear cookies
-      await fetchWithCsrf('/api/auth/logout', {
-        method: 'POST',
-        credentials: 'include'
-      })
-      
-      // Clear cached CSRF token
-      clearCsrfToken()
+      await apiClient.logout()
       
       // Clear localStorage
       if (typeof window !== 'undefined') {

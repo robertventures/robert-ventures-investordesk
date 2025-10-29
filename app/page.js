@@ -8,7 +8,6 @@ export default function Home() {
   return (
     <main className={styles.main}>
       <Header />
-      
       <div className={styles.container}>
         <section className={styles.welcomeSection}>
           <h1 className={styles.welcomeTitle}>Create your account</h1>

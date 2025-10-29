@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { apiClient } from '@/lib/apiClient'
 import logger from '@/lib/logger'
 import Header from '../components/Header'
 import styles from './page.module.css'
@@ -124,8 +125,7 @@ export default function InvestmentPage() {
     }
     const checkAdmin = async () => {
       try {
-        const res = await fetch(`/api/users/${userId}`)
-        const data = await res.json()
+        const data = await apiClient.getUser(userId)
         // If the account no longer exists, clear session and redirect
         if (!data.success || !data.user) {
           try {
@@ -154,11 +154,19 @@ export default function InvestmentPage() {
           return
         }
         
-        // Load user's account type and set as locked
-        if (data.success && data.user?.accountType) {
-          setUserAccountType(data.user.accountType)
-          setLockedAccountType(data.user.accountType)
-          setSelectedAccountType(data.user.accountType)
+        // Load user's account type and set as locked ONLY if user has confirmed investments
+        if (data.success && data.user) {
+          const confirmedInvestments = (data.user.investments || []).filter(inv => inv.status === 'confirmed' || inv.status === 'pending')
+          if (confirmedInvestments.length > 0 && data.user.accountType) {
+            // User has at least one confirmed/pending investment, lock the account type
+            setUserAccountType(data.user.accountType)
+            setLockedAccountType(data.user.accountType)
+            setSelectedAccountType(data.user.accountType)
+          } else if (data.user.accountType) {
+            // User has accountType but no confirmed investments yet - don't lock, just set the default
+            setUserAccountType(data.user.accountType)
+            setSelectedAccountType(data.user.accountType)
+          }
         }
         
         // Load existing draft investment data if it exists

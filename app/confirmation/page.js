@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { fetchWithCsrf } from '../../lib/csrfClient'
+import { apiClient } from '../../lib/apiClient'
 import logger from '@/lib/logger'
 import Header from '../components/Header'
 import styles from './page.module.css'
@@ -124,17 +124,7 @@ export default function ConfirmationPage() {
       }
 
       // Call backend to verify code and create the actual user account
-      const res = await fetchWithCsrf('/api/auth/verify-and-create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include', // Important: needed to receive auth cookies
-        body: JSON.stringify({
-          email: email,
-          verificationCode: enteredCode
-        })
-      })
-
-      const data = await res.json()
+      const data = await apiClient.verifyAndCreate(email, enteredCode)
 
       if (!data.success) {
         // Log full error details for debugging

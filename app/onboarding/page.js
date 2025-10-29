@@ -54,8 +54,7 @@ export default function OnboardingPage() {
   // Load user data when testing (no token)
   const loadUserData = async (userId) => {
     try {
-      const res = await fetch(`/api/users/${userId}`)
-      const data = await res.json()
+      const data = await apiClient.getUser(userId)
       
       if (data.success && data.user) {
         setUserData(data.user)

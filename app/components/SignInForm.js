@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { apiClient } from '../../lib/apiClient'
 import styles from './SignInForm.module.css'
 
 export default function SignInForm() {
@@ -59,28 +60,12 @@ export default function SignInForm() {
     setIsLoading(true)
 
     try {
-      // Call login API
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          email: formData.email,
-          password: formData.password
-        }),
-        credentials: 'include' // Important for cookies
-      })
+      // Call login API using apiClient
+      const data = await apiClient.login(formData.email, formData.password)
 
-      const data = await res.json()
-
-      if (!data.success) {
+      if (!data || !data.success) {
         // Handle specific error messages
-        if (res.status === 401) {
-          setErrors({ password: 'Invalid email or password' })
-        } else {
-          setGeneralError(data.error || 'Failed to sign in. Please try again.')
-        }
+        setErrors({ password: 'Invalid email or password' })
         setIsLoading(false)
         return
       }

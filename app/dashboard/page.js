@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { apiClient } from '@/lib/apiClient'
 import logger from '@/lib/logger'
 import DashboardHeader from '../components/DashboardHeader'
 import PortfolioSummary from '../components/PortfolioSummary'
@@ -30,8 +31,7 @@ export default function DashboardPage() {
         const fromFinalize = searchParams.get('from') === 'finalize'
         const freshParam = fromFinalize ? '?fresh=true' : ''
         
-        const res = await fetch(`/api/users/${userId}${freshParam}`)
-        const data = await res.json()
+        const data = await apiClient.getUser(userId, fromFinalize)
         if (!data.success || !data.user) {
           localStorage.removeItem('currentUserId')
           localStorage.removeItem('signupEmail')

@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { apiClient } from '../../lib/apiClient'
 import styles from './DocumentsView.module.css'
 import { formatCurrency } from '../../lib/formatters.js'
 import { formatDateLocale } from '../../lib/dateUtils.js'
@@ -21,8 +22,7 @@ export default function DocumentsView() {
       }
 
       try {
-        const res = await fetch(`/api/users/${userId}`)
-        const data = await res.json()
+        const data = await apiClient.getUser(userId)
         if (data.success) {
           setUser(data.user)
         }

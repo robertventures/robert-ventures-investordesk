@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useMemo, memo } from 'react'
 import { useRouter } from 'next/navigation'
+import { apiClient } from '../../lib/apiClient'
 import styles from './TransactionsList.module.css'
 import { formatCurrency } from '../../lib/formatters.js'
 import { formatDateForDisplay } from '../../lib/dateUtils.js'
@@ -19,6 +20,10 @@ function eventMeta(ev) {
       return { icon: '✅', iconClass: styles.confirmed, title: 'Investment Confirmed' }
     case 'investment_rejected':
       return { icon: '❌', iconClass: styles.rejected, title: 'Investment Rejected' }
+    case 'investment_updated':
+      return { icon: '📝', iconClass: styles.created, title: 'Investment Updated' }
+    case 'investment_info_confirmed':
+      return { icon: '✅', iconClass: styles.confirmed, title: 'Investment Info Confirmed' }
     case 'distribution':
       return { icon: '💸', iconClass: styles.distribution, title: 'Distribution' }
     case 'monthly_distribution':
@@ -37,6 +42,12 @@ function eventMeta(ev) {
       return { icon: '❌', iconClass: styles.withdrawal, title: 'Withdrawal Rejected' }
     case 'redemption':
       return { icon: '🏦', iconClass: styles.withdrawal, title: 'Redemption' }
+    case 'profile_updated':
+      return { icon: '👤', iconClass: styles.created, title: 'Profile Updated' }
+    case 'bank_account_added':
+      return { icon: '🏦', iconClass: styles.created, title: 'Bank Account Added' }
+    case 'bank_account_removed':
+      return { icon: '🏦', iconClass: styles.withdrawal, title: 'Bank Account Removed' }
     default:
       return { icon: '•', iconClass: '', title: ev.type }
   }
@@ -61,8 +72,7 @@ const TransactionsList = memo(function TransactionsList({ limit = null, showView
       if (!userId) { setLoading(false); return }
       try {
         // PERFORMANCE: Removed migration call - transactions are generated on admin time machine changes
-        const res = await fetch(`/api/users/${userId}`)
-        const data = await res.json()
+        const data = await apiClient.getUser(userId)
         if (data.success && data.user) {
           setUser(data.user)
           const baseEvents = Array.isArray(data.user.activity) ? data.user.activity : []
@@ -83,10 +93,8 @@ const TransactionsList = memo(function TransactionsList({ limit = null, showView
               investmentAmount: inv.amount || 0
             }))
           })
-          // Filter out redundant events:
-          // - investment_created: redundant with 'investment' transaction
-          const filteredBase = baseEvents.filter(ev => ev.type !== 'investment_created')
-          const combined = [...filteredBase, ...investmentEvents]
+          // No filtering needed - backend now only creates relevant activity events
+          const combined = [...baseEvents, ...investmentEvents]
           // Sort descending (newest first) to show most recent activity at the top
           const sorted = combined.slice().sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))
           setEvents(sorted)

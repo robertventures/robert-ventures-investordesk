@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { apiClient } from '../../lib/apiClient'
 import styles from './InvestmentsView.module.css'
 import { calculateInvestmentValue, formatCurrency, formatDate, getInvestmentStatus } from '../../lib/investmentCalculations.js'
 
@@ -22,16 +23,16 @@ export default function InvestmentsView() {
 
     try {
       // Get current app time for calculations (parallel with user data fetch)
-      const timePromise = fetch('/api/admin/time-machine')
-      const userPromise = fetch(`/api/users/${userId}${searchParams.get('from') === 'finalize' ? '?fresh=true' : ''}`)
+      const fresh = searchParams.get('from') === 'finalize'
+      const [timeData, data] = await Promise.all([
+        apiClient.getAppTime(),
+        apiClient.getUser(userId, fresh)
+      ])
       
-      const [timeRes, res] = await Promise.all([timePromise, userPromise])
-      const timeData = await timeRes.json()
-      const currentAppTime = timeData.success ? timeData.appTime : new Date().toISOString()
+      const currentAppTime = timeData?.success ? timeData.appTime : new Date().toISOString()
       setAppTime(currentAppTime)
       
-      const data = await res.json()
-      if (data.success && data.user) {
+      if (data && data.success && data.user) {
         setUserData(data.user)
         
         // Calculate portfolio metrics from investments using the new calculation functions

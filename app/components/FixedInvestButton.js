@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { apiClient } from '../../lib/apiClient'
 import styles from './FixedInvestButton.module.css'
 
 export default function FixedInvestButton() {
@@ -16,8 +17,7 @@ export default function FixedInvestButton() {
       const userId = localStorage.getItem('currentUserId')
       if (!userId) return
       try {
-        const res = await fetch(`/api/users/${userId}`)
-        const data = await res.json()
+        const data = await apiClient.getUser(userId)
         if (data.success && data.user && data.user.isAdmin) {
           setHide(true)
         }

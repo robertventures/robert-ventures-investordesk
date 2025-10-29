@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
+import { apiClient } from '@/lib/apiClient'
 import styles from './TabbedResidentialIdentity.module.css'
 
 const MIN_DOB = '1900-01-01'
@@ -175,8 +176,7 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
       const userId = localStorage.getItem('currentUserId')
       if (!userId) return
       try {
-        const res = await fetch(`/api/users/${userId}`)
-        const data = await res.json()
+        const data = await apiClient.getUser(userId)
         if (data.success && data.user) {
           const u = data.user
           // Determine current investment accountType if available
@@ -493,16 +493,12 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
         }
       }
 
-      const resUser = await fetch(`/api/users/${userId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(userData)
-      })
-      const userResponse = await resUser.json()
+      // Use apiClient to call Python backend
+      const userResponse = await apiClient.updateUser(userId, userData)
 
       if (!userResponse.success) {
         console.error('Failed to update user profile:', userResponse.error)
-        alert('Failed to save personal information. Please try again.')
+        alert(`Failed to save personal information: ${userResponse.error || 'Unknown error'}`)
         return
       }
 
@@ -586,19 +582,20 @@ export default function TabbedResidentialIdentity({ onCompleted, onReviewSummary
           }
         }
 
-        const investmentRes = await fetch(`/api/users/${userId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+        // Use apiClient to update investment via special action
+        try {
+          const investmentResponse = await apiClient.updateUser(userId, {
             _action: 'updateInvestment',
             investmentId,
             fields: investmentFields
           })
-        })
-        const investmentResponse = await investmentRes.json()
 
-        if (!investmentResponse.success) {
-          console.error('Failed to update investment:', investmentResponse.error)
+          if (!investmentResponse.success) {
+            console.error('Failed to update investment:', investmentResponse.error)
+            // Don't block the flow for investment update failures
+          }
+        } catch (error) {
+          console.error('Failed to update investment:', error)
           // Don't block the flow for investment update failures
         }
       }

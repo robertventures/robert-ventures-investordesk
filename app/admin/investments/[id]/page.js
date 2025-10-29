@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { apiClient } from '../../../../lib/apiClient'
 import { fetchWithCsrf } from '../../../../lib/csrfClient'
 import AdminHeader from '../../../components/AdminHeader'
 import InvestmentAdminHeader from '../../components/InvestmentAdminHeader'
@@ -49,9 +50,8 @@ export default function AdminInvestmentDetailsPage({ params }) {
         setCurrentUser(meData.user)
 
         // Load all users to find the investment
-        const usersRes = await fetch('/api/users')
-        const usersData = await usersRes.json()
-        if (!usersData.success) {
+        const usersData = await apiClient.getAllUsers()
+        if (!usersData || !usersData.success) {
           alert('Failed to load investment data')
           return
         }

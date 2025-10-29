@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { apiClient } from '../../lib/apiClient'
 import styles from './AccountCreationForm.module.css'
 
 export default function AccountCreationForm() {
@@ -62,18 +63,9 @@ export default function AccountCreationForm() {
     
     try {
       // Register as pending user (not added to Supabase yet)
-      const res = await fetch('/api/auth/register-pending', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: form.email,
-          password: form.password
-        })
-      })
+      const data = await apiClient.registerPending(form.email, form.password)
 
-      const data = await res.json()
-
-      if (data.success) {
+      if (data && data.success) {
         // Store email for confirmation page
         localStorage.setItem('signupEmail', form.email)
         localStorage.setItem('pendingRegistration', 'true')
@@ -82,7 +74,7 @@ export default function AccountCreationForm() {
         return
       }
 
-      if (res.status === 409 || data.error === 'User with this email already exists') {
+      if (data && (data.error === 'User with this email already exists' || data.error?.includes('already exists'))) {
         setAccountExistsError('An account with this email already exists. Please sign in instead.')
         return
       }

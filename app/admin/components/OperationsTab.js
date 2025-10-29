@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { apiClient } from '../../../lib/apiClient'
 import SectionCard from './SectionCard'
 import TimeMachineTab from './TimeMachineTab'
 import ImportInvestorsTab from './ImportInvestorsTab'
@@ -36,14 +37,9 @@ export default function OperationsTab({
 
   const fetchMasterPasswordInfo = async () => {
     try {
-      const res = await fetch('/api/admin/generate-master-password', {
-        credentials: 'include'
-      })
-      if (res.ok) {
-        const data = await res.json()
-        if (data.success && data.hasPassword) {
-          setMasterPasswordInfo(data)
-        }
+      const data = await apiClient.request('/api/admin/generate-master-password')
+      if (data && data.success && data.hasPassword) {
+        setMasterPasswordInfo(data)
       }
     } catch (error) {
       console.error('Error fetching master password info:', error)
@@ -54,14 +50,11 @@ export default function OperationsTab({
     setIsGenerating(true)
     setCopied(false)
     try {
-      const res = await fetch('/api/admin/generate-master-password', {
-        method: 'POST',
-        credentials: 'include'
+      const data = await apiClient.request('/api/admin/generate-master-password', {
+        method: 'POST'
       })
       
-      const data = await res.json()
-      
-      if (data.success) {
+      if (data && data.success) {
         setMasterPassword(data.password)
         setMasterPasswordInfo({
           hasPassword: true,

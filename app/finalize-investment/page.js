@@ -1,6 +1,7 @@
 "use client"
 import Header from '../components/Header'
 import BankConnectionModal from '../components/BankConnectionModal'
+import { apiClient } from '../../lib/apiClient'
 import styles from './page.module.css'
 import { useEffect, useState } from 'react'
 
@@ -54,8 +55,7 @@ function ClientContent() {
         window.location.href = '/'
         return
       }
-      const res = await fetch(`/api/users/${userId}`)
-      const data = await res.json()
+      const data = await apiClient.getUser(userId)
       if (data.success && data.user) {
         setUser(data.user)
         const inv = (data.user.investments || []).find(i => i.id === investmentId) || null
@@ -593,9 +593,8 @@ function ClientContent() {
               console.log('Investment details:', { userId, investmentId, paymentMethod: fundingMethod, earningsMethod })
 
               // Fetch current app time (Time Machine) from server
-              const timeRes = await fetch('/api/admin/time-machine')
-              const timeData = await timeRes.json()
-              const appTime = timeData.success ? timeData.appTime : new Date().toISOString()
+              const timeData = await apiClient.getAppTime()
+              const appTime = timeData?.success ? timeData.appTime : new Date().toISOString()
               console.log('Using app time for timestamps:', appTime)
 
               // Determine bank account to use for funding and payout
@@ -623,13 +622,10 @@ function ClientContent() {
               
               // Update the draft investment to pending status with compliance and banking data
               console.log('Making API call to update investment status...')
-              const investmentUpdateRes = await fetch(`/api/users/${userId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  _action: 'updateInvestment',
-                  investmentId,
-                  fields: {
+              const investmentUpdateData = await apiClient.updateUser(userId, {
+                _action: 'updateInvestment',
+                investmentId,
+                fields: {
                     // Set payment method for backend auto-approval logic
                     paymentMethod,
                     // For individual/IRA accounts, snapshot personalInfo and address at submission time
@@ -715,11 +711,9 @@ function ClientContent() {
                     status: 'pending',
                     submittedAt: appTime
                   }
-                })
               })
 
               console.log('Investment update API response received')
-              const investmentUpdateData = await investmentUpdateRes.json()
               console.log('Investment update result:', investmentUpdateData)
               if (!investmentUpdateData.success) {
                 console.error('Investment update failed:', investmentUpdateData.error)
@@ -737,21 +731,15 @@ function ClientContent() {
                 return bank
               })
 
-              const bankingUpdateRes = await fetch(`/api/users/${userId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  banking: { 
-                    fundingMethod, 
-                    earningsMethod, 
-                    payoutMethod,
-                    ...(fundingBankToUse ? { defaultBankAccountId: fundingBankToUse.id } : {})
-                  },
-                  bankAccounts: nextBankAccounts
-                })
+              const bankingUpdateData = await apiClient.updateUser(userId, {
+                banking: { 
+                  fundingMethod, 
+                  earningsMethod, 
+                  payoutMethod,
+                  ...(fundingBankToUse ? { defaultBankAccountId: fundingBankToUse.id } : {})
+                },
+                bankAccounts: nextBankAccounts
               })
-
-              const bankingUpdateData = await bankingUpdateRes.json()
               console.log('Banking update result:', bankingUpdateData)
               if (!bankingUpdateData.success) {
                 console.warn('Banking details update failed:', bankingUpdateData.error)
@@ -811,15 +799,13 @@ function ClientContent() {
             
             const userId = localStorage.getItem('currentUserId')
             console.log('Saving bank account to database...')
-            const res = await fetch(`/api/users/${userId}`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                _action: 'addBankAccount',
-                bankAccount: account
-              })
+            
+            // Use apiClient to ensure it goes to the Python backend
+            const data = await apiClient.updateUser(userId, {
+              _action: 'addBankAccount',
+              bankAccount: account
             })
-            const data = await res.json()
+            
             console.log('Bank account save response:', data)
             
             if (data.success) {
@@ -827,7 +813,10 @@ function ClientContent() {
               // Update user data with saved bank accounts
               if (data.user) {
                 setUser(data.user)
-                setAvailableBanks(data.user.bankAccounts || [])
+              }
+              // Update available banks from the response
+              if (data.bankAccounts) {
+                setAvailableBanks(data.bankAccounts)
               }
             } else {
               console.error('❌ Failed to save bank account:', data.error)
@@ -836,6 +825,7 @@ function ClientContent() {
             }
           } catch (e) {
             console.error('❌ Error saving bank account:', e)
+            console.error('Error details:', e)
             alert(`Error saving bank account: ${e.message}\n\nThe account is available for this session but may not persist.`)
           } finally {
             setIsSavingBank(false)

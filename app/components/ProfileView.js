@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
+import { apiClient } from '../../lib/apiClient'
 import logger from '@/lib/logger'
 import styles from './ProfileView.module.css'
 import BankConnectionModal from './BankConnectionModal'
@@ -124,8 +125,8 @@ export default function ProfileView() {
     if (!userId) return
 
     try {
-      const res = await fetch(`/api/users/${userId}?includeSSN=true`)
-      const data = await res.json()
+      // Use apiClient to route to Python backend (not Next.js)
+      const data = await apiClient.getUser(userId)
       if (data.success && data.user) {
         setUserData(data.user)
         setFormData({
@@ -317,16 +318,11 @@ export default function ProfileView() {
       if (typeof window === 'undefined') return
       
       const userId = localStorage.getItem('currentUserId')
-      const res = await fetch(`/api/users/${userId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          _action: 'changePassword',
-          currentPassword: passwordForm.currentPassword,
-          newPassword: passwordForm.newPassword
-        })
+      const data = await apiClient.updateUser(userId, {
+        _action: 'changePassword',
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword
       })
-      const data = await res.json()
       if (!data.success) {
         alert(data.error || 'Failed to change password')
         return
@@ -470,74 +466,69 @@ export default function ProfileView() {
       if (typeof window === 'undefined') return
       
       const userId = localStorage.getItem('currentUserId')
-      const res = await fetch(`/api/users/${userId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          firstName: formData.firstName,
-          lastName: formData.lastName,
-          phoneNumber: normalizePhoneForDB(formData.phoneNumber),
-          dob: formData.dob,
-          ssn: formData.ssn,
-          email: formData.email,
-          ...(Array.isArray(userData?.investments) && userData.investments.some(inv => inv.accountType === 'joint') || !!userData?.jointHolder ? {
-            jointHoldingType: formData.jointHoldingType,
-            jointHolder: {
-              firstName: formData.jointHolder.firstName,
-              lastName: formData.jointHolder.lastName,
-              email: formData.jointHolder.email,
-              phone: normalizePhoneForDB(formData.jointHolder.phone),
-              dob: formData.jointHolder.dob,
-              ssn: formData.jointHolder.ssn,
-              address: {
-                street1: formData.jointHolder.address.street1,
-                street2: formData.jointHolder.address.street2,
-                city: formData.jointHolder.address.city,
-                state: formData.jointHolder.address.state,
-                zip: formData.jointHolder.address.zip,
-                country: formData.jointHolder.address.country
-              }
+      const data = await apiClient.updateUser(userId, {
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        phoneNumber: normalizePhoneForDB(formData.phoneNumber),
+        dob: formData.dob,
+        ssn: formData.ssn,
+        email: formData.email,
+        ...(Array.isArray(userData?.investments) && userData.investments.some(inv => inv.accountType === 'joint') || !!userData?.jointHolder ? {
+          jointHoldingType: formData.jointHoldingType,
+          jointHolder: {
+            firstName: formData.jointHolder.firstName,
+            lastName: formData.jointHolder.lastName,
+            email: formData.jointHolder.email,
+            phone: normalizePhoneForDB(formData.jointHolder.phone),
+            dob: formData.jointHolder.dob,
+            ssn: formData.jointHolder.ssn,
+            address: {
+              street1: formData.jointHolder.address.street1,
+              street2: formData.jointHolder.address.street2,
+              city: formData.jointHolder.address.city,
+              state: formData.jointHolder.address.state,
+              zip: formData.jointHolder.address.zip,
+              country: formData.jointHolder.address.country
             }
-          } : {}),
-          ...(formData.entity && (Array.isArray(userData?.investments) && userData.investments.some(inv => inv.accountType === 'entity') || !!userData?.entity) ? {
-            entity: {
-              name: formData.entity.name,
-              registrationDate: formData.entity.registrationDate,
-              taxId: formData.entity.taxId,
-              address: {
-                street1: formData.entity.address.street1,
-                street2: formData.entity.address.street2,
-                city: formData.entity.address.city,
-                state: formData.entity.address.state,
-                zip: formData.entity.address.zip,
-                country: formData.entity.address.country
-              }
+          }
+        } : {}),
+        ...(formData.entity && (Array.isArray(userData?.investments) && userData.investments.some(inv => inv.accountType === 'entity') || !!userData?.entity) ? {
+          entity: {
+            name: formData.entity.name,
+            registrationDate: formData.entity.registrationDate,
+            taxId: formData.entity.taxId,
+            address: {
+              street1: formData.entity.address.street1,
+              street2: formData.entity.address.street2,
+              city: formData.entity.address.city,
+              state: formData.entity.address.state,
+              zip: formData.entity.address.zip,
+              country: formData.entity.address.country
             }
-          } : {}),
-          ...(formData.authorizedRepresentative && (Array.isArray(userData?.investments) && userData.investments.some(inv => inv.accountType === 'entity') || !!userData?.entity) ? {
-            authorizedRepresentative: {
-              dob: formData.authorizedRepresentative.dob,
-              ssn: formData.authorizedRepresentative.ssn,
-              address: {
-                street1: formData.authorizedRepresentative.address.street1,
-                street2: formData.authorizedRepresentative.address.street2,
-                city: formData.authorizedRepresentative.address.city,
-                state: formData.authorizedRepresentative.address.state,
-                zip: formData.authorizedRepresentative.address.zip,
-                country: formData.authorizedRepresentative.address.country
-              }
+          }
+        } : {}),
+        ...(formData.authorizedRepresentative && (Array.isArray(userData?.investments) && userData.investments.some(inv => inv.accountType === 'entity') || !!userData?.entity) ? {
+          authorizedRepresentative: {
+            dob: formData.authorizedRepresentative.dob,
+            ssn: formData.authorizedRepresentative.ssn,
+            address: {
+              street1: formData.authorizedRepresentative.address.street1,
+              street2: formData.authorizedRepresentative.address.street2,
+              city: formData.authorizedRepresentative.address.city,
+              state: formData.authorizedRepresentative.address.state,
+              zip: formData.authorizedRepresentative.address.zip,
+              country: formData.authorizedRepresentative.address.country
             }
-          } : {}),
-          trustedContact: formData.trustedContact ? {
-            firstName: formData.trustedContact.firstName,
-            lastName: formData.trustedContact.lastName,
-            email: formData.trustedContact.email,
-            phone: formData.trustedContact.phone,
-            relationship: formData.trustedContact.relationship
-          } : {}
-        })
+          }
+        } : {}),
+        trustedContact: formData.trustedContact ? {
+          firstName: formData.trustedContact.firstName,
+          lastName: formData.trustedContact.lastName,
+          email: formData.trustedContact.email,
+          phone: formData.trustedContact.phone,
+          relationship: formData.trustedContact.relationship
+        } : {}
       })
-      const data = await res.json()
       if (data.success && data.user) {
         setUserData(data.user)
         setSaveSuccess(true)
@@ -554,15 +545,10 @@ export default function ProfileView() {
       if (typeof window === 'undefined') return
       
       const userId = localStorage.getItem('currentUserId')
-      const res = await fetch(`/api/users/${userId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          _action: 'addBankAccount',
-          bankAccount
-        })
+      const data = await apiClient.updateUser(userId, {
+        _action: 'addBankAccount',
+        bankAccount
       })
-      const data = await res.json()
       if (data.success) {
         await loadUser()
       } else {
@@ -579,15 +565,10 @@ export default function ProfileView() {
       if (typeof window === 'undefined') return
       
       const userId = localStorage.getItem('currentUserId')
-      const res = await fetch(`/api/users/${userId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          _action: 'setDefaultBank',
-          bankAccountId: bankId
-        })
+      const data = await apiClient.updateUser(userId, {
+        _action: 'setDefaultBank',
+        bankAccountId: bankId
       })
-      const data = await res.json()
       if (data.success) {
         await loadUser()
       } else {
@@ -607,15 +588,10 @@ export default function ProfileView() {
       if (typeof window === 'undefined') return
       
       const userId = localStorage.getItem('currentUserId')
-      const res = await fetch(`/api/users/${userId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          _action: 'removeBankAccount',
-          bankAccountId: bankId
-        })
+      const data = await apiClient.updateUser(userId, {
+        _action: 'removeBankAccount',
+        bankAccountId: bankId
       })
-      const data = await res.json()
       if (data.success) {
         await loadUser()
       } else {
@@ -642,14 +618,9 @@ export default function ProfileView() {
     }
     try {
       if (typeof window === 'undefined') return
-      const res = await fetch('/api/users/profile', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ address: addressForm })
-      })
-      const data = await res.json()
-      if (!data.success) {
-        alert(data.error || 'Failed to save address')
+      const data = await apiClient.updateUserProfile({ address: addressForm })
+      if (!data || !data.success) {
+        alert(data?.error || 'Failed to save address')
         return
       }
       await loadUser()

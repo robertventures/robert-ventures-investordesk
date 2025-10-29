@@ -32,9 +32,11 @@ export default function ActivityTab({ users }) {
       investments.forEach(investment => {
         const transactions = Array.isArray(investment.transactions) ? investment.transactions : []
         transactions.forEach(tx => {
-          // Filter out 'investment' type transactions to avoid duplicates with user.activity events
-          // (investment_created/investment_confirmed already show these milestones)
-          if (tx.type === 'investment') return
+          // Note: Investments generate distribution and contribution transactions
+          // - distribution: Monthly interest payments
+          // - contribution: Compounded interest (for compounding investments)
+          // For compounding investments, a distribution is generated first, then immediately 
+          // converted to a contribution (reinvestment)
           
           events.push({
             ...tx,

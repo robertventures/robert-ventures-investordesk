@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useMemo } from 'react'
 import { useRouter, useParams } from 'next/navigation'
+import { apiClient } from '../../../../../lib/apiClient'
 import { fetchWithCsrf } from '../../../../../lib/csrfClient'
 import AdminHeader from '../../../../components/AdminHeader'
 import styles from './page.module.css'
@@ -23,9 +24,8 @@ export default function MonthTransactionsPage() {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const res = await fetch('/api/users')
-        const data = await res.json()
-        if (data.success) {
+        const data = await apiClient.getAllUsers()
+        if (data && data.success) {
           setUsers(data.users || [])
           setTimeMachineData(data.timeMachine || { appTime: null, isActive: false })
         }
@@ -244,9 +244,8 @@ export default function MonthTransactionsPage() {
       alert(`Processed ${successCount} payout(s) successfully${errorCount > 0 ? `, ${errorCount} failed` : ''}`)
       
       // Refresh users data
-      const res = await fetch('/api/users')
-      const data = await res.json()
-      if (data.success) {
+      const data = await apiClient.getAllUsers()
+      if (data && data.success) {
         setUsers(data.users || [])
         setTimeMachineData(data.timeMachine || { appTime: null, isActive: false })
       }

@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { apiClient } from '../../lib/apiClient'
 import styles from './PortfolioSummary.module.css'
 import TransactionsList from './TransactionsList'
 import { calculateInvestmentValue, formatCurrency, formatDate, getInvestmentStatus } from '../../lib/investmentCalculations.js'
@@ -36,16 +37,23 @@ export default function PortfolioSummary() {
       // 3. Background job (if implemented)
       
       // Get current app time for calculations (parallel with user data fetch)
-      const timePromise = fetch('/api/admin/time-machine')
-      const userPromise = fetch(`/api/users/${userId}${searchParams.get('from') === 'finalize' ? '?fresh=true' : ''}`)
+      const fresh = searchParams.get('from') === 'finalize'
       
-      const [timeRes, res] = await Promise.all([timePromise, userPromise])
-      const timeData = await timeRes.json()
-      const currentAppTime = timeData.success ? timeData.appTime : new Date().toISOString()
+      // Fetch app time and user data in parallel
+      let timeData
+      try {
+        timeData = await apiClient.getAppTime()
+      } catch (err) {
+        console.warn('Failed to get app time, using system time:', err)
+        timeData = { success: false }
+      }
+      
+      const data = await apiClient.getUser(userId, fresh)
+      
+      const currentAppTime = (timeData?.success && timeData.appTime) ? timeData.appTime : new Date().toISOString()
       setAppTime(currentAppTime)
       
-      const data = await res.json()
-      if (data.success && data.user) {
+      if (data && data.success && data.user) {
         setUserData(data.user)
         
         // Calculate portfolio metrics from investments using the new calculation functions
@@ -185,7 +193,12 @@ export default function PortfolioSummary() {
           setPortfolioData(nextPortfolio)
 
           // Build earnings series for last 23 month-ends plus current app time as the final point
-          const end = new Date(currentAppTime)
+          const end = new Date(currentAppTime || new Date().toISOString())
+          if (isNaN(end.getTime())) {
+            console.error('Invalid date for chart calculation:', currentAppTime)
+            setChartSeries([])
+            return
+          }
           const start = new Date(end)
           start.setMonth(start.getMonth() - 23)
 

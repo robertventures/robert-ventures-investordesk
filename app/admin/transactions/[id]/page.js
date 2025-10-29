@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { apiClient } from '../../../../lib/apiClient'
 import { fetchWithCsrf } from '../../../../lib/csrfClient'
 import AdminHeader from '../../../components/AdminHeader'
 import styles from './page.module.css'
@@ -36,9 +37,8 @@ export default function AdminTransactionDetailsPage({ params }) {
         setCurrentUser(meData.user)
 
         // Load all users to find the transaction
-        const usersRes = await fetch('/api/users')
-        const usersData = await usersRes.json()
-        if (!usersData.success) {
+        const usersData = await apiClient.getAllUsers()
+        if (!usersData || !usersData.success) {
           alert('Failed to load transaction data')
           return
         }

@@ -22,8 +22,7 @@ export default function InvestmentReviewForm() {
         return
       }
       try {
-        const res = await fetch(`/api/users/${userId}`)
-        const data = await res.json()
+        const data = await apiClient.getUser(userId)
         if (!data.success || !data.user) return
         
         const user = data.user

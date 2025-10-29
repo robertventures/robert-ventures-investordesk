@@ -16,8 +16,7 @@ export default function InvestmentDetailsHeader({ investmentId }) {
       }
 
       try {
-        const res = await fetch(`/api/users/${userId}`)
-        const data = await res.json()
+        const data = await apiClient.getUser(userId)
         if (data.success && data.user) {
           const investment = data.user.investments?.find(inv => inv.id === investmentId)
           if (investment) {

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { apiClient } from '../../lib/apiClient'
 import Header from '../components/Header'
 import styles from './page.module.css'
 
@@ -29,15 +30,9 @@ export default function ForgotPasswordPage() {
     setError('')
 
     try {
-      const res = await fetch('/api/auth/request-reset', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email })
-      })
+      const data = await apiClient.requestPasswordReset(email)
 
-      const data = await res.json()
-
-      if (data.success) {
+      if (data && data.success) {
         setEmailSent(true)
       } else {
         // For security, we show success even if email doesn't exist

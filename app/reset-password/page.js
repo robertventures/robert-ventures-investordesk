@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { apiClient } from '../../lib/apiClient'
 import Header from '../components/Header'
 import styles from './page.module.css'
 
@@ -72,25 +73,16 @@ export default function ResetPasswordPage() {
     setIsLoading(true)
 
     try {
-      const res = await fetch('/api/auth/reset-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          token,
-          newPassword: formData.password
-        })
-      })
+      const data = await apiClient.resetPassword(token, formData.password)
 
-      const data = await res.json()
-
-      if (data.success) {
+      if (data && data.success) {
         setResetSuccess(true)
         // Redirect to sign-in after 3 seconds
         setTimeout(() => {
           router.push('/sign-in')
         }, 3000)
       } else {
-        setErrors({ general: data.error || 'Failed to reset password' })
+        setErrors({ general: data?.error || 'Failed to reset password' })
       }
     } catch (err) {
       console.error('Password reset error:', err)

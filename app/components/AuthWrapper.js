@@ -2,7 +2,8 @@
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { initCsrfToken } from '../../lib/csrfClient'
-import logger from '@/lib/logger'
+import { apiClient } from '../../lib/apiClient'
+import logger from '../../lib/logger'
 
 export default function AuthWrapper({ children }) {
   const router = useRouter()
@@ -28,33 +29,28 @@ export default function AuthWrapper({ children }) {
     
     const checkAuth = async () => {
       try {
-        // Verify authentication via API
-        const res = await fetch('/api/auth/me', {
-          credentials: 'include' // Important for cookies
-        })
+        // Verify authentication via API using apiClient
+        const data = await apiClient.getCurrentUser()
 
-        const isLoggedIn = res.ok
+        const isLoggedIn = data && data.success && data.user
 
         if (isLoggedIn) {
-          const data = await res.json()
-          if (data.success && data.user) {
-            // Store user ID in localStorage for backward compatibility
-            localStorage.setItem('currentUserId', data.user.id)
-            localStorage.setItem('signupEmail', data.user.email)
-            
-            // Check if user needs onboarding and redirect before rendering
-            if (data.user.needsOnboarding && !isOnboardingRoute) {
-              logger.log('User needs onboarding, redirecting from AuthWrapper...')
-              router.push('/onboarding')
-              return
-            }
-            
-            // If user completed onboarding but is on onboarding page, redirect to dashboard
-            if (!data.user.needsOnboarding && isOnboardingRoute) {
-              logger.log('User onboarding complete, redirecting to dashboard...')
-              router.push('/dashboard')
-              return
-            }
+          // Store user ID in localStorage for backward compatibility
+          localStorage.setItem('currentUserId', data.user.id)
+          localStorage.setItem('signupEmail', data.user.email)
+          
+          // Check if user needs onboarding and redirect before rendering
+          if (data.user.needsOnboarding && !isOnboardingRoute) {
+            logger.log('User needs onboarding, redirecting from AuthWrapper...')
+            router.push('/onboarding')
+            return
+          }
+          
+          // If user completed onboarding but is on onboarding page, redirect to dashboard
+          if (!data.user.needsOnboarding && isOnboardingRoute) {
+            logger.log('User onboarding complete, redirecting to dashboard...')
+            router.push('/dashboard')
+            return
           }
         } else {
           // Clear localStorage if not authenticated
@@ -104,19 +100,13 @@ export default function AuthWrapper({ children }) {
   }, [pathname, router, isPublicRoute])
 
   // Show loading state while checking authentication
+  // For public routes, always render to avoid blocking
+  if (isLoading && isPublicRoute) {
+    return children
+  }
+  
   if (isLoading) {
-    return (
-      <div style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        height: '100vh',
-        fontSize: '16px',
-        color: '#6b7280'
-      }}>
-        Loading...
-      </div>
-    )
+    return null // Return null instead of loading UI to avoid hydration issues
   }
 
   // Don't render protected content if not authenticated and not on public route

@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { apiClient } from '../../lib/apiClient'
 import styles from './TransactionsTable.module.css'
 
 export default function TransactionsTable() {
@@ -21,17 +22,15 @@ export default function TransactionsTable() {
 
       try {
         // Get current app time to ensure earnings/payouts align with time machine
-        const timeRes = await fetch('/api/admin/time-machine')
-        const timeData = await timeRes.json()
-        const currentAppTime = timeData.success ? timeData.appTime : new Date().toISOString()
+        const timeData = await apiClient.getAppTime()
+        const currentAppTime = timeData?.success ? timeData.appTime : new Date().toISOString()
         setAppTime(currentAppTime)
 
         // Backfill persistent transactions prior to loading
-        await fetch('/api/migrate-transactions', { method: 'POST' })
+        await apiClient.request('/api/migrate-transactions', { method: 'POST' })
 
-        const res = await fetch(`/api/users/${userId}`)
-        const data = await res.json()
-        if (data.success && data.user) {
+        const data = await apiClient.getUser(userId)
+        if (data && data.success && data.user) {
           setUserData(data.user)
           const investments = data.user.investments || []
           const investmentTransactions = investments.flatMap(inv => {

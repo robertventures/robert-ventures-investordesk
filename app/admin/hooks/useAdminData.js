@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { apiClient } from '../../../lib/apiClient'
 import { fetchWithCsrf } from '../../../lib/csrfClient'
 import logger from '@/lib/logger'
 
@@ -89,9 +90,8 @@ export function useAdminData() {
         }
 
         // Load current user
-        const meRes = await fetch(`/api/users/${userId}`)
-        const meData = await meRes.json()
-        if (!meData.success || !meData.user) {
+        const meData = await apiClient.getUser(userId)
+        if (!meData || !meData.success || !meData.user) {
           router.push('/')
           return
         }
@@ -136,9 +136,8 @@ export function useAdminData() {
       }
       
       // Load users with all their activity events
-      const res = await fetch('/api/users')
-      const data = await res.json()
-      if (data.success) {
+      const data = await apiClient.getAllUsers()
+      if (data && data.success) {
         setUsers(data.users || [])
         setCachedData(CACHE_KEY_USERS, data.users || [])
         logger.log('✓ User data loaded and cached')
@@ -165,9 +164,8 @@ export function useAdminData() {
       }
       
       setIsLoadingWithdrawals(true)
-      const res = await fetch('/api/admin/withdrawals')
-      const data = await res.json()
-      if (data.success) {
+      const data = await apiClient.getAdminWithdrawals()
+      if (data && data.success) {
         setWithdrawals(data.withdrawals || [])
         setCachedData(CACHE_KEY_WITHDRAWALS, data.withdrawals || [])
       }
@@ -195,9 +193,8 @@ export function useAdminData() {
       }
       
       setIsLoadingPayouts(true)
-      const res = await fetch('/api/admin/pending-payouts')
-      const data = await res.json()
-      if (data.success) {
+      const data = await apiClient.getPendingPayouts()
+      if (data && data.success) {
         setPendingPayouts(data.pendingPayouts || [])
         setCachedData(CACHE_KEY_PAYOUTS, data.pendingPayouts || [])
       }
@@ -210,9 +207,8 @@ export function useAdminData() {
 
   const loadTimeMachine = async () => {
     try {
-      const timeRes = await fetch('/api/admin/time-machine')
-      const timeData = await timeRes.json()
-      if (timeData.success) {
+      const timeData = await apiClient.getAppTime()
+      if (timeData && timeData.success) {
         setTimeMachineData({
           appTime: timeData.appTime,
           isActive: timeData.isTimeMachineActive,
