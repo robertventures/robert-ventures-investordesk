@@ -3,36 +3,18 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { apiClient } from '@/lib/apiClient'
 import logger from '@/lib/logger'
+import { useUser } from '../contexts/UserContext'
 import styles from './DashboardHeader.module.css'
 
 export default function DashboardHeader({ onViewChange, activeView }) {
   const router = useRouter()
   const [mounted, setMounted] = useState(false)
-  const [userData, setUserData] = useState(null)
+  const { userData } = useUser()
   const [showMobileNav, setShowMobileNav] = useState(false)
 
   useEffect(() => {
     setMounted(true)
-    if (typeof window === 'undefined') return
-    
-    const userId = localStorage.getItem('currentUserId')
-    if (!userId) {
-      router.push('/')
-      return
-    }
-
-    const loadUser = async () => {
-      try {
-        const data = await apiClient.getUser(userId)
-        if (data.success && data.user) {
-          setUserData(data.user)
-        }
-      } catch (e) {
-        logger.error('Failed to load user data', e)
-      }
-    }
-    loadUser()
-  }, [router])
+  }, [])
 
   const handleMakeInvestment = () => {
     try {
@@ -45,26 +27,29 @@ export default function DashboardHeader({ onViewChange, activeView }) {
 
   const handleLogout = async () => {
     try {
-      // Call logout API to clear cookies
-      await apiClient.logout()
-      
-      // Clear localStorage
+      // Clear localStorage first (immediate feedback)
       if (typeof window !== 'undefined') {
         localStorage.removeItem('currentUserId')
         localStorage.removeItem('signupEmail')
         localStorage.removeItem('currentInvestmentId')
       }
+      
+      // Call logout API to clear cookies with a timeout
+      const logoutPromise = apiClient.logout()
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Logout timeout')), 3000)
+      )
+      
+      // Race between logout and timeout
+      await Promise.race([logoutPromise, timeoutPromise]).catch((error) => {
+        logger.error('Logout API error (will still redirect):', error)
+      })
       
       // Redirect to sign-in page
       router.push('/sign-in')
     } catch (error) {
       logger.error('Logout error:', error)
-      // Still redirect even if API call fails
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('currentUserId')
-        localStorage.removeItem('signupEmail')
-        localStorage.removeItem('currentInvestmentId')
-      }
+      // Always redirect even if something goes wrong
       router.push('/sign-in')
     }
   }
@@ -98,7 +83,8 @@ export default function DashboardHeader({ onViewChange, activeView }) {
     <header className={styles.header}>
       <div className={styles.container}>
         <div className={styles.logo}>
-          <span className={styles.logoText}>ROBERT VENTURES</span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/images/logo.png" alt="Robert Ventures" className={styles.logoImage} />
         </div>
         
         <nav className={styles.nav}>
@@ -164,7 +150,10 @@ export default function DashboardHeader({ onViewChange, activeView }) {
               router.push('/investment?context=new') 
             }}>Make an Investment</button>
             <div className={styles.mobileDivider}></div>
-            <button className={styles.mobileNavItem} onClick={() => { setShowMobileNav(false); handleLogout() }}>Sign Out</button>
+            <button className={styles.mobileNavItem} onClick={() => { 
+              setShowMobileNav(false); 
+              handleLogout(); 
+            }}>Sign Out</button>
           </div>
         </div>
       )}

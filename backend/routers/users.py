@@ -109,21 +109,50 @@ async def get_all_users(request: Request):
         ).execute()
         users = response.data if response.data else []
         
-        # Get transactions and activity for each user
+        # PERFORMANCE FIX: Batch fetch all transactions and activities instead of N+1 queries
+        # Collect all investment IDs and user IDs
+        all_investment_ids = []
+        all_user_ids = []
         for user in users:
-            # Get transactions for each investment
+            all_user_ids.append(user['id'])
+            if user.get('investments'):
+                all_investment_ids.extend([inv['id'] for inv in user['investments']])
+        
+        # Fetch all transactions in one query
+        transactions_by_investment = {}
+        if all_investment_ids:
+            txn_response = supabase.table('transactions').select('*').in_(
+                'investment_id', all_investment_ids
+            ).order('date', desc=False).execute()
+            
+            for txn in (txn_response.data or []):
+                inv_id = txn.get('investment_id')
+                if inv_id not in transactions_by_investment:
+                    transactions_by_investment[inv_id] = []
+                transactions_by_investment[inv_id].append(txn)
+        
+        # Fetch all activities in one query
+        activities_by_user = {}
+        if all_user_ids:
+            activity_response = supabase.table('activity').select('*').in_(
+                'user_id', all_user_ids
+            ).order('date', desc=True).execute()
+            
+            for activity in (activity_response.data or []):
+                user_id = activity.get('user_id')
+                if user_id not in activities_by_user:
+                    activities_by_user[user_id] = []
+                activities_by_user[user_id].append(activity)
+        
+        # Assign transactions and activities to each user
+        for user in users:
+            # Assign transactions to investments
             if user.get('investments'):
                 for investment in user['investments']:
-                    txn_response = supabase.table('transactions').select('*').eq(
-                        'investment_id', investment['id']
-                    ).order('date', desc=False).execute()
-                    investment['transactions'] = txn_response.data or []
+                    investment['transactions'] = transactions_by_investment.get(investment['id'], [])
             
-            # Get activity events for user
-            activity_response = supabase.table('activity').select('*').eq(
-                'user_id', user['id']
-            ).order('date', desc=True).execute()
-            user['activity'] = activity_response.data or []
+            # Assign activities to user
+            user['activity'] = activities_by_user.get(user['id'], [])
         
         # Convert all users to camelCase
         users_camel = [convert_user_to_camel_case(user) for user in users]

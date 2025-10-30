@@ -1,7 +1,8 @@
 'use client'
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { apiClient } from '../../lib/apiClient'
+import { useUser } from '../contexts/UserContext'
 import styles from './PortfolioSummary.module.css'
 import TransactionsList from './TransactionsList'
 import { calculateInvestmentValue, formatCurrency, formatDate, getInvestmentStatus } from '../../lib/investmentCalculations.js'
@@ -10,7 +11,7 @@ export default function PortfolioSummary() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [mounted, setMounted] = useState(false)
-  const [userData, setUserData] = useState(null)
+  const { userData, refreshUser } = useUser()
   const [portfolioData, setPortfolioData] = useState({
     totalInvested: 0,
     totalPending: 0,
@@ -19,7 +20,6 @@ export default function PortfolioSummary() {
     investments: []
   })
   const [appTime, setAppTime] = useState(null)
-  const [chartSeries, setChartSeries] = useState([])
   const [chartWidth, setChartWidth] = useState(600)
   const chartAreaRef = useRef(null)
 
@@ -36,10 +36,15 @@ export default function PortfolioSummary() {
       // 2. Manual admin action in Operations tab
       // 3. Background job (if implemented)
       
-      // Get current app time for calculations (parallel with user data fetch)
+      // Get current app time for calculations
       const fresh = searchParams.get('from') === 'finalize'
       
-      // Fetch app time and user data in parallel
+      // Refresh user data if needed (e.g., coming from finalize page)
+      if (fresh && refreshUser) {
+        await refreshUser()
+      }
+      
+      // Fetch app time
       let timeData
       try {
         timeData = await apiClient.getAppTime()
@@ -48,16 +53,13 @@ export default function PortfolioSummary() {
         timeData = { success: false }
       }
       
-      const data = await apiClient.getUser(userId, fresh)
-      
       const currentAppTime = (timeData?.success && timeData.appTime) ? timeData.appTime : new Date().toISOString()
       setAppTime(currentAppTime)
       
-      if (data && data.success && data.user) {
-        setUserData(data.user)
+      if (userData) {
         
         // Calculate portfolio metrics from investments using the new calculation functions
-        const investments = data.user.investments || []
+        const investments = userData.investments || []
         // Include active, withdrawal_notice, and withdrawn investments in the dashboard
         // Investors should see all their investment history
         const confirmedInvestments = investments.filter(inv => 
@@ -81,7 +83,7 @@ export default function PortfolioSummary() {
             // Fallback: If confirmedAt is not set, try to get it from activity log
             let confirmedAt = inv.confirmedAt
             if (!confirmedAt && (inv.status === 'active' || inv.status === 'withdrawal_notice' || inv.status === 'withdrawn')) {
-              const activity = data.user.activity || []
+              const activity = userData.activity || []
               const confirmEvent = activity.find(a => a.type === 'investment_confirmed' && a.investmentId === inv.id)
               if (confirmEvent && confirmEvent.date) {
                 confirmedAt = confirmEvent.date
@@ -191,84 +193,113 @@ export default function PortfolioSummary() {
             investments: investmentDetails
           }
           setPortfolioData(nextPortfolio)
-
-          // Build earnings series for last 23 month-ends plus current app time as the final point
-          const end = new Date(currentAppTime || new Date().toISOString())
-          if (isNaN(end.getTime())) {
-            console.error('Invalid date for chart calculation:', currentAppTime)
-            setChartSeries([])
-            return
-          }
-          const start = new Date(end)
-          start.setMonth(start.getMonth() - 23)
-
-          const points = []
-          const confirmed = confirmedInvestments
-          // 23 historical month-end points
-          for (let i = 0; i < 23; i++) {
-            const d = new Date(start)
-            d.setMonth(start.getMonth() + i)
-            const asOf = new Date(d.getFullYear(), d.getMonth() + 1, 0)
-            const asOfIso = asOf.toISOString()
-            let totalEarnings = 0
-            confirmed.forEach(inv => {
-              if (inv.confirmedAt && new Date(inv.confirmedAt) <= asOf) {
-                const investmentTransactions = Array.isArray(inv.transactions) ? inv.transactions : []
-                // Include withdrawn investments in historical earnings
-                // If withdrawn before this point, use final earnings; otherwise calculate as of this point
-                if (inv.status === 'withdrawn' && inv.withdrawalNoticeStartAt && new Date(inv.withdrawalNoticeStartAt) <= asOf) {
-                  // Investment was withdrawn by this point - use stored final earnings
-                  totalEarnings += inv.totalEarnings || 0
-                } else if (inv.paymentFrequency === 'monthly') {
-                  // For monthly payout investments, sum paid distributions from transactions
-                  const paidDistributions = investmentTransactions
-                    .filter(tx => tx.type === 'distribution' && new Date(tx.date || 0) <= asOf && tx.status !== 'rejected')
-                    .reduce((sum, ev) => sum + (Number(ev.amount) || 0), 0)
-                  totalEarnings += Math.round(paidDistributions * 100) / 100
-                } else {
-                  // For compounding investments, use calculated earnings
-                  const calc = calculateInvestmentValue(inv, asOfIso)
-                  totalEarnings += calc.totalEarnings
-                }
-              }
-            })
-            points.push({ date: asOf, value: totalEarnings })
-          }
-          // Final point at current app time to match current investment info
-        {
-          const asOf = new Date(end)
-          const asOfIso = asOf.toISOString()
-          let totalEarnings = 0
-          confirmed.forEach(inv => {
-            if (inv.confirmedAt && new Date(inv.confirmedAt) <= asOf) {
-              const investmentTransactions = Array.isArray(inv.transactions) ? inv.transactions : []
-              // Include withdrawn investments in current earnings
-              if (inv.status === 'withdrawn') {
-                // Investment was withdrawn - use stored final earnings
-                totalEarnings += inv.totalEarnings || 0
-              } else if (inv.paymentFrequency === 'monthly') {
-                // For monthly payout investments, sum paid distributions from transactions
-                const paidDistributions = investmentTransactions
-                  .filter(tx => tx.type === 'distribution' && new Date(tx.date || 0) <= asOf && tx.status !== 'rejected')
-                  .reduce((sum, ev) => sum + (Number(ev.amount) || 0), 0)
-                totalEarnings += Math.round(paidDistributions * 100) / 100
-              } else {
-                // For compounding investments, use calculated earnings
-                const calc = calculateInvestmentValue(inv, asOfIso)
-                  totalEarnings += calc.totalEarnings
-                }
-              }
-            })
-            points.push({ date: asOf, value: totalEarnings })
-          }
-        setChartSeries(points)
+        
+        // NOTE: Chart series calculation moved to useMemo for performance
       }
     } catch (e) {
       console.error('Failed to load portfolio data:', e)
       // Set error state so user knows something went wrong
       alert('Failed to load portfolio data. Please refresh the page. If the problem persists, contact support.')
     }
-  }, [searchParams])
+  }, [searchParams, userData, refreshUser])
+
+  // PERFORMANCE FIX: Memoize chart series calculation to avoid recalculating on every render
+  // Only recalculate when appTime or portfolioData.investments change
+  const chartSeries = useMemo(() => {
+    if (!appTime || !portfolioData.investments || portfolioData.investments.length === 0) {
+      return []
+    }
+
+    try {
+      const confirmedInvestments = portfolioData.investments.filter(inv => 
+        inv.status === 'active' || 
+        inv.status === 'withdrawal_notice' || 
+        inv.status === 'withdrawn'
+      )
+
+      if (confirmedInvestments.length === 0) {
+        return []
+      }
+
+      // Build earnings series for last 23 month-ends plus current app time as the final point
+      const end = new Date(appTime)
+      if (isNaN(end.getTime())) {
+        console.error('Invalid date for chart calculation:', appTime)
+        return []
+      }
+      
+      const start = new Date(end)
+      start.setMonth(start.getMonth() - 23)
+
+      const points = []
+      
+      // 23 historical month-end points
+      for (let i = 0; i < 23; i++) {
+        const d = new Date(start)
+        d.setMonth(start.getMonth() + i)
+        const asOf = new Date(d.getFullYear(), d.getMonth() + 1, 0)
+        const asOfIso = asOf.toISOString()
+        let totalEarnings = 0
+        
+        confirmedInvestments.forEach(inv => {
+          if (inv.confirmedAt && new Date(inv.confirmedAt) <= asOf) {
+            const investmentTransactions = Array.isArray(inv.transactions) ? inv.transactions : []
+            // Include withdrawn investments in historical earnings
+            // If withdrawn before this point, use final earnings; otherwise calculate as of this point
+            if (inv.status === 'withdrawn' && inv.withdrawalNoticeStartAt && new Date(inv.withdrawalNoticeStartAt) <= asOf) {
+              // Investment was withdrawn by this point - use stored final earnings
+              totalEarnings += inv.totalEarnings || 0
+            } else if (inv.paymentFrequency === 'monthly') {
+              // For monthly payout investments, sum paid distributions from transactions
+              const paidDistributions = investmentTransactions
+                .filter(tx => tx.type === 'distribution' && new Date(tx.date || 0) <= asOf && tx.status !== 'rejected')
+                .reduce((sum, ev) => sum + (Number(ev.amount) || 0), 0)
+              totalEarnings += Math.round(paidDistributions * 100) / 100
+            } else {
+              // For compounding investments, use calculated earnings
+              const calc = calculateInvestmentValue(inv, asOfIso)
+              totalEarnings += calc.totalEarnings
+            }
+          }
+        })
+        points.push({ date: asOf, value: totalEarnings })
+      }
+      
+      // Final point at current app time to match current investment info
+      {
+        const asOf = new Date(end)
+        const asOfIso = asOf.toISOString()
+        let totalEarnings = 0
+        
+        confirmedInvestments.forEach(inv => {
+          if (inv.confirmedAt && new Date(inv.confirmedAt) <= asOf) {
+            const investmentTransactions = Array.isArray(inv.transactions) ? inv.transactions : []
+            // Include withdrawn investments in current earnings
+            if (inv.status === 'withdrawn') {
+              // Investment was withdrawn - use stored final earnings
+              totalEarnings += inv.totalEarnings || 0
+            } else if (inv.paymentFrequency === 'monthly') {
+              // For monthly payout investments, sum paid distributions from transactions
+              const paidDistributions = investmentTransactions
+                .filter(tx => tx.type === 'distribution' && new Date(tx.date || 0) <= asOf && tx.status !== 'rejected')
+                .reduce((sum, ev) => sum + (Number(ev.amount) || 0), 0)
+              totalEarnings += Math.round(paidDistributions * 100) / 100
+            } else {
+              // For compounding investments, use calculated earnings
+              const calc = calculateInvestmentValue(inv, asOfIso)
+              totalEarnings += calc.totalEarnings
+            }
+          }
+        })
+        points.push({ date: asOf, value: totalEarnings })
+      }
+      
+      return points
+    } catch (e) {
+      console.error('Error calculating chart series:', e)
+      return []
+    }
+  }, [appTime, portfolioData.investments])
 
   useEffect(() => {
     setMounted(true)

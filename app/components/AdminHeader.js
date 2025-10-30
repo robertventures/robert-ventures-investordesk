@@ -33,22 +33,27 @@ export default function AdminHeader({ onTabChange, activeTab }) {
 
   const handleLogout = async () => {
     try {
-      // Call logout API to clear cookies
-      await apiClient.logout()
-      
-      // Clear localStorage
+      // Clear localStorage first (immediate feedback)
       localStorage.removeItem('currentUserId')
       localStorage.removeItem('signupEmail')
       localStorage.removeItem('currentInvestmentId')
+      
+      // Call logout API to clear cookies with a timeout
+      const logoutPromise = apiClient.logout()
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Logout timeout')), 3000)
+      )
+      
+      // Race between logout and timeout
+      await Promise.race([logoutPromise, timeoutPromise]).catch((error) => {
+        console.error('Logout API error (will still redirect):', error)
+      })
       
       // Redirect to sign-in page
       router.push('/sign-in')
     } catch (error) {
       console.error('Logout error:', error)
-      // Still redirect even if API call fails
-      localStorage.removeItem('currentUserId')
-      localStorage.removeItem('signupEmail')
-      localStorage.removeItem('currentInvestmentId')
+      // Always redirect even if something goes wrong
       router.push('/sign-in')
     }
   }

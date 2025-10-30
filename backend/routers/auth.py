@@ -272,7 +272,7 @@ async def register_pending(register_data: RegisterRequest):
                 detail="Password must be at least 8 characters"
             )
         
-        # Check if email already exists
+        # Check if email already exists in users table
         existing_user = get_user_by_email(register_data.email)
         if existing_user:
             raise HTTPException(
@@ -376,7 +376,18 @@ async def verify_and_create(verify_data: VerifyRequest, response: Response):
             })
             auth_user = getattr(auth_res, 'user', None)
         except Exception as e:
-            print(f"Supabase Admin create_user error: {e}")
+            error_msg = str(e)
+            print(f"Supabase Admin create_user error: {error_msg}")
+            
+            # Check if error is due to email already existing
+            if 'already' in error_msg.lower() or 'exists' in error_msg.lower() or 'registered' in error_msg.lower():
+                # Clean up the pending user since this email is already registered
+                delete_pending_user(verify_data.email)
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Email already registered. Please sign in instead."
+                )
+            
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to create auth user"

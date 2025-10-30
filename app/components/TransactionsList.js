@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState, useMemo, memo } from 'react'
 import { useRouter } from 'next/navigation'
-import { apiClient } from '../../lib/apiClient'
+import { useUser } from '../contexts/UserContext'
 import styles from './TransactionsList.module.css'
 import { formatCurrency } from '../../lib/formatters.js'
 import { formatDateForDisplay } from '../../lib/dateUtils.js'
@@ -57,54 +57,49 @@ const TransactionsList = memo(function TransactionsList({ limit = null, showView
   const router = useRouter()
   const [mounted, setMounted] = useState(false)
   const [events, setEvents] = useState([])
-  const [user, setUser] = useState(null)
-  const [loading, setLoading] = useState(true)
   const [expandedId, setExpandedId] = useState(null)
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 5
+  
+  // PERFORMANCE FIX: Use UserContext instead of fetching user data again
+  const { userData: user, loading } = useUser()
 
   useEffect(() => {
     setMounted(true)
     if (typeof window === 'undefined') return
     
     const load = async () => {
-      const userId = localStorage.getItem('currentUserId')
-      if (!userId) { setLoading(false); return }
+      if (!user) return
       try {
-        // PERFORMANCE: Removed migration call - transactions are generated on admin time machine changes
-        const data = await apiClient.getUser(userId)
-        if (data.success && data.user) {
-          setUser(data.user)
-          const baseEvents = Array.isArray(data.user.activity) ? data.user.activity : []
-          const investmentEvents = (data.user.investments || []).flatMap(inv => {
-            const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
-            return transactions.map(tx => ({
-              ...tx,
-              // Extract metadata fields if they exist in JSONB
-              monthIndex: tx.monthIndex || tx.metadata?.monthIndex,
-              lockupPeriod: tx.lockupPeriod || tx.metadata?.lockupPeriod || inv.lockupPeriod,
-              paymentFrequency: tx.paymentFrequency || tx.metadata?.paymentFrequency || inv.paymentFrequency,
-              payoutBankNickname: tx.payoutBankNickname || tx.metadata?.payoutBankNickname,
-              payoutDueBy: tx.payoutDueBy || tx.metadata?.payoutDueBy,
-              withdrawalId: tx.withdrawalId || tx.metadata?.withdrawalId,
-              type: tx.type,
-              date: tx.date || tx.createdAt,
-              investmentId: inv.id,
-              investmentAmount: inv.amount || 0
-            }))
-          })
-          // No filtering needed - backend now only creates relevant activity events
-          const combined = [...baseEvents, ...investmentEvents]
-          // Sort descending (newest first) to show most recent activity at the top
-          const sorted = combined.slice().sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))
-          setEvents(sorted)
-        }
-      } finally {
-        setLoading(false)
+        const baseEvents = Array.isArray(user.activity) ? user.activity : []
+        const investmentEvents = (user.investments || []).flatMap(inv => {
+          const transactions = Array.isArray(inv.transactions) ? inv.transactions : []
+          return transactions.map(tx => ({
+            ...tx,
+            // Extract metadata fields if they exist in JSONB
+            monthIndex: tx.monthIndex || tx.metadata?.monthIndex,
+            lockupPeriod: tx.lockupPeriod || tx.metadata?.lockupPeriod || inv.lockupPeriod,
+            paymentFrequency: tx.paymentFrequency || tx.metadata?.paymentFrequency || inv.paymentFrequency,
+            payoutBankNickname: tx.payoutBankNickname || tx.metadata?.payoutBankNickname,
+            payoutDueBy: tx.payoutDueBy || tx.metadata?.payoutDueBy,
+            withdrawalId: tx.withdrawalId || tx.metadata?.withdrawalId,
+            type: tx.type,
+            date: tx.date || tx.createdAt,
+            investmentId: inv.id,
+            investmentAmount: inv.amount || 0
+          }))
+        })
+        // No filtering needed - backend now only creates relevant activity events
+        const combined = [...baseEvents, ...investmentEvents]
+        // Sort descending (newest first) to show most recent activity at the top
+        const sorted = combined.slice().sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))
+        setEvents(sorted)
+      } catch (e) {
+        console.error('Failed to load transactions:', e)
       }
     }
     load()
-  }, [])
+  }, [user])
 
   // PERFORMANCE: Memoize expensive filtering and pagination calculations
   // IMPORTANT: Hooks must be called unconditionally in the same order on every render.

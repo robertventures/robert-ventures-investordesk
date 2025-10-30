@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { apiClient } from '../../lib/apiClient'
 import styles from './AccountCreationForm.module.css'
@@ -18,6 +18,14 @@ export default function AccountCreationForm() {
   const [isPasswordFocused, setIsPasswordFocused] = useState(false)
   const [accountExistsError, setAccountExistsError] = useState('')
   const [generalError, setGeneralError] = useState('')
+  
+  // Clear any stale registration data when component mounts
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('pendingRegistration')
+      // Don't clear signupEmail here - it might be legitimate if user is coming back
+    }
+  }, [])
   
   const hasUppercase = /[A-Z]/.test(form.password)
   const hasNumber = /[0-9]/.test(form.password)

@@ -157,7 +157,14 @@ function ClientContent() {
     <div className={styles.sections}>
       <Section title="Investor Confirmation">
         <div className={styles.radioGroup}>
-          <div className={styles.radioOption}>
+          <div 
+            className={styles.radioOption}
+            onClick={() => {
+              setAccredited('accredited')
+              setAccreditedType('')
+              setTenPercentConfirmed(false)
+            }}
+          >
             <label>
               <input
                 type="radio"
@@ -174,8 +181,11 @@ function ClientContent() {
             </label>
             
             {accredited === 'accredited' && (
-              <div className={styles.subOptions}>
-                <label className={styles.subOption}>
+              <div className={styles.subOptions} onClick={(e) => e.stopPropagation()}>
+                <div 
+                  className={styles.subOption}
+                  onClick={() => setAccreditedType('assets')}
+                >
                   <input
                     type="radio"
                     name="accreditedType"
@@ -184,8 +194,11 @@ function ClientContent() {
                     onChange={() => setAccreditedType('assets')}
                   />
                   <span>Net worth over $1 million (excluding primary residence)</span>
-                </label>
-                <label className={styles.subOption}>
+                </div>
+                <div 
+                  className={styles.subOption}
+                  onClick={() => setAccreditedType('income')}
+                >
                   <input
                     type="radio"
                     name="accreditedType"
@@ -194,12 +207,18 @@ function ClientContent() {
                     onChange={() => setAccreditedType('income')}
                   />
                   <span>Annual income over $200,000 (individual) or $300,000 (joint)</span>
-                </label>
+                </div>
               </div>
             )}
           </div>
           
-          <div className={styles.radioOption}>
+          <div 
+            className={styles.radioOption}
+            onClick={() => {
+              setAccredited('not_accredited')
+              setAccreditedType('')
+            }}
+          >
             <label>
               <input
                 type="radio"
@@ -214,15 +233,18 @@ function ClientContent() {
               <span>Investor does not meet the definition of "accredited investor" or is not sure</span>
             </label>
             {accredited === 'not_accredited' && (
-              <div className={styles.subOptions}>
-                <label className={styles.subOption}>
+              <div className={styles.subOptions} onClick={(e) => e.stopPropagation()}>
+                <div 
+                  className={styles.subOption}
+                  onClick={() => setTenPercentConfirmed(!tenPercentConfirmed)}
+                >
                   <input
                     type="checkbox"
                     checked={tenPercentConfirmed}
                     onChange={(e) => setTenPercentConfirmed(e.target.checked)}
                   />
                   <span>the investor confirms their investment is not more than 10% of their net worth or annual income.</span>
-                </label>
+                </div>
               </div>
             )}
           </div>
@@ -298,7 +320,7 @@ function ClientContent() {
                 URL.revokeObjectURL(url)
               }}
             >
-              📄 Download Agreement
+              📄 View Agreement
             </button>
           </div>
 
@@ -315,7 +337,15 @@ function ClientContent() {
           <div className={styles.groupTitle}>Funding</div>
           <div className={styles.radioGroup}>
             {!isIra && !requiresWireTransfer && (
-              <div className={styles.radioOption}>
+              <div 
+                className={styles.radioOption}
+                onClick={(e) => {
+                  // Only trigger if not clicking on nested interactive elements
+                  if (!e.target.closest('button') && !e.target.closest('[class*="Bank"]')) {
+                    setFundingMethod('bank-transfer')
+                  }
+                }}
+              >
                 <label>
                   <input
                     type="radio"
@@ -390,7 +420,15 @@ function ClientContent() {
                 )}
               </div>
             )}
-            <div className={styles.radioOption}>
+            <div 
+              className={styles.radioOption}
+              onClick={(e) => {
+                // Only trigger if not clicking on nested buttons
+                if (!e.target.closest('button')) {
+                  setFundingMethod('wire-transfer')
+                }
+              }}
+            >
               <label>
                 <input
                   type="radio"
@@ -462,16 +500,26 @@ function ClientContent() {
           <div className={styles.subSection}>
             <div className={styles.groupTitle}>Payout</div>
             <div className={styles.radioGroup}>
-              <label className={styles.radioOption}>
-                <input
-                  type="radio"
-                  name="payout"
-                  value="bank-account"
-                  checked={payoutMethod === 'bank-account'}
-                  onChange={() => setPayoutMethod('bank-account')}
-                />
-                <span>Bank Account</span>
-              </label>
+              <div 
+                className={styles.radioOption}
+                onClick={(e) => {
+                  // Only trigger if not clicking on nested interactive elements
+                  if (!e.target.closest('button') && !e.target.closest('[class*="Bank"]')) {
+                    setPayoutMethod('bank-account')
+                  }
+                }}
+              >
+                <label>
+                  <input
+                    type="radio"
+                    name="payout"
+                    value="bank-account"
+                    checked={payoutMethod === 'bank-account'}
+                    onChange={() => setPayoutMethod('bank-account')}
+                  />
+                  <span>Bank Account</span>
+                </label>
+              </div>
             </div>
             {payoutMethod === 'bank-account' && (
               <div className={styles.bankConnectionSection}>
@@ -750,9 +798,9 @@ function ClientContent() {
               console.log('Investment submitted successfully, redirecting to dashboard...')
               await new Promise(resolve => setTimeout(resolve, 500))
               
-              // Redirect to dashboard with 'from=finalize' param to trigger fresh data fetch
+              // Redirect to dashboard (will default to portfolio view)
               console.log('Redirecting to dashboard...')
-              window.location.href = '/dashboard?from=finalize'
+              window.location.href = '/dashboard'
             } catch (e) {
               console.error('Failed to save finalization data', e)
               setSubmitError('An error occurred while submitting your investment. Please try again. If the problem persists, contact support.')

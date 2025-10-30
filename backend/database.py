@@ -59,13 +59,28 @@ def get_user_by_id(user_id: str) -> dict:
         if response.data:
             user = response.data
             
-            # Get transactions for each investment
+            # PERFORMANCE FIX: Get all transactions for user's investments in one query
+            # instead of N separate queries (N+1 problem)
             if user.get('investments'):
-                for investment in user['investments']:
-                    txn_response = supabase.table('transactions').select('*').eq(
-                        'investment_id', investment['id']
+                investment_ids = [inv['id'] for inv in user['investments']]
+                
+                if investment_ids:
+                    # Single query to get all transactions for all investments
+                    txn_response = supabase.table('transactions').select('*').in_(
+                        'investment_id', investment_ids
                     ).order('date', desc=False).execute()
-                    investment['transactions'] = txn_response.data or []
+                    
+                    # Group transactions by investment_id
+                    transactions_by_investment = {}
+                    for txn in (txn_response.data or []):
+                        inv_id = txn.get('investment_id')
+                        if inv_id not in transactions_by_investment:
+                            transactions_by_investment[inv_id] = []
+                        transactions_by_investment[inv_id].append(txn)
+                    
+                    # Assign transactions to each investment
+                    for investment in user['investments']:
+                        investment['transactions'] = transactions_by_investment.get(investment['id'], [])
             
             # Get activity
             activity_response = supabase.table('activity').select('*').eq(

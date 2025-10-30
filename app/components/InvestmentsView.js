@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { apiClient } from '../../lib/apiClient'
+import { useUser } from '../contexts/UserContext'
 import styles from './InvestmentsView.module.css'
 import { calculateInvestmentValue, formatCurrency, formatDate, getInvestmentStatus } from '../../lib/investmentCalculations.js'
 
@@ -9,7 +10,7 @@ export default function InvestmentsView() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [mounted, setMounted] = useState(false)
-  const [userData, setUserData] = useState(null)
+  const { userData, refreshUser } = useUser()
   const [portfolioData, setPortfolioData] = useState({
     investments: []
   })
@@ -22,21 +23,23 @@ export default function InvestmentsView() {
     if (!userId) return
 
     try {
-      // Get current app time for calculations (parallel with user data fetch)
+      // Get current app time for calculations
       const fresh = searchParams.get('from') === 'finalize'
-      const [timeData, data] = await Promise.all([
-        apiClient.getAppTime(),
-        apiClient.getUser(userId, fresh)
-      ])
+      
+      // Refresh user data if needed (e.g., coming from finalize page)
+      if (fresh && refreshUser) {
+        await refreshUser()
+      }
+      
+      const timeData = await apiClient.getAppTime()
       
       const currentAppTime = timeData?.success ? timeData.appTime : new Date().toISOString()
       setAppTime(currentAppTime)
       
-      if (data && data.success && data.user) {
-        setUserData(data.user)
+      if (userData) {
         
         // Calculate portfolio metrics from investments using the new calculation functions
-        const investments = data.user.investments || []
+        const investments = userData.investments || []
         // Include active, withdrawal_notice, and withdrawn investments in the dashboard
         const confirmedInvestments = investments.filter(inv => 
           inv.status === 'active' || 
@@ -55,7 +58,7 @@ export default function InvestmentsView() {
           // Fallback: If confirmedAt is not set, try to get it from activity log
           let confirmedAt = inv.confirmedAt
           if (!confirmedAt && (inv.status === 'active' || inv.status === 'withdrawal_notice' || inv.status === 'withdrawn')) {
-            const activity = data.user.activity || []
+            const activity = userData.activity || []
             const confirmEvent = activity.find(a => a.type === 'investment_confirmed' && a.investmentId === inv.id)
             if (confirmEvent && confirmEvent.date) {
               confirmedAt = confirmEvent.date
@@ -129,7 +132,7 @@ export default function InvestmentsView() {
       console.error('Failed to load investments data:', e)
       alert('Failed to load investments data. Please refresh the page. If the problem persists, contact support.')
     }
-  }, [searchParams])
+  }, [searchParams, userData, refreshUser])
 
   useEffect(() => {
     setMounted(true)

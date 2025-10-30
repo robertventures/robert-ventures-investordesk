@@ -140,13 +140,27 @@ export default function ConfirmationPage() {
         }
         
         // If pending registration expired or not found
-        if (errorMessage.includes('not found or expired')) {
+        if (errorMessage.includes('not found') || errorMessage.includes('expired')) {
           errorMessage = 'Registration expired. Please sign up again.'
           // Clear localStorage
           if (typeof window !== 'undefined') {
             localStorage.removeItem('signupEmail')
             localStorage.removeItem('pendingRegistration')
+            localStorage.removeItem('currentUserId')
           }
+        }
+        
+        // If email already registered (this shouldn't happen, but handle it gracefully)
+        if (errorMessage.includes('already registered')) {
+          errorMessage = 'This email is already registered. Redirecting to sign in...'
+          // Clear localStorage
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('signupEmail')
+            localStorage.removeItem('pendingRegistration')
+            localStorage.removeItem('currentUserId')
+          }
+          // Redirect to sign in after showing error
+          setTimeout(() => router.push('/sign-in'), 2000)
         }
         
         setError(errorMessage)

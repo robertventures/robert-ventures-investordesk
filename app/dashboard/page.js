@@ -1,8 +1,8 @@
 'use client'
 import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { apiClient } from '@/lib/apiClient'
 import logger from '@/lib/logger'
+import { UserProvider, useUser } from '../contexts/UserContext'
 import DashboardHeader from '../components/DashboardHeader'
 import PortfolioSummary from '../components/PortfolioSummary'
 import InvestmentsView from '../components/InvestmentsView'
@@ -16,6 +16,7 @@ function DashboardPageContent() {
   const searchParams = useSearchParams()
   const [mounted, setMounted] = useState(false)
   const [activeView, setActiveView] = useState('portfolio')
+  const { userData, loading } = useUser()
 
   // Guard against missing/removed account
   useEffect(() => {
@@ -24,34 +25,32 @@ function DashboardPageContent() {
     
     const verify = async () => {
       const userId = localStorage.getItem('currentUserId')
-      if (!userId) { router.push('/'); return }
-      try {
-        // Check if we're coming from investment finalization
-        // If so, request fresh data to ensure we have the latest state
-        const fromFinalize = searchParams.get('from') === 'finalize'
-        const freshParam = fromFinalize ? '?fresh=true' : ''
-        
-        const data = await apiClient.getUser(userId, fromFinalize)
-        if (!data.success || !data.user) {
-          localStorage.removeItem('currentUserId')
-          localStorage.removeItem('signupEmail')
-          localStorage.removeItem('currentInvestmentId')
-          router.push('/')
-          return
-        }
-        
-        // Redirect to onboarding if user needs to complete setup
-        if (data.user.needsOnboarding) {
-          logger.log('User needs onboarding, redirecting...')
-          router.push('/onboarding')
-          return
-        }
-      } catch {
+      if (!userId) { 
         router.push('/')
+        return 
+      }
+
+      // Wait for user data to load
+      if (loading) return
+
+      // Check if user data loaded successfully
+      if (!userData) {
+        localStorage.removeItem('currentUserId')
+        localStorage.removeItem('signupEmail')
+        localStorage.removeItem('currentInvestmentId')
+        router.push('/')
+        return
+      }
+      
+      // Redirect to onboarding if user needs to complete setup
+      if (userData.needsOnboarding) {
+        logger.log('User needs onboarding, redirecting...')
+        router.push('/onboarding')
+        return
       }
     }
     verify()
-  }, [router, searchParams])
+  }, [router, searchParams, userData, loading])
 
   // Initialize activeView from URL params and sync URL with activeView
   useEffect(() => {
@@ -59,13 +58,21 @@ function DashboardPageContent() {
     if (section && ['portfolio', 'investments', 'profile', 'documents', 'contact'].includes(section)) {
       setActiveView(section)
     }
-  }, [searchParams])
+    
+    // Clean up temporary query params like 'from' after initial load
+    const from = searchParams.get('from')
+    if (from) {
+      const newSearchParams = new URLSearchParams(searchParams.toString())
+      newSearchParams.delete('from')
+      const section = newSearchParams.get('section') || 'portfolio'
+      router.replace(`/dashboard?section=${section}`, { scroll: false })
+    }
+  }, [searchParams, router])
 
   const handleViewChange = (view) => {
     setActiveView(view)
-    const newSearchParams = new URLSearchParams(searchParams.toString())
-    newSearchParams.set('section', view)
-    router.replace(`/dashboard?${newSearchParams.toString()}`, { scroll: false })
+    // Only keep the section parameter, clean URL
+    router.replace(`/dashboard?section=${view}`, { scroll: false })
   }
 
   const renderContent = () => {
@@ -90,8 +97,8 @@ function DashboardPageContent() {
     }
   }
 
-  // Prevent hydration mismatch - don't render until mounted
-  if (!mounted) {
+  // Prevent hydration mismatch - don't render until mounted and user data loaded
+  if (!mounted || loading) {
     return (
       <div className={styles.main}>
         <div style={{ padding: '40px', textAlign: 'center' }}>
@@ -114,14 +121,16 @@ function DashboardPageContent() {
 
 export default function DashboardPage() {
   return (
-    <Suspense fallback={
-      <div className={styles.main}>
-        <div style={{ padding: '40px', textAlign: 'center' }}>
-          Loading...
+    <UserProvider>
+      <Suspense fallback={
+        <div className={styles.main}>
+          <div style={{ padding: '40px', textAlign: 'center' }}>
+            Loading...
+          </div>
         </div>
-      </div>
-    }>
-      <DashboardPageContent />
-    </Suspense>
+      }>
+        <DashboardPageContent />
+      </Suspense>
+    </UserProvider>
   )
 }
